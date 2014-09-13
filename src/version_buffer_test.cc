@@ -12,7 +12,7 @@ protected:
 
 	virtual void SetUp() {
 		alloc = new 
-			VersionBufferAllocator(10*VersionBufferAllocator::BUFFER_SIZE);
+			VersionBufferAllocator(100*VersionBufferAllocator::BUFFER_SIZE);
 		ASSERT_TRUE(alloc != NULL);
 		drained = NULL;
 	}
@@ -29,6 +29,50 @@ protected:
 		drained = NULL;
 	}
 };
+
+TEST_F(VBufAllocatorTest, VBufTest) {
+	VersionBuffer buf(alloc);
+	CompositeKey def;
+	bool success = false;
+	
+	// Append a single element to the VersionBuffer.
+	success = buf.Append(def);
+	ASSERT_TRUE(success);
+	
+	// Don't allow more blocks to be allocted.
+	DrainAllocator();
+
+	// Five more should succeed. A total of six at this point.
+	for (int i = 0; i < 5; ++i) {
+		success = buf.Append(def);
+		ASSERT_TRUE(success);
+	}
+
+	// The seventh should fail.
+	success = buf.Append(def);
+	ASSERT_FALSE(success);
+
+	// All of these should fail.
+	for (int i = 0; i < 1000; ++i) {
+		success = buf.Append(def);
+		ASSERT_FALSE(success);
+	}
+
+	// Return the buffer.
+	alloc->ReturnBuffers(&buf);
+	
+	// At this point, we should allow six more appends.
+	for (int i = 0; i < 6; ++i) {
+		success = buf.Append(def);
+		ASSERT_TRUE(success);
+	}
+	
+	// Any further should fail.
+	for (int i = 0; i < 1000; ++i) {
+		success = buf.Append(def);
+		ASSERT_FALSE(success);
+	}
+}
 
 /*
  * Test getting and returning buffers.

@@ -201,7 +201,7 @@ bool VersionBuffer::Append(CompositeKey value) {
 	
 	// offset == NUM_ELEMS means that we've filled up the current buffer. Try 
 	// to allocate a new buffer. If the allocation fails, return false.
-	if (offset == NUM_ELEMS) {
+	if (offset == NUM_ELEMS || tail == NULL) {
 		void *buffer;
 		if (alloc->GetBuffer(&buffer)) {
 
@@ -213,12 +213,14 @@ bool VersionBuffer::Append(CompositeKey value) {
 		else {
 
 			// Allocation failed.			
+			offset -= 1;
 			return false;
 		}
 	}
 	
 	// Success. Write the value to the appropriate location in the version 
 	// buffer.
+	assert(offset < NUM_ELEMS);
 	((CompositeKey*)tail)[offset] = value;
 	return true;
 }

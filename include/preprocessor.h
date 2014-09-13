@@ -67,7 +67,6 @@ class VersionBuffer
 	void Reset();
 	
 	uint64_t GetValue();
-
 };
 
 /*
