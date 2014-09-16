@@ -9,6 +9,7 @@
 #include <time.h>
 #include <cstring>
 #include <preprocessor.h>
+#include <city.h>
 
 class Action;
 
@@ -54,8 +55,8 @@ class CompositeKey {
       return !(*this < other);
   }
 
-  uint64_t Hash() {
-	  return 0;
+  static inline uint64_t Hash(CompositeKey *key) {
+	  return CityHash64((char*)key, 12);
   }
 } __attribute__((__packed__));
 

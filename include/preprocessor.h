@@ -89,7 +89,7 @@ class MVScheduler : public Runnable {
  protected:
 	virtual void StartWorking();
 	void ProcessReadset(Action *action);
-	void ProcessWriteset(Action *action, uint64_t writeset);
+	void ProcessWriteset(Action *action, uint64_t timestamp);
 	void ScheduleTransaction(Action *action);	
 
  public:

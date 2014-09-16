@@ -34,7 +34,7 @@ MVTablePartition::MVTablePartition(uint64_t size,
  */
 bool MVTablePartition::GetLatestVersion(CompositeKey pkey, 
 										  uint64_t *version) {	
-	uint64_t slotNumber = pkey.Hash() % numSlots;
+	uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
 	MVRecord *hashBucket = tableSlots[slotNumber];
 	while (hashBucket != NULL) {
 		if (hashBucket->key == pkey && hashBucket->deleteTimestamp == 0) {
@@ -65,7 +65,7 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
 
 	// Get the slot number the record hashes to, and try to find if a previous
 	// version of the record already exists.
-	uint64_t slotNumber = pkey.Hash() % numSlots;
+	uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
 	MVRecord *cur = tableSlots[slotNumber];
 	MVRecord **prev = &tableSlots[slotNumber];
 

@@ -205,3 +205,20 @@ TEST_F(CatalogTest, CatalogTest) {
 		}
 	}
 }
+
+TEST(CompositeKeyTest, HashTest) {
+	CompositeKey keys[1000];
+	uint64_t hashes[1000];
+	for (int i = 0; i < 1000; ++i) {
+		keys[i].tableId = 0;
+		keys[i].key = (uint64_t)(i % 100);
+		keys[i].version = (uint64_t)i;		
+		hashes[i] = CompositeKey::Hash(&keys[i]);
+	}
+	
+	for (int i = 0; i < 100; ++i) {
+		for (int j = 100; j < 1000; j += 100) {
+			ASSERT_EQ(hashes[i], hashes[i+j]);
+		}
+	}	
+}

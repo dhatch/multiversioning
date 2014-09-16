@@ -1,4 +1,4 @@
-CFLAGS=-g -Werror -Wextra -std=c++0x
+CFLAGS=-O2 -g -Werror -Wextra -std=c++0x
 LIBS=-lnuma -lpthread -lrt -lcityhash -ltcmalloc_minimal
 CXX=g++
 
