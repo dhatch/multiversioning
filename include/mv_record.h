@@ -43,6 +43,8 @@ struct MVRecordList {
  * not shared across multiple threads. 
  */
 class MVRecordAllocator {
+
+	friend class MVAllocatorTest;
 	
  private:
 	MVRecord *freeList;

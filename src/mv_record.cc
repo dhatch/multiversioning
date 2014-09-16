@@ -13,17 +13,24 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size) {
 		data[i].recordLink = &data[i+1];
 	}
 	data[numRecords-1].recordLink = NULL;
+	freeList = data;
 }
 
 bool MVRecordAllocator::GetRecord(MVRecord **out) {
 	if (freeList == NULL) {
+		*out = NULL;
 		return false;
 	}
 	
-	*out = freeList;
+	MVRecord *ret = freeList;
 	freeList = freeList->recordLink;
-	(*out)->recordLink = NULL;
-	(*out)->link = NULL;
+
+	// Set up the MVRecord to return.
+	memset(ret, 0xA3, sizeof(MVRecord));
+	ret->link = NULL;
+	ret->recordLink = NULL;
+	
+	*out = ret;
 	return true;
 }
 
