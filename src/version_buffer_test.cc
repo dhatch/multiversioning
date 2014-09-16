@@ -1,7 +1,9 @@
 #include <database.h>
 #include <preprocessor.h>
 #include <gtest/gtest.h>
+#include <iostream>
 
+// Keep the compiler happy.
 Database DB;
 
 class VBufAllocatorTest : public testing::Test {
@@ -11,6 +13,7 @@ protected:
 	void *drained;
 
 	virtual void SetUp() {
+		ASSERT_TRUE(sizeof(CompositeKey) == 20);
 		alloc = new 
 			VersionBufferAllocator(100*VersionBufferAllocator::BUFFER_SIZE);
 		ASSERT_TRUE(alloc != NULL);
@@ -27,6 +30,10 @@ protected:
 	virtual void UndrainAllocator() {
 		alloc->freeList = drained;
 		drained = NULL;
+	}
+
+	virtual int GetOffset(VersionBuffer *vbuffer) {
+		return vbuffer->offset;
 	}
 };
 
@@ -71,7 +78,69 @@ TEST_F(VBufAllocatorTest, VBufTest) {
 	for (int i = 0; i < 1000; ++i) {
 		success = buf.Append(def);
 		ASSERT_FALSE(success);
+		ASSERT_EQ(5, GetOffset(&buf));
 	}
+	
+	// Get back the remaining blocks.
+	UndrainAllocator();
+
+	// Try to allocate all other blocks.
+	for (int i = 0; i < 99; ++i) {
+		for (int j = 0; j < 6; ++j) {
+			success = buf.Append(def);
+			ASSERT_TRUE(success);
+		}
+	}
+	
+	// Done with all blocks. This shouldn't succeed.
+	success = buf.Append(def);
+	ASSERT_FALSE(success);
+
+	// Any further should fail.
+	for (int i = 0; i < 1000; ++i) {
+		success = buf.Append(def);
+		ASSERT_FALSE(success);
+		ASSERT_EQ(5, GetOffset(&buf));
+	}
+	
+	// Try to allocate from another VersionBuffer.
+	// This should also fail.
+	VersionBuffer bufOther(alloc);
+	success = bufOther.Append(def);
+	ASSERT_FALSE(success);	
+
+	// Any further should fail.
+	for (int i = 0; i < 1000; ++i) {
+		success = bufOther.Append(def);
+		ASSERT_FALSE(success);
+	}
+
+	// Return the buffers.
+	alloc->ReturnBuffers(&buf);
+
+	// Split the allocator's blocks among two buffers.
+	for (int i = 0; i < 100; ++i) {
+		
+		VersionBuffer *bufPtr;
+		if (i % 2 == 0) {
+			bufPtr = &buf;
+		}
+		else {
+			bufPtr = &bufOther;
+		}
+
+		for (int j = 0; j < 6; ++j) {
+			success = bufPtr->Append(def);
+			ASSERT_TRUE(success);
+		}
+		ASSERT_EQ(5, GetOffset(bufPtr));
+	}
+
+	success = bufOther.Append(def);
+	ASSERT_FALSE(success);
+	
+	success = buf.Append(def);
+	ASSERT_FALSE(success);		
 }
 
 /*

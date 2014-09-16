@@ -33,6 +33,7 @@ class VersionBufferAllocator {
 class VersionBuffer
 {
 	friend class VersionBufferAllocator;
+	friend class VBufAllocatorTest;
 
  private:	
 	// Each version buffer consists of several 64-byte buffers linked together.
@@ -40,7 +41,7 @@ class VersionBuffer
 	void 		*head;
 	void 		*tail;
 	
-	uint32_t offset;
+	int offset;
 	VersionBufferAllocator *alloc;
 	
  public:

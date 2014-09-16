@@ -57,7 +57,7 @@ class CompositeKey {
   uint64_t Hash() {
 	  return 0;
   }
-};
+} __attribute__((__packed__));
 
 class VersionBuffer;
 

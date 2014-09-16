@@ -45,7 +45,6 @@ inline void* BufferArithmetic::GetElementAt(void *buf, uint64_t bufferSize,
 	return ret;
 }
 
-
 /*  
  * totalSize: The total amount of memory the BufferAllocator has at its disposal
  * bufferSize: The amount of memory allocated per chunk.
@@ -106,12 +105,8 @@ bool VersionBufferAllocator::GetBuffer(void **outBuf)
     *outBuf = freeList;
 	void *linkPtr = BufferArithmetic::GetLastElement(freeList, BUFFER_SIZE, 
 													 sizeof(uint64_t));
-	freeList = *(void **)linkPtr;
-    
-    // Set the output buffer's link pointer to NULL.
-    void *outBufLink = BufferArithmetic::GetLastElement(outBuf, BUFFER_SIZE, 
-                                                        sizeof(uint64_t));
-    *((uint64_t**)outBufLink) = NULL;
+	freeList = *((void **)linkPtr);
+	*((void **)linkPtr) = NULL;
     return true;
 }
 
@@ -180,7 +175,7 @@ void VersionBuffer::AddLink(void *link) {
 		
 		// Make the current tail's link pointer point to the new link.
 		void *tailLink = BufferArithmetic::
-			GetLastElement(link, VersionBufferAllocator::BUFFER_SIZE,
+			GetLastElement(tail, VersionBufferAllocator::BUFFER_SIZE,
 						   sizeof(uint64_t));
 		*((void**)tailLink) = link;
 		
@@ -196,7 +191,8 @@ void VersionBuffer::AddLink(void *link) {
 bool VersionBuffer::Append(CompositeKey value) {
 	
 	// Ensure that the current offset is valid.
-	assert(offset < NUM_ELEMS);
+	assert(NUM_ELEMS == (int)NUM_ELEMS);
+	assert(offset < (int)NUM_ELEMS && offset >= -1);
 	offset += 1;
 	
 	// offset == NUM_ELEMS means that we've filled up the current buffer. Try 
@@ -220,7 +216,7 @@ bool VersionBuffer::Append(CompositeKey value) {
 	
 	// Success. Write the value to the appropriate location in the version 
 	// buffer.
-	assert(offset < NUM_ELEMS);
+	assert(offset < (int)NUM_ELEMS);
 	((CompositeKey*)tail)[offset] = value;
 	return true;
 }
@@ -260,7 +256,8 @@ void MVScheduler::ProcessReadset(Action *action) {
  * responsible for the appropriate key range. 
  */
 inline uint32_t MVScheduler::GetCCThread(CompositeKey key) {
-	return key.Hash() % NUM_CC_THREADS;
+	assert(false);
+	return 0;
 }
 
 
