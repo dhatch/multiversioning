@@ -26,7 +26,7 @@ struct _MVRecord_ {
 	MVRecord *link;
 	
 	MVRecord *recordLink;
-};
+} __attribute__((__packed__));
 
 /*
  * MVRecords are returned to the allocator (defined below) in bulk using this 

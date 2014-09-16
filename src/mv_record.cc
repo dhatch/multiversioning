@@ -16,9 +16,9 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size) {
 	freeList = data;
 }
 
-bool MVRecordAllocator::GetRecord(MVRecord **out) {
+bool MVRecordAllocator::GetRecord(MVRecord **OUT_recordPtr) {
 	if (freeList == NULL) {
-		*out = NULL;
+		*OUT_recordPtr = NULL;
 		return false;
 	}
 	
@@ -30,7 +30,7 @@ bool MVRecordAllocator::GetRecord(MVRecord **out) {
 	ret->link = NULL;
 	ret->recordLink = NULL;
 	
-	*out = ret;
+	*OUT_recordPtr = ret;
 	return true;
 }
 
@@ -48,5 +48,3 @@ void MVRecordAllocator::ReturnMVRecords(MVRecordList recordList) {
 		assert(recordList.head == NULL);
 	}
 }
-
-

@@ -25,7 +25,7 @@ MVTablePartition::MVTablePartition(uint64_t size,
 	// Allocate a contiguous chunk of memory in which to store the table's slots
 	this->tableSlots = (MVRecord**)malloc(sizeof(MVRecord*)*size);
 	assert(this->tableSlots != NULL);
-	memset(this->tableSlots, 0x00, sizeof(MVRecord)*size);	
+	memset(this->tableSlots, 0x00, sizeof(MVRecord*)*size);	
 }
 
 /*
@@ -57,6 +57,11 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
 	MVRecord *toAdd;
 	bool success = allocator->GetRecord(&toAdd);
 	assert(success);	// Can't deal with allocation failures yet.
+	assert(toAdd->link == NULL && toAdd->recordLink == NULL);
+	toAdd->createTimestamp = version;
+	toAdd->deleteTimestamp = 0;
+	toAdd->writer = action;
+	toAdd->key = pkey;	
 
 	// Get the slot number the record hashes to, and try to find if a previous
 	// version of the record already exists.
@@ -68,9 +73,6 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
 		
 		// We found the record. Link to the old record.
 		if (cur->key == pkey) {
-			toAdd->recordLink = cur;
-			cur->deleteTimestamp = version;
-			cur = cur->link;
 			break;
 		}
 
@@ -78,9 +80,12 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
 		cur = cur->link;
 	}
 	
-	
-	// XXX: Any ordering constraints here? 
-	(*prev)->link = cur;
+	// Link in the MVRecord.
+	if (cur != NULL) {
+		toAdd->link = cur->link;
+		toAdd->recordLink = cur;
+		cur->link = NULL;
+	}
 	*prev = toAdd;
 	return true;
 }

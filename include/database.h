@@ -10,7 +10,7 @@
 class Database {
 
  private:
-	Catalog *catalog;
+	Catalog catalog;
 
  public:
 	Database();
