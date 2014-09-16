@@ -34,6 +34,7 @@ class VersionBuffer
 {
 	friend class VersionBufferAllocator;
 	friend class VBufAllocatorTest;
+	friend class MVScheduler;
 
  private:	
 	// Each version buffer consists of several 64-byte buffers linked together.
@@ -75,11 +76,12 @@ class VersionBuffer
  * several physical cores.
  */
 class MVScheduler : public Runnable {
+	friend class SchedulerTest;
 	
  private:
 	static uint32_t NUM_CC_THREADS;
-	static uint32_t GetCCThread(CompositeKey key);
-
+	static inline uint32_t GetCCThread(CompositeKey key);
+	
 	uint32_t threadId;
 	VersionBufferAllocator *alloc;
 
@@ -93,7 +95,7 @@ class MVScheduler : public Runnable {
 	void ScheduleTransaction(Action *action);	
 
  public:
-	MVScheduler(int cpuNumber, uint64_t totalBufSize);	
+	MVScheduler(int cpuNumber, uint32_t threadId, uint64_t totalBufSize);	
 };
 
 

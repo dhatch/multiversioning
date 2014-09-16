@@ -13,8 +13,7 @@ class Database {
 	Catalog catalog;
 
  public:
-	Database();
-	
+	Database();	
 	
 	// Wrapper around Catalog's PutTable method (include/catalog.h).
 	bool PutTable(uint32_t tableId, MVTable *in);

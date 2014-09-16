@@ -13,6 +13,8 @@
 
 using namespace std;
 
+uint32_t MVScheduler::NUM_CC_THREADS = 1;
+
 /*
  * Given a buffer, get a pointer to the last element in the buffer.
  * This function requires the size of the buffer, and the size of each 
@@ -221,12 +223,22 @@ bool VersionBuffer::Append(CompositeKey value) {
 	return true;
 }
 
+MVScheduler::MVScheduler(int cpuNumber, uint32_t threadId, 
+						 uint64_t totalBufSize) : Runnable(cpuNumber) {
+	this->threadId = threadId;
+	this->alloc = new VersionBufferAllocator(totalBufSize);
+}
+
+void MVScheduler::StartWorking() {
+
+}
+
 /*
  * For each record in the readset, find out the version which should be read
  * by this transaction. We always pick the latest version.
  */
 void MVScheduler::ProcessReadset(Action *action) {
-	VersionBuffer readBuffer;
+	VersionBuffer readBuffer(alloc);
 	for (uint32_t i = 0; i < action->readset.size(); ++i) {
 		CompositeKey record = action->readset[i];
 		uint64_t version;
@@ -247,6 +259,7 @@ void MVScheduler::ProcessReadset(Action *action) {
 		record.version = version;
 		bool appendSuccess = readBuffer.Append(record);
 		assert(appendSuccess);
+		action->readset[i].version = version;
 	}
 	action->readVersions[threadId] = readBuffer;
 }
@@ -255,9 +268,9 @@ void MVScheduler::ProcessReadset(Action *action) {
  * Hash the given key, and find which concurrency control thread is
  * responsible for the appropriate key range. 
  */
-inline uint32_t MVScheduler::GetCCThread(CompositeKey key) {
-	assert(false);
-	return 0;
+uint32_t MVScheduler::GetCCThread(CompositeKey key) {
+	uint64_t hash = CompositeKey::Hash(&key);
+	return (uint32_t)(hash % NUM_CC_THREADS);
 }
 
 
@@ -284,6 +297,7 @@ void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
 		}
 	}
 }
+
 
 void MVScheduler::ScheduleTransaction(Action *action) {
 	txnCounter += 1;

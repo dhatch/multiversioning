@@ -20,7 +20,7 @@ class MVTablePartition {
 	//
 	// param size: Number of slots in the hash table.
 	// param alloc: Allocator to use for creating MVRecords.
-	MVTablePartition(uint64_t size, MVRecordAllocator *alloc);
+	MVTablePartition(uint64_t size, MVRecordAllocator *alloc);	
 	
 	// Get the latest version for the given primary key. If we're unable to find
 	// a live instance of the record, return false. Otherwise, return true.
