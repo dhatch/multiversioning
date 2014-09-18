@@ -283,7 +283,7 @@ uint32_t MVScheduler::GetCCThread(CompositeKey key) {
 void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
 	for (uint32_t i = 0; i < action->writeset.size(); ++i) {
 		CompositeKey record = action->writeset[i];
-		uint64_t version;
+        //		uint64_t version;
 		if (GetCCThread(record) == threadId) {
 			
 			MVTable *tbl;
