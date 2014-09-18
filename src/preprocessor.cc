@@ -199,7 +199,7 @@ bool VersionBuffer::Append(CompositeKey value) {
 	
 	// offset == NUM_ELEMS means that we've filled up the current buffer. Try 
 	// to allocate a new buffer. If the allocation fails, return false.
-	if (offset == NUM_ELEMS || tail == NULL) {
+	if (offset == (int)NUM_ELEMS || tail == NULL) {
 		void *buffer;
 		if (alloc->GetBuffer(&buffer)) {
 

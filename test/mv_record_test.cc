@@ -113,7 +113,7 @@ TEST_F(MVAllocatorTest, AllocTest) {
 	ASSERT_TRUE(temp == NULL);
 	ASSERT_FALSE(success);
 
-	MVRecordList ret0 = {.head = cur0, .tail = cur0};
+	MVRecordList ret0 = {cur0, cur0};
 	allocator->ReturnMVRecords(ret0);
 
 	cur0 = NULL;
