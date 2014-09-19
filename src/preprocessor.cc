@@ -229,7 +229,6 @@ MVScheduler::MVScheduler(MVSchedulerConfig config) : Runnable(config.cpuNumber) 
 }
 
 void MVScheduler::StartWorking() {
-    
     while (true) {
         if (config.threadId == 0) {
             Leader();
@@ -263,7 +262,7 @@ void MVScheduler::Leader() {
 
     // Signal every other concurrency control thread to start.
     for (uint32_t i = 0; i < NUM_CC_THREADS-1; ++i) {
-        config.leaderEpochStartQueue[i]->EnqueueBlocking(curBatch);
+        config.leaderEpochStartQueues[i]->EnqueueBlocking(curBatch);
     }
     
     // Maintain dependencies for the current batch of transactions
@@ -273,7 +272,7 @@ void MVScheduler::Leader() {
 
     // Wait for all concurrency control threads to finish.    
     for (uint32_t i = 0; i < NUM_CC_THREADS-1; ++i) {
-        config.leaderEpochStopQueue[i]->DequeueBlocking();
+        config.leaderEpochStopQueues[i]->DequeueBlocking();
     }
     
     config.leaderOutputQueue->EnqueueBlocking(curBatch);

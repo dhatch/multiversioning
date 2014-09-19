@@ -14,18 +14,28 @@ TESTOBJECTS=$(patsubst test/%.cc,test/%.o,$(TESTSOURCES))
 DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
-all:build/tests
+all:build/db build/tests
 
 build/%.o: src/%.cc $(DEPSDIR)/stamp 
 	@mkdir -p build
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
+	@rm $(DEPSDIR)/$*.d
 
 $(TESTOBJECTS):$(OBJECTS)
+
 test/%.o: test/%.cc $(DEPSDIR)/stamp 
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) -Wno-missing-field-initializers -Wno-conversion-null $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
+	@rm $(DEPSDIR)/$*.d
 
+start/%.o: start/%.cc $(DEPSDIR)/stamp 
+	@echo + cc $<
+	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
+	@rm $(DEPSDIR)/$*.d
+
+build/db:start/main.o $(OBJECTS)
+	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)

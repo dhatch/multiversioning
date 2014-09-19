@@ -92,7 +92,7 @@ class Action {
   std::vector<CompositeKey> readset;
   std::vector<CompositeKey> writeset;
   
-  VersionBuffer readVersions[32];
+  VersionBuffer readVersions[10];
 
   //  std::vector<int> real_writes;
   //  volatile uint64_t __attribute__((aligned(CACHE_LINE))) sched_start_time;    

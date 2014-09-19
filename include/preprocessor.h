@@ -85,8 +85,8 @@ struct MVSchedulerConfig {
     // Coordination queues required by the leader thread.
     SimpleQueue<ActionBatch> *leaderInputQueue;
     SimpleQueue<ActionBatch> *leaderOutputQueue;
-    SimpleQueue<ActionBatch> **leaderEpochStartQueue;
-    SimpleQueue<ActionBatch> **leaderEpochStopQueue;
+    SimpleQueue<ActionBatch> **leaderEpochStartQueues;
+    SimpleQueue<ActionBatch> **leaderEpochStopQueues;
     
     // Coordination queues required by the subordinate threads.
     SimpleQueue<ActionBatch> *subordInputQueue;
@@ -101,7 +101,6 @@ class MVScheduler : public Runnable {
 	friend class SchedulerTest;
 	
  private:
-	static uint32_t NUM_CC_THREADS;
 	static inline uint32_t GetCCThread(CompositeKey key);
 
     MVSchedulerConfig config;
@@ -119,6 +118,7 @@ class MVScheduler : public Runnable {
     void Subordinate();
 
  public:
+	static uint32_t NUM_CC_THREADS;
 	MVScheduler(MVSchedulerConfig config);
 };
 
