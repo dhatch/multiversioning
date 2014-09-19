@@ -19,7 +19,20 @@ protected:
 
 	virtual void SetUp() {		
 		InitTable();
-		sched = new MVScheduler(0, 0, (1<<20));		
+
+        MVSchedulerConfig config = {
+            0, 
+            0,
+            (1 << 20),
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+        };
+
+		sched = new MVScheduler(config);
 		sched->txnCounter = 1;
 	}
 

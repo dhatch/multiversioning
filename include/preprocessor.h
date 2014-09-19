@@ -2,6 +2,16 @@
 #define 	PREPROCESSOR_H_
 
 #include <runnable.hh>
+#include <concurrent_queue.h>
+
+class VersionBuffer;
+class CompositeKey;
+class Action;
+
+struct ActionBatch {
+    Action **actionBuf;
+    uint32_t numActions;
+};
 
 class BufferArithmetic {
  public:
@@ -11,10 +21,6 @@ class BufferArithmetic {
 	static void* GetElementAt(void *buf, uint64_t bufferSize, 
 							  uint64_t elementSize, uint64_t index);
 };
-
-class VersionBuffer;
-class CompositeKey;
-class Action;
 
 class VersionBufferAllocator {	
 
@@ -71,6 +77,22 @@ class VersionBuffer
 	uint64_t GetValue();
 };
 
+struct MVSchedulerConfig {
+    int cpuNumber;
+    uint32_t threadId;
+    uint64_t totalBufSize;
+    
+    // Coordination queues required by the leader thread.
+    SimpleQueue<ActionBatch> *leaderInputQueue;
+    SimpleQueue<ActionBatch> *leaderOutputQueue;
+    SimpleQueue<ActionBatch> **leaderEpochStartQueue;
+    SimpleQueue<ActionBatch> **leaderEpochStopQueue;
+    
+    // Coordination queues required by the subordinate threads.
+    SimpleQueue<ActionBatch> *subordInputQueue;
+    SimpleQueue<ActionBatch> *subordOutputQueue;
+};
+
 /*
  * MVScheduler implements scheduling logic. The scheduler is partitioned across 
  * several physical cores.
@@ -81,8 +103,8 @@ class MVScheduler : public Runnable {
  private:
 	static uint32_t NUM_CC_THREADS;
 	static inline uint32_t GetCCThread(CompositeKey key);
-	
-	uint32_t threadId;
+
+    MVSchedulerConfig config;
 	VersionBufferAllocator *alloc;
 
 	uint32_t epoch;
@@ -93,9 +115,11 @@ class MVScheduler : public Runnable {
 	void ProcessReadset(Action *action);
 	void ProcessWriteset(Action *action, uint64_t timestamp);
 	void ScheduleTransaction(Action *action);	
+    void Leader();
+    void Subordinate();
 
  public:
-	MVScheduler(int cpuNumber, uint32_t threadId, uint64_t totalBufSize);	
+	MVScheduler(MVSchedulerConfig config);
 };
 
 

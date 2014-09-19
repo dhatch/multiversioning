@@ -69,8 +69,8 @@ class VersionBuffer;
  * completely agnostic about the mapping between a primary key and the 
  * appropriate version. 
  */
-class Action 
-{
+class Action {
+
  protected:
 	void* Read(CompositeKey key);
 	void* Write(CompositeKey key);

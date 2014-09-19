@@ -1,9 +1,9 @@
 #include <preprocessor.h>
 #include <machine.h>
 #include <city.h>
-#include <action.h>
 #include <catalog.h>
 #include <database.h>
+#include <action.h>
 
 #include <stdlib.h>
 
@@ -223,14 +223,60 @@ bool VersionBuffer::Append(CompositeKey value) {
 	return true;
 }
 
-MVScheduler::MVScheduler(int cpuNumber, uint32_t threadId, 
-						 uint64_t totalBufSize) : Runnable(cpuNumber) {
-	this->threadId = threadId;
-	this->alloc = new VersionBufferAllocator(totalBufSize);
+MVScheduler::MVScheduler(MVSchedulerConfig config) : Runnable(config.cpuNumber) {
+    this->config = config;
+	this->alloc = new VersionBufferAllocator(config.totalBufSize);
 }
 
 void MVScheduler::StartWorking() {
+    
+    while (true) {
+        if (config.threadId == 0) {
+            Leader();
+        }
+        else {
+            Subordinate();
+        }
+    }
+}
 
+void MVScheduler::Subordinate() {
+    assert(config.threadId != 0 && config.threadId < NUM_CC_THREADS);
+
+    // Take a batch of tranasctions from the leader.
+    ActionBatch curBatch = config.subordInputQueue->DequeueBlocking();
+    
+    // Maintain dependencies for the current batch.
+    for (uint32_t i = 0; i < curBatch.numActions; ++i) {
+        ScheduleTransaction(curBatch.actionBuf[i]);
+    }
+
+    // Signal that we're done with the current batch.
+    config.subordOutputQueue->EnqueueBlocking(curBatch);
+}
+
+void MVScheduler::Leader() {
+    assert(config.threadId == 0);
+
+    // Take a batch of transactions from the input queue.
+    ActionBatch curBatch = config.leaderInputQueue->DequeueBlocking();
+
+    // Signal every other concurrency control thread to start.
+    for (uint32_t i = 0; i < NUM_CC_THREADS-1; ++i) {
+        config.leaderEpochStartQueue[i]->EnqueueBlocking(curBatch);
+    }
+    
+    // Maintain dependencies for the current batch of transactions
+    for (uint32_t i = 0; i < curBatch.numActions; ++i) {
+        ScheduleTransaction(curBatch.actionBuf[i]);
+    }
+
+    // Wait for all concurrency control threads to finish.    
+    for (uint32_t i = 0; i < NUM_CC_THREADS-1; ++i) {
+        config.leaderEpochStopQueue[i]->DequeueBlocking();
+    }
+    
+    config.leaderOutputQueue->EnqueueBlocking(curBatch);
 }
 
 /*
@@ -242,7 +288,7 @@ void MVScheduler::ProcessReadset(Action *action) {
 	for (uint32_t i = 0; i < action->readset.size(); ++i) {
 		CompositeKey record = action->readset[i];
 		uint64_t version;
-		if (GetCCThread(record) == threadId) {
+		if (GetCCThread(record) == config.threadId) {
 			
 			// Try to get a reference to the table from the catalog. Ensure that
 			// the table actually exists.
@@ -252,7 +298,7 @@ void MVScheduler::ProcessReadset(Action *action) {
 			}
 			
 			// XXX What if the table does not contain the record?
-			if (!tbl->GetLatestVersion(threadId, record, &version)) {
+			if (!tbl->GetLatestVersion(config.threadId, record, &version)) {
 				assert(false);
 			}
 		}
@@ -261,7 +307,7 @@ void MVScheduler::ProcessReadset(Action *action) {
 		assert(appendSuccess);
 		action->readset[i].version = version;
 	}
-	action->readVersions[threadId] = readBuffer;
+	action->readVersions[config.threadId] = readBuffer;
 }
 
 /*
@@ -284,14 +330,14 @@ void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
 	for (uint32_t i = 0; i < action->writeset.size(); ++i) {
 		CompositeKey record = action->writeset[i];
         //		uint64_t version;
-		if (GetCCThread(record) == threadId) {
+		if (GetCCThread(record) == config.threadId) {
 			
 			MVTable *tbl;
 			if (!DB.GetTable(record.tableId, &tbl)) {
 				assert(false);
 			}
 			
-			if (!tbl->WriteNewVersion(threadId, record, action, timestamp)) {
+			if (!tbl->WriteNewVersion(config.threadId, record, action, timestamp)) {
 				assert(false);
 			}
 		}
@@ -301,7 +347,7 @@ void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
 
 void MVScheduler::ScheduleTransaction(Action *action) {
 	txnCounter += 1;
-	if (threadId == 0) {
+	if (config.threadId == 0) {
 		uint64_t version = (((uint64_t)epoch << 32) | txnCounter);
 		action->version = version;
 	}
