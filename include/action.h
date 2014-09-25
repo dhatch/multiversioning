@@ -17,7 +17,7 @@ class CompositeKey {
  public:
   uint32_t tableId;
   uint64_t key;
-  uint64_t version;
+  uint32_t threadId;
 
   CompositeKey(uint32_t table, uint64_t key) {
     this->tableId = table;
@@ -55,10 +55,16 @@ class CompositeKey {
       return !(*this < other);
   }
 
-  static inline uint64_t Hash(CompositeKey *key) {
-	  return CityHash64((char*)key, 12);
+  static inline uint64_t Hash(const CompositeKey *key) {
+      return CityHash64((char*)key, 12);
   }
 } __attribute__((__packed__));
+
+
+struct Range {
+    int start;
+    int end;
+};
 
 class VersionBuffer;
 
@@ -76,14 +82,15 @@ class Action {
 	void* Write(CompositeKey key);
 
  public:  
-	uint64_t version;
-  bool materialize;
-  bool is_blind;  
-  timespec start_time;
-  timespec end_time;
+    uint64_t version;
+    uint64_t combinedHash;
+    //  bool materialize;
+    //  bool is_blind;  
+    //  timespec start_time;
+    //  timespec end_time;
 
-  uint64_t start_rdtsc_time;
-  uint64_t end_rdtsc_time;
+    //  uint64_t start_rdtsc_time;
+    //  uint64_t end_rdtsc_time;
 
   //  volatile uint64_t start_time;
   //  volatile uint64_t end_time;
@@ -91,8 +98,11 @@ class Action {
   //  volatile uint64_t system_end_time;
   std::vector<CompositeKey> readset;
   std::vector<CompositeKey> writeset;
-  
-  VersionBuffer readVersions[10];
+  std::vector<Range> readRange;
+  std::vector<Range> writeRange;
+
+  //  char readVersions[64*10];
+  //  VersionBuffer readVersions[10];
 
   //  std::vector<int> real_writes;
   //  volatile uint64_t __attribute__((aligned(CACHE_LINE))) sched_start_time;    

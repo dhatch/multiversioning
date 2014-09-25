@@ -3,8 +3,8 @@
 
 #include <runnable.hh>
 #include <concurrent_queue.h>
+#include <numa.h>
 
-class VersionBuffer;
 class CompositeKey;
 class Action;
 
@@ -13,6 +13,7 @@ struct ActionBatch {
     uint32_t numActions;
 };
 
+/*
 class BufferArithmetic {
  public:
 	
@@ -31,7 +32,7 @@ class VersionBufferAllocator {
 
  public:
 	static const uint32_t BUFFER_SIZE = 128;
-	VersionBufferAllocator(uint64_t totalSize);
+	VersionBufferAllocator(uint64_t totalSize, int cpu);
 	bool GetBuffer(void **outBuf);
 	void ReturnBuffers(VersionBuffer *buffer);
 };
@@ -75,7 +76,9 @@ class VersionBuffer
 	void Reset();
 	
 	uint64_t GetValue();
-};
+}__attribute__((__packed__, __aligned__(64)));
+*/
+
 
 struct MVSchedulerConfig {
     int cpuNumber;
@@ -104,14 +107,14 @@ class MVScheduler : public Runnable {
 	static inline uint32_t GetCCThread(CompositeKey key);
 
     MVSchedulerConfig config;
-	VersionBufferAllocator *alloc;
+    //	VersionBufferAllocator *alloc;
 
 	uint32_t epoch;
 	uint32_t txnCounter;
+    uint32_t txnMask;
 
  protected:
 	virtual void StartWorking();
-	void ProcessReadset(Action *action);
 	void ProcessWriteset(Action *action, uint64_t timestamp);
 	void ScheduleTransaction(Action *action);	
     void Leader();

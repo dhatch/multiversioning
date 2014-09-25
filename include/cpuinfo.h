@@ -6,6 +6,15 @@
 
 #include <pthread.h>
 #include <numa.h>
+#include <sys/mman.h>
+
+#ifndef MAP_HUGETLB
+#define MAP_HUGETLB 0x40000
+#endif
+
+#define MMAP_FLAGS (MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB)
+#define MMAP_PROT (PROT_READ | PROT_WRITE)
+#define MMAP_ADDR (void *)(0x0UL)
 
 void
 init_cpuinfo();
@@ -18,5 +27,11 @@ get_cpu(int index, int striped);
 
 int
 pin_thread(int cpu);
+
+void*
+alloc_mem(size_t size, int cpu);
+
+void*
+alloc_huge(size_t size, int cpu);
 
 #endif

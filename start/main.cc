@@ -2,10 +2,16 @@
 #include <preprocessor.h>
 #include <cpuinfo.h>
 
+#include <gperftools/profiler.h>
+
+#include <algorithm>
+#include <fstream>
 #include <set>
 #include <iostream>
 
 Database DB;
+
+int NumProcs;
 
 timespec diff_time(timespec end, timespec start) {
     timespec temp;
@@ -23,33 +29,36 @@ timespec diff_time(timespec end, timespec start) {
 
 MVSchedulerConfig SetupLeaderSched(int cpuNumber, int numSchedThreads) {
     // Set up queues for coordinating with other threads in the system.
-    char *inputArray = (char*)malloc(CACHE_LINE*1000);            
-    SimpleQueue<ActionBatch> *leaderInputQueue = new SimpleQueue<ActionBatch>(inputArray, 1000);
-    char *outputArray = (char*)malloc(CACHE_LINE*1000);
-    SimpleQueue<ActionBatch> *leaderOutputQueue = new SimpleQueue<ActionBatch>(outputArray, 1000);
+    char *inputArray = (char*)alloc_mem(CACHE_LINE*256, 0);            
+    SimpleQueue<ActionBatch> *leaderInputQueue = new SimpleQueue<ActionBatch>(inputArray, 256);
+    char *outputArray = (char*)alloc_mem(CACHE_LINE*256, 0);
+    SimpleQueue<ActionBatch> *leaderOutputQueue = new SimpleQueue<ActionBatch>(outputArray, 256);
     
     // Queues to coordinate with subordinate scheduler threads.
     SimpleQueue<ActionBatch> **leaderEpochStartQueues = 
-        (SimpleQueue<ActionBatch>**)malloc(sizeof(SimpleQueue<ActionBatch>*)*numSchedThreads-1);
+        (SimpleQueue<ActionBatch>**)alloc_mem(sizeof(SimpleQueue<ActionBatch>*)*numSchedThreads-1, 0);
     SimpleQueue<ActionBatch> **leaderEpochStopQueues = 
-        (SimpleQueue<ActionBatch>**)malloc(sizeof(SimpleQueue<ActionBatch>*)*numSchedThreads-1);    
+        (SimpleQueue<ActionBatch>**)alloc_mem(sizeof(SimpleQueue<ActionBatch>*)*numSchedThreads-1, 0);    
 
     // We need a queue of size 2 because each the leader and subordinates run epochs in 
     // lock step.
-    for (int i = 0; i < numSchedThreads-1; ++i) {        
-        char *startArray = (char*)malloc(CACHE_LINE*2);
+    for (int i = 0; i < numSchedThreads; ++i) {        
+        char *startArray = (char*)alloc_mem(CACHE_LINE*2, 0);
         SimpleQueue<ActionBatch> *startQueue = new SimpleQueue<ActionBatch>(startArray, 2);
-        char *stopArray = (char*)malloc(CACHE_LINE*2);
+        char *stopArray = (char*)alloc_mem(CACHE_LINE*2, 0);
         SimpleQueue<ActionBatch> *stopQueue = new SimpleQueue<ActionBatch>(stopArray, 2);
         
+        assert(startQueue != NULL);
+        assert(stopQueue != NULL);
+
         leaderEpochStartQueues[i] = startQueue;
         leaderEpochStopQueues[i] = stopQueue;
     }
     
-    MVSchedulerConfig config = {
+    MVSchedulerConfig config {
         cpuNumber,						// core to bind
         0,								// threadId
-        (1<<25),						// bufSize
+            0,
         leaderInputQueue,
         leaderOutputQueue,
         leaderEpochStartQueues,
@@ -63,28 +72,29 @@ MVSchedulerConfig SetupLeaderSched(int cpuNumber, int numSchedThreads) {
 
 MVSchedulerConfig SetupSubordinateSched(int cpuNumber, uint32_t threadId, 
                                         MVSchedulerConfig leaderConfig) {
-    MVSchedulerConfig config = {
+    MVSchedulerConfig config {
         cpuNumber,
         threadId,
-        (1 << 25),
+            0,
         NULL,
         NULL,
         NULL,
         NULL,
-        leaderConfig.leaderEpochStartQueues[threadId],
-        leaderConfig.leaderEpochStopQueues[threadId],
+        leaderConfig.leaderEpochStartQueues[threadId-1],
+        leaderConfig.leaderEpochStopQueues[threadId-1],
     };
+    assert(config.subordInputQueue != NULL && config.subordOutputQueue != NULL);
     return config;
 }
 
 MVScheduler** SetupSchedulers(int numProcs, SimpleQueue<ActionBatch> **inputQueueRef_OUT, 
                               SimpleQueue<ActionBatch> **outputQueueRef_OUT) {
     MVScheduler **schedArray = (MVScheduler**)malloc(sizeof(MVScheduler*)*numProcs);
-    MVSchedulerConfig leaderConfig = SetupLeaderSched(1,  // cpuNumber
+    MVSchedulerConfig leaderConfig = SetupLeaderSched(10,  // cpuNumber
                                                       numProcs);
     schedArray[0] = new MVScheduler(leaderConfig);
     for (int i = 1; i < numProcs; ++i) {
-        MVSchedulerConfig subordConfig = SetupSubordinateSched(1+i, i, leaderConfig);
+        MVSchedulerConfig subordConfig = SetupSubordinateSched(i+10, i, leaderConfig);
         schedArray[i] = new MVScheduler(subordConfig);
     }
     
@@ -93,27 +103,18 @@ MVScheduler** SetupSchedulers(int numProcs, SimpleQueue<ActionBatch> **inputQueu
     return schedArray;
 }
 
-void SetupDatabase(int numProcs, uint64_t allocatorSize, uint64_t tableSize, uint64_t numRecords) {
+void SetupDatabase(int numProcs, uint64_t allocatorSize, uint64_t tableSize) {
     MVTablePartition **partArray = (MVTablePartition**)malloc(sizeof(MVTable*)*numProcs);
     
-    uint64_t allocatorChunkSize = allocatorSize/numProcs;
+    //    uint64_t allocatorChunkSize = allocatorSize/numProcs;
     uint64_t tableChunkSize = tableSize/numProcs;
 
     for (int i = 0; i < numProcs; ++i) {
         MVRecordAllocator *recordAlloc = 
-            new MVRecordAllocator(allocatorChunkSize*sizeof(MVRecord));
+            new MVRecordAllocator(allocatorSize, i+10);
 
-        MVTablePartition *part = new MVTablePartition(tableChunkSize, recordAlloc);
+        MVTablePartition *part = new MVTablePartition(tableChunkSize, i+10, recordAlloc);
         partArray[i] = part;
-    }
-
-    CompositeKey temp;
-    temp.tableId = 0;
-    for (uint64_t i = 0; i < numRecords; ++i) {
-        temp.key = i;
-        uint64_t partitionId = (uint64_t)(CompositeKey::Hash(&temp) % numProcs);
-        bool success = partArray[partitionId]->WriteNewVersion(temp, NULL, 0);        
-        assert(success);
     }
 
     MVTable *tbl = new MVTable(numProcs, partArray);    
@@ -121,24 +122,58 @@ void SetupDatabase(int numProcs, uint64_t allocatorSize, uint64_t tableSize, uin
     assert(success);
 }
 
+bool SortCmp(CompositeKey key1, CompositeKey key2) {
+    uint32_t thread1 = CompositeKey::Hash(&key1) % MVScheduler::NUM_CC_THREADS;
+    uint32_t thread2 = CompositeKey::Hash(&key2) % MVScheduler::NUM_CC_THREADS;
+    return thread1 > thread2;
+}
+
 ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords) {
+    std::cout << MVScheduler::NUM_CC_THREADS << "\n";
     Action **ret = new Action*[epochSize];    
+    assert(ret != NULL);
     std::set<uint64_t> seenKeys;
     for (uint32_t j = 0; j < epochSize; ++j) {
         seenKeys.clear();
         ret[j] = new Action();
+        assert(ret[j] != NULL);
+        ret[j]->combinedHash = 0;
         for (int i = 0; i < txnSize; ++i) {        
             while (true) {
                 uint64_t key = (uint64_t)(rand() % numRecords);
                 if (seenKeys.find(key) == seenKeys.end()) {
                     seenKeys.insert(key);
                     CompositeKey toAdd(0, key);
+                    uint32_t threadId = CompositeKey::Hash(&toAdd) % MVScheduler::NUM_CC_THREADS;
+                    toAdd.threadId = threadId;
                     ret[j]->readset.push_back(toAdd);
                     ret[j]->writeset.push_back(toAdd);
                     break;
                 }
             }
         }
+        
+        //        std::sort(ret[j]->readset.begin(), ret[j]->readset.end(), SortCmp);
+        //        std::sort(ret[j]->writeset.begin(), ret[j]->writeset.end(), SortCmp);
+        //        int counts[MVScheduler::NUM_CC_THREADS];
+        //        memset(counts, 0, sizeof(counts));
+        for (int k = 0; k < txnSize; ++k) {
+            uint32_t threadId = CompositeKey::Hash(&ret[j]->readset[k]) % MVScheduler::NUM_CC_THREADS;
+            ret[j]->combinedHash |= (1<<threadId);
+            //            counts[threadId] += 1;
+        }
+        
+        /*
+        int prevCount = 0;
+        for (int k = 0; k < MVScheduler::NUM_CC_THREADS; ++k) {
+            Range curRange;
+            curRange.start = prevCount;
+            curRange.end = prevCount + counts[k];
+            prevCount += counts[k];
+            ret[j]->readRange.push_back(curRange);
+            ret[j]->writeRange.push_back(curRange);
+        }
+        */
     }
     
     ActionBatch batch = {
@@ -149,15 +184,15 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords) 
 
 }
 
-void SetupInput(SimpleQueue<ActionBatch> *input, int numEpochs, int epochSize, int numRecords) {
+void SetupInput(SimpleQueue<ActionBatch> *input, int numEpochs, int epochSize, int numRecords, int txnsize) {
     for (int i = 0; i < numEpochs; ++i) {
-        ActionBatch curBatch = CreateRandomAction(20, epochSize, numRecords);
+        ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords);
         input->EnqueueBlocking(curBatch);        
     }
 }
 
-void DoExperiment(int numProcs, int numRecords, int epochSize, int numEpochs) {
-    int successPin = pin_thread(0);
+void DoExperiment(int numProcs, int numRecords, int epochSize, int numEpochs, int txnSize) {
+    int successPin = pin_thread(79);
     if (successPin != 0) {
         assert(false);
     }
@@ -167,28 +202,43 @@ void DoExperiment(int numProcs, int numRecords, int epochSize, int numEpochs) {
     SimpleQueue<ActionBatch> *outputQueue = NULL;
 
     // Set up the database.
-    SetupDatabase(numProcs, 1<<30, 2*numRecords, numRecords);
+    std::cout << "Start setup database...\n";
+    SetupDatabase(numProcs, 1<<30, numRecords);
+    std::cout << "Setup database...\n";
     
     // Set up the scheduler threads.
     schedThreads = SetupSchedulers(numProcs, &inputQueue, &outputQueue);
     assert(schedThreads != NULL);
     assert(inputQueue != NULL);
     assert(outputQueue != NULL);
+    std::cout << "Setup scheduler threads...\n";
 
     // Set up the input.
-    SetupInput(inputQueue, numEpochs, epochSize, numRecords);
+    SetupInput(inputQueue, numEpochs, epochSize, numRecords, txnSize);
+    std::cout << "Setup input...\n";
 
     // Run the experiment.
+    ProfilerStart("/home/jmf/multiversioning/db.prof");
+    std::cout << "Running experiment. Epochs: " << numEpochs << "\n";
     timespec start_time, end_time;
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
-    for (int i = 0; i < epochSize; ++i) {
+    for (int i = 0; i < numProcs; ++i) {
+        schedThreads[i]->Run();
+    }
+    for (int i = 0; i < numEpochs; ++i) {
         outputQueue->DequeueBlocking();
+        //        std::cout << "Iteration " << i << "\n";
     }
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
+    ProfilerStop();
     timespec elapsed_time = diff_time(end_time, start_time);
     double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
-
-    std::cout << "Time elapsed: " << elapsedMilli;
+    std::cout << elapsedMilli << '\n';
+    std::ofstream resultFile;
+    resultFile.open("results.txt", std::ios::app | std::ios::out);
+    resultFile << elapsedMilli << " " << numEpochs*epochSize << " " << numProcs << "\n";
+    //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
+    resultFile.close();
 }
 
 // arg0: number of scheduler threads
@@ -196,11 +246,15 @@ void DoExperiment(int numProcs, int numRecords, int epochSize, int numEpochs) {
 // arg2: number of txns in an epoch
 // arg3: number of epochs
 int main(int argc, char **argv) {
-    assert(argc == 5);
+    assert(argc == 6);
     int numProcs = atoi(argv[1]);
     int numRecords = atoi(argv[2]);
     int epochSize = atoi(argv[3]);
     int numEpochs = atoi(argv[4]);
-    
-    DoExperiment(numProcs, numRecords, epochSize, numEpochs);
+    int txnSize = atoi(argv[5]);
+
+    MVScheduler::NUM_CC_THREADS = (uint32_t)numProcs;
+    DoExperiment(numProcs, numRecords, epochSize, numEpochs, txnSize);
+    exit(0);
 }
+

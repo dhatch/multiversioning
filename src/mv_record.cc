@@ -1,18 +1,20 @@
 #include <mv_record.h>
 #include <cstdlib>
+#include <cpuinfo.h>
 
-MVRecordAllocator::MVRecordAllocator(uint64_t size) {
-	assert(size % sizeof(MVRecord) == 0);
+MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu) {
 	
-	MVRecord *data = (MVRecord*)malloc(size);
+	MVRecord *data = (MVRecord*)alloc_mem(size, cpu);
 	assert(data != NULL);
 	memset(data, 0xA3, size);
 	
 	uint64_t numRecords = size/sizeof(MVRecord);
-	for (uint64_t i = 0; i < numRecords; ++i) {
-		data[i].recordLink = &data[i+1];
+    uint64_t endIndex = numRecords-1;
+	for (uint64_t i = 0; i < numRecords/2; ++i) {
+        data[i].recordLink = &data[endIndex-i];
+        data[endIndex-i].recordLink = &data[i+1];
 	}
-	data[numRecords-1].recordLink = NULL;
+	data[numRecords/2].recordLink = NULL;
 	freeList = data;
 }
 
@@ -26,7 +28,7 @@ bool MVRecordAllocator::GetRecord(MVRecord **OUT_recordPtr) {
 	freeList = freeList->recordLink;
 
 	// Set up the MVRecord to return.
-	memset(ret, 0xA3, sizeof(MVRecord));
+    //	memset(ret, 0xA3, sizeof(MVRecord));
 	ret->link = NULL;
 	ret->recordLink = NULL;
 	

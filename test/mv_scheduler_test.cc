@@ -7,6 +7,7 @@
 #include <time.h>
 
 using namespace std;
+Database DB;
 
 class SchedulerTest : public testing::Test {
 	
@@ -42,10 +43,10 @@ protected:
 
 	virtual void InitTable() {
 		MVRecordAllocator *recordAlloc = 
-			new MVRecordAllocator((1<<20)*sizeof(MVRecord));
+			new MVRecordAllocator((1<<20)*sizeof(MVRecord), 0);
 		ASSERT_TRUE(recordAlloc != NULL);
 
-		MVTablePartition *part = new MVTablePartition((1 << 16), recordAlloc);
+		MVTablePartition *part = new MVTablePartition((1 << 16), 0, recordAlloc);
 		ASSERT_TRUE(part != NULL);
 
 		MVTablePartition **partArray = 
@@ -61,7 +62,6 @@ protected:
 		for (int i = 0; i < numRecords; ++i) {
 			temp.tableId = 0;
 			temp.key = (uint64_t)i;
-			temp.version = 0;
 
 			bool success = false;
 			success = tbl->WriteNewVersion(0, temp, NULL, 0);
@@ -84,27 +84,29 @@ TEST_F(SchedulerTest, Test) {
 			uint64_t key = (uint64_t)((i + j)%numRecords);
 			temp.tableId = 0;
 			temp.key = key;
-			temp.version = 0;
 
 			toSchedule[i].readset.push_back(temp);
 			toSchedule[i].writeset.push_back(temp);
 		}
+        toSchedule[i].combinedHash = 1;
 
 		SchedWrapper(&toSchedule[i]);
 		
+        // For every element in the writeset, ensure that the "latest version" of
+        // the corresponding record in the table is equal to the timestamp assigned
+        // to this particular transaction.
 		for (int j = 0; j < writesetSize; ++j) {
-			uint64_t key = toSchedule[i].readset[j].key;
-			ASSERT_EQ(versionTracker[key], toSchedule[i].readset[j].version);
-
-			/*
-			MVTable *tbl;
-			bool success = DB.GetTable(0, &tbl);
-			ASSERT_TRUE(success);
-			MVRecord *prevVersion = 
-			*/
-
-			versionTracker[key] = toSchedule[i].version;
-			actionTracker[key] = &toSchedule[i];
+            MVTable *tbl;
+            bool success = DB.GetTable(0, &tbl);
+            ASSERT_TRUE(success);
+            uint64_t version;
+            tbl->GetLatestVersion(0, toSchedule[i].writeset[j], &version);
+            ASSERT_EQ(toSchedule[i].version, version);
 		}		
 	}
+}
+
+int main(int argc, char **argv) {
+	testing::InitGoogleTest(&argc, argv);
+	return RUN_ALL_TESTS();
 }

@@ -1,5 +1,6 @@
 #include <numa.h>
 #include <iostream>
+#include <cpuinfo.h>
 
 struct cpuinfo {
   int num_cpus;
@@ -8,6 +9,18 @@ struct cpuinfo {
 };
 
 static struct cpuinfo cpu_info;
+
+void*
+alloc_huge(size_t size, int cpu) {
+    pin_thread(cpu);
+    numa_set_strict(1);
+    void *ret = mmap(MMAP_ADDR, size, MMAP_PROT, MMAP_FLAGS, 0, 0);
+    if (ret == MAP_FAILED){
+        std::cout << "HUGE PAGE ALLOCATION FAILED!\n";
+        exit(-1);
+    }    
+    return ret;
+}
 
 void
 init_cpuinfo()
@@ -83,8 +96,16 @@ pin_thread(int cpu)
   pthread_t self = pthread_self();
   if (pthread_setaffinity_np(self, sizeof(cpu_set_t), &binding) < 0) {
     std::cout << "Couldn't bind to my cpu!\n";
-    return -1;
+    exit(-1);
   }
   return 0;
 }
 
+void*
+alloc_mem(size_t size, int cpu)
+{
+    int numa_node = numa_node_of_cpu(cpu);
+    numa_set_strict(1);
+    void *buf = numa_alloc_onnode(size, numa_node);
+    return buf;
+}

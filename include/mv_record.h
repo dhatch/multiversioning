@@ -13,7 +13,7 @@ struct _MVRecord_ {
 	// The time at which this record became invalid.
 	uint64_t deleteTimestamp;
 	
-	CompositeKey key;
+    uint64_t key;
 	
 	// The transaction responsible for creating a value associated with the 
 	// record.
@@ -53,7 +53,7 @@ class MVRecordAllocator {
 	
 	// Constructor takes a size parameter, which is the total number of bytes 
 	// allocator can work with.
-	MVRecordAllocator(uint64_t size);
+	MVRecordAllocator(uint64_t size, int cpu);
 	
 	// 
 	bool GetRecord(MVRecord **out);

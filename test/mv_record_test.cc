@@ -12,7 +12,7 @@ protected:
 	MVRecord *drained;
 
 	virtual void SetUp() {
-		allocator = new MVRecordAllocator(sizeof(MVRecord)*1000);
+		allocator = new MVRecordAllocator(sizeof(MVRecord)*1000, 0);
 	}
 
 	virtual void DrainAllocator() {
@@ -33,7 +33,7 @@ protected:
 
 	virtual void SetUp() {
 		MVAllocatorTest::SetUp();
-		partition = new MVTablePartition(100, allocator);
+		partition = new MVTablePartition(100, 0, allocator);
 	}
 };
 
@@ -212,7 +212,7 @@ TEST(CompositeKeyTest, HashTest) {
 	for (int i = 0; i < 1000; ++i) {
 		keys[i].tableId = 0;
 		keys[i].key = (uint64_t)(i % 100);
-		keys[i].version = (uint64_t)i;		
+		keys[i].threadId = (uint32_t)i;		
 		hashes[i] = CompositeKey::Hash(&keys[i]);
 	}
 	

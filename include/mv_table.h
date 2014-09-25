@@ -20,7 +20,7 @@ class MVTablePartition {
 	//
 	// param size: Number of slots in the hash table.
 	// param alloc: Allocator to use for creating MVRecords.
-	MVTablePartition(uint64_t size, MVRecordAllocator *alloc);	
+	MVTablePartition(uint64_t size, int cpu, MVRecordAllocator *alloc);	
 	
 	// Get the latest version for the given primary key. If we're unable to find
 	// a live instance of the record, return false. Otherwise, return true.
@@ -30,7 +30,7 @@ class MVTablePartition {
 	// 
 	// return value: true if the lookup finds a live instance of the record. 
 	//				 Otherwise, false.
-	bool GetLatestVersion(CompositeKey pkey, uint64_t *version);
+	bool GetLatestVersion(const CompositeKey &pkey, uint64_t *version);
 
 	// Insert a new version for the given record.
 	//
@@ -39,7 +39,7 @@ class MVTablePartition {
 	// param version: Version of the record to write out.
 	// 
 	// return value: true if the write is successful, false otherwise. 
-	bool WriteNewVersion(CompositeKey pkey, Action *action, uint64_t version);
+	bool WriteNewVersion(const CompositeKey &pkey, Action *action, uint64_t version);
 
 };
 
@@ -75,7 +75,7 @@ class MVTable {
 	// 
 	// return value: true if we're able to find a live version. otherwise, 
 	// 				 false.
-	bool GetLatestVersion(uint32_t partition, CompositeKey pkey, 
+	bool GetLatestVersion(uint32_t partition, const CompositeKey& pkey, 
 						  uint64_t *version);
 
 	// Scheduler threads call this function in order to create a new version for
@@ -88,7 +88,7 @@ class MVTable {
 	// 
 	// return value: true if we're able to insert a new version for the record. 
 	// 				 May fail if the allocator runs out of memory.
-	bool WriteNewVersion(uint32_t partition, CompositeKey pkey, Action *action, 
+	bool WriteNewVersion(uint32_t partition, const CompositeKey& pkey, Action *action, 
 						 uint64_t timestamp);	
 };
 
