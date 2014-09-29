@@ -1,28 +1,31 @@
-#ifndef 		RUNNABLE_HH_
-#define 		RUNNABLE_HH_
+#ifndef                 RUNNABLE_HH_
+#define                 RUNNABLE_HH_
 
 #include <pthread.h>
 #include <cassert>
 #include <iostream>
 
 class Runnable {
-private:
-    volatile uint64_t 		m_start_signal;
-    int 					m_cpu_number;
-    pthread_t 				m_thread;
 
 protected:
-    virtual void
-    StartWorking() = 0;
+  volatile uint64_t                     m_start_signal;
+  int                                   m_cpu_number;
+  pthread_t                             m_thread;
 
-    static void*
-    Bootstrap(void *arg);
+  virtual void
+  StartWorking() = 0;
+
+  virtual void
+  Init() = 0;
+  
+  static void*
+  Bootstrap(void *arg);
 
 public:    
-    Runnable(int cpu_number);
+  Runnable(int cpu_number);
     
-    void
-    Run();
+  void
+  Run();
 };
 
-#endif		//  RUNNABLE_HH_
+#endif          //  RUNNABLE_HH_

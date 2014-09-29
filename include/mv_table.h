@@ -2,6 +2,7 @@
 #define 	MV_TABLE_H_
 
 #include <mv_record.h>
+#include <action.h>
 
 /*
  * Single-writer hash table. Each scheduler thread contains a unique 
@@ -40,7 +41,10 @@ class MVTablePartition {
 	// 
 	// return value: true if the write is successful, false otherwise. 
 	bool WriteNewVersion(const CompositeKey &pkey, Action *action, uint64_t version);
-
+        
+        void WritePartition();
+        
+        MVRecordAllocator* GetAlloc();
 };
 
 /*
@@ -90,6 +94,10 @@ class MVTable {
 	// 				 May fail if the allocator runs out of memory.
 	bool WriteNewVersion(uint32_t partition, const CompositeKey& pkey, Action *action, 
 						 uint64_t timestamp);	
+
+        MVTablePartition* GetPartition(uint32_t partition) {
+          return tablePartitions[partition];
+        }
 };
 
 #endif 		/* MV_TABLE_H_ */

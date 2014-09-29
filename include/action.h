@@ -56,8 +56,13 @@ class CompositeKey {
   }
 
   static inline uint64_t Hash(const CompositeKey *key) {
+      return CityHash64((char*)key, 16);
+  }
+  
+  static inline uint64_t HashKey(const CompositeKey *key) {
       return CityHash64((char*)key, 12);
   }
+
 } __attribute__((__packed__));
 
 

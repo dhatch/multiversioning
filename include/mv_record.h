@@ -1,7 +1,10 @@
 #ifndef 	MV_RECORD_H_
 #define 	MV_RECORD_H_
 
-#include <action.h>
+#include <stdint.h>
+#include <cassert>
+
+class Action;
 
 typedef struct _MVRecord_ MVRecord;
 
@@ -48,7 +51,7 @@ class MVRecordAllocator {
 	
  private:
 	MVRecord *freeList;
-
+        uint64_t size;
  public:
 	
 	// Constructor takes a size parameter, which is the total number of bytes 
@@ -58,6 +61,7 @@ class MVRecordAllocator {
 	// 
 	bool GetRecord(MVRecord **out);
 	void ReturnMVRecords(MVRecordList recordList);	
+        void WriteAllocator();
 };
 
 #endif 		/* MV_RECORD_H_ */

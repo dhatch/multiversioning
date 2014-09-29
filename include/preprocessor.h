@@ -4,86 +4,25 @@
 #include <runnable.hh>
 #include <concurrent_queue.h>
 #include <numa.h>
+#include <mv_table.h>
 
 class CompositeKey;
 class Action;
+class MVRecordAllocator;
+class MVTablePartition;
 
 struct ActionBatch {
     Action **actionBuf;
     uint32_t numActions;
 };
 
-/*
-class BufferArithmetic {
- public:
-	
-	static void* GetLastElement(void *buf, uint64_t bufferSize, 
-								 uint64_t elementSize);
-	static void* GetElementAt(void *buf, uint64_t bufferSize, 
-							  uint64_t elementSize, uint64_t index);
-};
-
-class VersionBufferAllocator {	
-
-	friend class VBufAllocatorTest;
-
- private:
-	void *freeList;
-
- public:
-	static const uint32_t BUFFER_SIZE = 128;
-	VersionBufferAllocator(uint64_t totalSize, int cpu);
-	bool GetBuffer(void **outBuf);
-	void ReturnBuffers(VersionBuffer *buffer);
-};
-
-class VersionBuffer
-{
-	friend class VersionBufferAllocator;
-	friend class VBufAllocatorTest;
-	friend class MVScheduler;
-
- private:	
-	// Each version buffer consists of several 64-byte buffers linked together.
-	// the pointer "data" points to the first of these 64-byte buffers.
-	void 		*head;
-	void 		*tail;
-	
-	int offset;
-	VersionBufferAllocator *alloc;
-	
- public:
-	
-	// Hack: Each buffer contains 6 CompositeKeys.
-	static const uint32_t NUM_ELEMS = 6;
-
-	VersionBuffer();
-	
-	// Initialize an empty version buffer.
-	VersionBuffer(VersionBufferAllocator *alloc);
-	
-	// Appends "link" to the data.
-	void AddLink(void *link);
-	
-	// Move the position of the cursor to the next element in the buffer.
-	bool Move();
-	
-	bool Append(CompositeKey key);
-
-	void Write(uint64_t value);
-
-	// Move the position of the cursor back to the first element of the buffer.
-	void Reset();
-	
-	uint64_t GetValue();
-}__attribute__((__packed__, __aligned__(64)));
-*/
-
-
 struct MVSchedulerConfig {
     int cpuNumber;
     uint32_t threadId;
     uint64_t totalBufSize;
+  size_t allocatorSize;
+  size_t partitionSize;
+
     
     // Coordination queues required by the leader thread.
     SimpleQueue<ActionBatch> *leaderInputQueue;
@@ -109,9 +48,11 @@ class MVScheduler : public Runnable {
     MVSchedulerConfig config;
     //	VersionBufferAllocator *alloc;
 
+    MVTablePartition *partition;
+
 	uint32_t epoch;
 	uint32_t txnCounter;
-    uint32_t txnMask;
+    uint64_t txnMask;
 
  protected:
 	virtual void StartWorking();
@@ -119,7 +60,7 @@ class MVScheduler : public Runnable {
 	void ScheduleTransaction(Action *action);	
     void Leader();
     void Subordinate();
-
+    virtual void Init();
  public:
 	static uint32_t NUM_CC_THREADS;
 	MVScheduler(MVSchedulerConfig config);

@@ -30,12 +30,21 @@ MVTablePartition::MVTablePartition(uint64_t size,
 	memset(this->tableSlots, 0x00, sizeof(MVRecord*)*size);	
 }
 
+void MVTablePartition::WritePartition() {
+  memset(tableSlots, 0x00, sizeof(MVRecord*)*numSlots);
+}
+
+MVRecordAllocator* MVTablePartition::GetAlloc() {
+  return allocator;
+}
+
 /*
  * Given a primary key, find the slot associated with the key. Then iterate 
  * through the hash table's bucket list to find the key.
  */
 bool MVTablePartition::GetLatestVersion(const CompositeKey& pkey, 
 										  uint64_t *version) {	
+
 	uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
 	MVRecord *hashBucket = tableSlots[slotNumber];
 	while (hashBucket != NULL) {

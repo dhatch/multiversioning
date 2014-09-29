@@ -29,7 +29,9 @@ Runnable::Bootstrap(void *arg) {
         std::cout << "Couldn't bind to a cpu!\n";
         exit(-1);
     }
-
+    
+    worker->Init();
+    
     // Signal that we've initialized
     fetch_and_increment(&worker->m_start_signal);	
 
