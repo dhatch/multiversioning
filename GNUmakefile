@@ -1,4 +1,4 @@
-CFLAGS=-g -Werror -Wall -Wextra -std=c++0x 
+CFLAGS=-O3 -g -Werror -Wall -Wextra -w -std=c++0x  -DNDEBUG
 LIBS=-lnuma -lpthread -lrt -lcityhash -ltcmalloc_minimal  -lprofiler
 CXX=g++
 
@@ -48,7 +48,7 @@ $(DEPSDIR)/stamp:
 .PHONY: clean
 
 clean:
-	rm -rf build $(DEPSDIR) $(TESTOBJECTS)
+	rm -rf build $(DEPSDIR) $(TESTOBJECTS) start/*.o
 
 
 

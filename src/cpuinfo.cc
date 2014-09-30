@@ -117,6 +117,7 @@ alloc_mem(size_t size, int cpu) {
   */
 
   int numa_node = numa_node_of_cpu(cpu);
+  //  std::cout << "memory allocated on node: " << numa_node << "\n";
   numa_set_strict(1);
   void *buf = numa_alloc_onnode(size, numa_node);
   if (mlock(buf, size) < 0) {

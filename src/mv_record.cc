@@ -4,8 +4,8 @@
 #include <iostream>
 
 MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu) {
-
-  MVRecord *data = (MVRecord*)alloc_mem(size, cpu);
+    std::cout << "NUMA node: " << numa_node_of_cpu(cpu) << "\n";
+    MVRecord *data = (MVRecord*)alloc_mem(size, cpu);
   assert(data != NULL);
   memset(data, 0xA3, size);
         
@@ -65,3 +65,6 @@ void MVRecordAllocator::ReturnMVRecords(MVRecordList recordList) {
     assert(recordList.head == NULL);
   }
 }
+
+
+

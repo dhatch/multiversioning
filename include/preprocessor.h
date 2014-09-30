@@ -17,22 +17,21 @@ struct ActionBatch {
 };
 
 struct MVSchedulerConfig {
-    int cpuNumber;
-    uint32_t threadId;
-    uint64_t totalBufSize;
+  int cpuNumber;
+  uint32_t threadId;
   size_t allocatorSize;
   size_t partitionSize;
 
     
-    // Coordination queues required by the leader thread.
-    SimpleQueue<ActionBatch> *leaderInputQueue;
-    SimpleQueue<ActionBatch> *leaderOutputQueue;
-    SimpleQueue<ActionBatch> **leaderEpochStartQueues;
-    SimpleQueue<ActionBatch> **leaderEpochStopQueues;
+  // Coordination queues required by the leader thread.
+  SimpleQueue<ActionBatch> *leaderInputQueue;
+  SimpleQueue<ActionBatch> *leaderOutputQueue;
+  SimpleQueue<ActionBatch> **leaderEpochStartQueues;
+  SimpleQueue<ActionBatch> **leaderEpochStopQueues;
     
-    // Coordination queues required by the subordinate threads.
-    SimpleQueue<ActionBatch> *subordInputQueue;
-    SimpleQueue<ActionBatch> *subordOutputQueue;
+  // Coordination queues required by the subordinate threads.
+  SimpleQueue<ActionBatch> *subordInputQueue;
+  SimpleQueue<ActionBatch> *subordOutputQueue;
 };
 
 /*
@@ -54,12 +53,14 @@ class MVScheduler : public Runnable {
 	uint32_t txnCounter;
     uint64_t txnMask;
 
+    uint32_t threadId;
+
  protected:
 	virtual void StartWorking();
 	void ProcessWriteset(Action *action, uint64_t timestamp);
-	void ScheduleTransaction(Action *action);	
-    void Leader();
-    void Subordinate();
+	void ScheduleTransaction(Action *action, uint64_t version);	
+    void Leader(uint32_t epoch);
+    void Subordinate(uint32_t epoch);
     virtual void Init();
  public:
 	static uint32_t NUM_CC_THREADS;

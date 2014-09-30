@@ -31,7 +31,7 @@ class MVTablePartition {
 	// 
 	// return value: true if the lookup finds a live instance of the record. 
 	//				 Otherwise, false.
-	bool GetLatestVersion(const CompositeKey &pkey, uint64_t *version);
+	bool GetLatestVersion(CompositeKey pkey, uint64_t *version);
 
 	// Insert a new version for the given record.
 	//
@@ -40,7 +40,7 @@ class MVTablePartition {
 	// param version: Version of the record to write out.
 	// 
 	// return value: true if the write is successful, false otherwise. 
-	bool WriteNewVersion(const CompositeKey &pkey, Action *action, uint64_t version);
+	bool WriteNewVersion(CompositeKey pkey, Action *action, uint64_t version);
         
         void WritePartition();
         

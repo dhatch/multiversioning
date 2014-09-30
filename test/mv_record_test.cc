@@ -227,7 +227,7 @@ TEST(CompositeKeyTest, HashTest) {
     keys[i].tableId = 0;
     keys[i].key = (uint64_t)(i % 100);
     keys[i].threadId = (uint32_t)i;         
-    hashes[i] = CompositeKey::Hash(&keys[i]);
+    hashes[i] = CompositeKey::HashKey(&keys[i]);
   }
         
   for (int i = 0; i < 100; ++i) {

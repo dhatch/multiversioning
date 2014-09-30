@@ -39,12 +39,13 @@ struct queue_elem {
 
 template<class T>
 class SimpleQueue {
+ public:
     char* m_values;
     uint64_t m_size;
-    volatile uint64_t __attribute__((aligned(CACHE_LINE))) m_head;    
-    volatile uint64_t __attribute__((aligned(CACHE_LINE))) m_tail;    
+    volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) m_head;    
+    volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) m_tail;    
 
- public:
+
     SimpleQueue(char* values, uint64_t size) {
         m_values = values;
         m_size = (uint64_t)size;

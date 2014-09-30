@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <cassert>
+#include <cstddef>
+#include <cpuinfo.h>
 
 class Action;
 
@@ -53,6 +55,10 @@ class MVRecordAllocator {
 	MVRecord *freeList;
         uint64_t size;
  public:
+
+        void* operator new(std::size_t sz, int cpu) {
+          return alloc_mem(sz, cpu);
+        };
 	
 	// Constructor takes a size parameter, which is the total number of bytes 
 	// allocator can work with.

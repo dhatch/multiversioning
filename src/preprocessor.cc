@@ -12,6 +12,7 @@
 #include <cstring>
 #include <deque>
 
+
 using namespace std;
 
 uint32_t MVScheduler::NUM_CC_THREADS = 1;
@@ -33,8 +34,9 @@ void MVScheduler::Init(MVSchedulerConfig config) {
 
 void MVScheduler::Init() {
   std::cout << "Called init on core: " << m_cpu_number << "\n";
-  auto alloc = new MVRecordAllocator(config.allocatorSize, m_cpu_number);
+  auto alloc = new (m_cpu_number) MVRecordAllocator(config.allocatorSize, m_cpu_number);
   this->partition = new MVTablePartition(config.partitionSize, m_cpu_number, alloc);
+  this->threadId = config.threadId;
 }
 
 MVScheduler::MVScheduler(MVSchedulerConfig config) : 
@@ -53,32 +55,44 @@ MVScheduler::MVScheduler(MVSchedulerConfig config) :
 
 
 void MVScheduler::StartWorking() {
+
+    uint32_t epoch = 0;
   while (true) {
+
     if (config.threadId == 0) {
-      Leader();
+        Leader(epoch);
     }
     else {
-      Subordinate();
+        Subordinate(epoch);
     }
+    epoch += 1;
+
   }
 }
 
-void MVScheduler::Subordinate() {
+static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
+    return (((uint64_t)epoch << 32) | txnCounter);
+}
+
+void MVScheduler::Subordinate(uint32_t epoch) {
   assert(config.threadId != 0 && config.threadId < NUM_CC_THREADS);
 
   // Take a batch of tranasctions from the leader.
   ActionBatch curBatch = config.subordInputQueue->DequeueBlocking();
     
   // Maintain dependencies for the current batch.
-  for (uint32_t i = 0; i < curBatch.numActions; ++i) {
-    ScheduleTransaction(curBatch.actionBuf[i]);
+  uint32_t txnCounter = 0;
+  for (uint32_t i = 0; i < curBatch.numActions; ++i) {      
+      uint64_t version = compute_version(epoch, txnCounter);
+      ScheduleTransaction(curBatch.actionBuf[i], version);
+      txnCounter += 1;
   }
 
   // Signal that we're done with the current batch.
   config.subordOutputQueue->EnqueueBlocking(curBatch);
 }
 
-void MVScheduler::Leader() {
+void MVScheduler::Leader(uint32_t epoch) {
   assert(config.threadId == 0);
 
   // Take a batch of transactions from the input queue.
@@ -90,8 +104,11 @@ void MVScheduler::Leader() {
   }
     
   // Maintain dependencies for the current batch of transactions
+  uint32_t txnCounter = 0;
   for (uint32_t i = 0; i < curBatch.numActions; ++i) {
-    ScheduleTransaction(curBatch.actionBuf[i]);
+    uint64_t version = compute_version(epoch, txnCounter);
+    ScheduleTransaction(curBatch.actionBuf[i], version);
+    txnCounter += 1;
   }
 
   // Wait for all concurrency control threads to finish.    
@@ -119,25 +136,16 @@ uint32_t MVScheduler::GetCCThread(CompositeKey key) {
  * is equal to the transaction's timestamp.
  */
 void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
-  for (size_t i = 0;
-       i < action->writeset.size(); ++i) {
-    CompositeKey record = action->writeset[i];
-    if (record.threadId == config.threadId) {
-      //      MVTable *tbl;
-      //      DB.GetTable(record.tableId, &tbl);
-      //      tbl->WriteNewVersion(config.threadId, record, action, timestamp);
-      partition->WriteNewVersion(record, action, timestamp);
+    size_t size = action->writeset.size();
+    for (uint32_t i = 0; i < size; ++i) {
+        if (action->writeset[i].threadId == threadId) {
+            this->partition->WriteNewVersion(action->writeset[i], action, timestamp);
+        }
     }
-  }
 }
 
 
-void MVScheduler::ScheduleTransaction(Action *action) {
-  txnCounter += 1;
-  uint64_t version = (((uint64_t)epoch << 32) | txnCounter);
-  if (config.threadId == 0) {
-    action->version = version;
-  }
+inline void MVScheduler::ScheduleTransaction(Action *action, uint64_t version) {
   if ((action->combinedHash & txnMask) != 0) {
     ProcessWriteset(action, version);
   }

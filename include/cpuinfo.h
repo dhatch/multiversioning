@@ -32,6 +32,6 @@ void*
 alloc_mem(size_t size, int cpu);
 
 void*
-alloc_huge(size_t size, int cpu);
+alloc_huge(size_t size);
 
 #endif
