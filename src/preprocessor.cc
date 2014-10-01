@@ -16,26 +16,66 @@
 using namespace std;
 
 uint32_t MVScheduler::NUM_CC_THREADS = 1;
-/*
-struct ThreadArgs {
-  void *arg;
-  volatile uint64_t 
-};
 
-
-void ThreadInit(void *threadArgs, void*) {
-  
+void* MVActionHasher::operator new(std::size_t sz, int cpu) {
+  void *ret = alloc_mem(sz, cpu);
+  assert(ret != NULL);
+  return ret;
 }
 
-void MVScheduler::Init(MVSchedulerConfig config) {
-  
+void MVActionHasher::Init() {
 }
-*/
+
+MVActionHasher:: MVActionHasher(int cpuNumber,
+                                SimpleQueue<ActionBatch> *inputQueue, 
+                                SimpleQueue<ActionBatch> *outputQueue) 
+  : Runnable(cpuNumber){
+  this->inputQueue = inputQueue;
+  this->outputQueue = outputQueue;
+}
+
+
+void MVActionHasher::StartWorking() {
+  uint32_t epoch = 0;
+  while (true) {
+    
+    // Take a single batch as input.
+    ActionBatch batch = inputQueue->DequeueBlocking();
+    
+    // Process every action in the batch.
+    uint32_t numActions = batch.numActions;
+    for (uint32_t i = 0; i < numActions; ++i) {
+      ProcessAction(batch.actionBuf[i], epoch, i);
+    }
+    
+    // Output the batch to the concurrency control stage.
+    outputQueue->EnqueueBlocking(batch);
+  }
+}
+
+void MVActionHasher::ProcessAction(Action *action, uint32_t epoch,
+                                   uint32_t txnCounter) {
+  action->combinedHash =  0;
+  action->version = (((uint64_t)epoch << 32) | txnCounter);
+  size_t numWrites = action->writeset.size();  
+  for (uint32_t i = 0; i < numWrites; ++i) {
+    
+    // Find which concurrency control thread is in charge of this key. Write out
+    // the threadId and change the combinedHash bitmask appropriately.
+    uint32_t threadId = 
+      CompositeKey::HashKey(&action->writeset[i]) % MVScheduler::NUM_CC_THREADS;
+    action->writeset[i].threadId = threadId;
+    action->combinedHash |= (((uint64_t)1)<<threadId);
+  }
+}
 
 void MVScheduler::Init() {
   std::cout << "Called init on core: " << m_cpu_number << "\n";
-  auto alloc = new (m_cpu_number) MVRecordAllocator(config.allocatorSize, m_cpu_number);
-  this->partition = new MVTablePartition(config.partitionSize, m_cpu_number, alloc);
+  auto alloc = new (m_cpu_number) MVRecordAllocator(config.allocatorSize, 
+                                                    m_cpu_number);
+  this->partition = new MVTablePartition(config.partitionSize, 
+                                         m_cpu_number, 
+                                         alloc);
   this->threadId = config.threadId;
 }
 

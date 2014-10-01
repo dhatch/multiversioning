@@ -16,6 +16,48 @@ struct ActionBatch {
     uint32_t numActions;
 };
 
+/*
+ * An MVActionHasher is the first stage of the transaction processing pipleline.
+ * Its job is to take a batch of transactions as input, and assign each key of 
+ * each transaction to a concurrency control worker thread. We hash keys in this
+ * stage because it reduces the amount of serial work that must be perfomed by 
+ * the concurrency control stage.
+ */
+class MVActionHasher : public Runnable {
+ private:
+  
+  // A batch of transactions is input through this queue.
+  SimpleQueue<ActionBatch> *inputQueue;
+  
+  // Once a batch of transactions is completed, output to this queue.
+  SimpleQueue<ActionBatch> *outputQueue;  
+
+ protected:
+  
+  virtual void StartWorking();
+  
+  virtual void Init();
+  
+  static inline void ProcessAction(Action *action, uint32_t epoch, 
+                                   uint32_t txnCounter);
+
+ public:
+  
+  // Override the default allocation mechanism. We want all thread local memory
+  // allocations to be 
+  // 
+  void* operator new(std::size_t sz, int cpu);
+  
+  // Constructor
+  //
+  // param numThreads: Number of concurrency control threads (in the next stage)
+  // param inputQueue: Queue through which batches are input
+  // param outputQueue: Queue through which batches are output
+  MVActionHasher(int cpuNumber,
+                 SimpleQueue<ActionBatch> *inputQueue, 
+                 SimpleQueue<ActionBatch> *outputQueue);
+};
+
 struct MVSchedulerConfig {
   int cpuNumber;
   uint32_t threadId;

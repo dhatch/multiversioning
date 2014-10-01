@@ -168,7 +168,7 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords) 
         seenKeys.clear();
         ret[j] = new Action();
         assert(ret[j] != NULL);
-        ret[j]->combinedHash = 0xFFFFFFFFFFFFFFFF;
+        ret[j]->combinedHash = 0;
         for (int i = 0; i < txnSize; ++i) {        
             /*
             CompositeKey toAdd(0, counter);
@@ -193,7 +193,7 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords) 
                     toAdd.threadId = threadId;
                     ret[j]->readset.push_back(toAdd);
                     ret[j]->writeset.push_back(toAdd);
-                    ret[j]->combinedHash |= (((uint64_t)1)<<threadId);
+                    //     ret[j]->combinedHash |= (((uint64_t)1)<<threadId);
                     break;
                 }
             }
@@ -275,20 +275,62 @@ void DoExperiment(int numProcs, int numRecords, int epochSize, int numEpochs, in
     resultFile.close();
 }
 
+void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs, 
+              int txnSize) {
+  char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 71);            
+  SimpleQueue<ActionBatch> *inputQueue = 
+    new SimpleQueue<ActionBatch>(inputArray, INPUT_SIZE);
+  char *outputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 71);
+  SimpleQueue<ActionBatch> *outputQueue = 
+    new SimpleQueue<ActionBatch>(outputArray, INPUT_SIZE);
+  SetupInput(inputQueue, numEpochs, epochSize, numRecords, txnSize);  
+
+  auto hasher = new (0) MVActionHasher(0, inputQueue, outputQueue);
+
+  int successPin = pin_thread(79);
+  if (successPin != 0) {
+    assert(false);
+  }
+
+  timespec start_time, end_time;
+  hasher->Run();
+  outputQueue->DequeueBlocking();
+
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
+  for (int i = 0; i < numEpochs; ++i) {
+    outputQueue->DequeueBlocking();
+  }
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
+  timespec elapsed_time = diff_time(end_time, start_time);
+  double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
+  std::cout << elapsedMilli << '\n';
+  std::ofstream resultFile;
+  resultFile.open("hashing.txt", std::ios::app | std::ios::out);
+  resultFile << elapsedMilli << " " << numEpochs*epochSize << " " << numProcs << "\n";
+  //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
+  resultFile.close();
+}
+
 // arg0: number of scheduler threads
 // arg1: number of records in the database
 // arg2: number of txns in an epoch
 // arg3: number of epochs
 int main(int argc, char **argv) {
-    assert(argc == 6);
+    assert(argc == 7);
     int numProcs = atoi(argv[1]);
     int numRecords = atoi(argv[2]);
     int epochSize = atoi(argv[3]);
     int numEpochs = atoi(argv[4]);
     int txnSize = atoi(argv[5]);
+    int exptId = atoi(argv[6]);
 
     srand(time(NULL));
     MVScheduler::NUM_CC_THREADS = (uint32_t)numProcs;
-    DoExperiment(numProcs, numRecords, epochSize, numEpochs, txnSize);
+    if (exptId == 0) {
+      DoExperiment(numProcs, numRecords, epochSize, numEpochs, txnSize);
+    }
+    else {
+      DoHashes(numProcs, numRecords, epochSize, numEpochs, txnSize);
+    }
     exit(0);
 }
