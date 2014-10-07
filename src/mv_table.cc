@@ -45,7 +45,6 @@ MVTablePartition::MVTablePartition(uint64_t size,
 
 bool MVTablePartition::GetVersion(const CompositeKey &pkey, uint64_t version, 
                                   Record *OUT_rec) {
-
   // Get the slot number the record hashes to, and try to find if a previous
   // version of the record already exists.
   uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
@@ -55,33 +54,27 @@ bool MVTablePartition::GetVersion(const CompositeKey &pkey, uint64_t version,
                 
     // We found the record. Link to the old record.
     if (cur->key == pkey.key) {
-      while (cur != NULL && cur->createTimestamp > version) {
+      while (cur != NULL && cur->deleteTimestamp > version) {
+        // Found a valid version
+        if (cur->createTimestamp <= version && cur->deleteTimestamp > version) {
+          
+          // Check if the version has already been substantiated. If 
+          // substantiated, "writer" is set to NULL.
+          if (cur->writer == NULL) {
+            OUT_rec->isMaterialized = true;
+            OUT_rec->rec = cur->value;
+          }
+          else {
+            OUT_rec->isMaterialized = false;
+            OUT_rec->rec = cur->writer;
+          }
+          return true;
+        }
         cur = cur->recordLink;
       }
-      
-      // We found a valid version.
-      if (cur->deleteTimestamp > version) {
-        
-        // Check if the version has already been substantiated. 
-        if (cur->writer == NULL) {
-          
-          // Already substantiated.
-          OUT_rec->isMaterialized = true;
-          OUT_rec->rec = cur->value;
-        }
-        else {
-          
-          // Not substantied.
-          OUT_rec->isMaterialized = false;
-          OUT_rec->rec = cur->writer;
-        }
-        return true;
-      }
-      else {
-        // Couldn't find a version that's visible at this particular timestamp.
-        return false;
-      }
+      break;
     }
+    cur = cur->link;
   }
   return false;
 }
@@ -132,7 +125,7 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
   assert(success);        // Can't deal with allocation failures yet.
   assert(toAdd->link == NULL && toAdd->recordLink == NULL);
   toAdd->createTimestamp = version;
-  toAdd->deleteTimestamp = 0;
+  toAdd->deleteTimestamp = MVRecord::INFINITY;
   toAdd->writer = action;
   toAdd->key = pkey.key;  
 
@@ -149,6 +142,7 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
       toAdd->link = cur->link;
       toAdd->recordLink = cur;
       cur->link = NULL;
+      cur->deleteTimestamp = version;
       break;
     }
 

@@ -1,4 +1,4 @@
-CFLAGS=-O3 -g -Werror -Wall -Wextra -w -std=c++0x  -DNDEBUG
+CFLAGS=-O3 -g -Werror -Wall -Wextra -std=c++0x
 LIBS=-lnuma -lpthread -lrt -lcityhash -ltcmalloc_minimal  -lprofiler
 CXX=g++
 
@@ -14,8 +14,11 @@ TESTOBJECTS=$(patsubst test/%.cc,test/%.o,$(TESTSOURCES))
 DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
+all:CFLAGS+=-DTESTING=0
 all:build/db
-test: build/tests
+
+test:CFLAGS+=-DTESTING=1
+test:build/tests
 
 build/%.o: src/%.cc $(DEPSDIR)/stamp 
 	@mkdir -p build

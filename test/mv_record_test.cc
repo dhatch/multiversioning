@@ -48,6 +48,12 @@ TEST_F(MVTablePartitionTest, PartitionTest) {
   bool success = false;
   uint64_t version;
 
+  // Create a bunch of dummy transactions to insert into the partition.
+  Action **actionPtrs = (Action**)malloc(sizeof(Action*)*200);
+  for (int i = 0; i < 200; ++i) {
+    actionPtrs[i] = new Action();
+  }
+
   for (int i = 0; i < 100; ++i) {
     toAdd.key = (uint64_t)i;
     success = partition->GetLatestVersion(toAdd, &version);
@@ -57,38 +63,61 @@ TEST_F(MVTablePartitionTest, PartitionTest) {
   version = 1;
   for (int i = 0; i < 100; ++i) {
     toAdd.key = (uint64_t)i;
-    success = partition->WriteNewVersion(toAdd, NULL, version);
+    ASSERT_TRUE(actionPtrs[i] != NULL);
+    success = partition->WriteNewVersion(toAdd, actionPtrs[i], version);
     ASSERT_TRUE(success);
   }
 
-  version = 0;
+  Record rec;
   for (int i = 0; i < 100; ++i) {
     toAdd.key = (uint64_t)i;
-    success = partition->GetLatestVersion(toAdd, &version);
+    
+    // Version at time 1 should exist.
+    success = partition->GetVersion(toAdd, 1, &rec);
     ASSERT_TRUE(success);
-    ASSERT_EQ((uint64_t)1, version);
-  }
+    ASSERT_FALSE(rec.isMaterialized);
+    ASSERT_EQ(actionPtrs[i], rec.rec);
 
+    // Version at time 0 should not exist.
+    success = partition->GetVersion(toAdd, 0, &rec);
+    ASSERT_FALSE(success);
+  }
+  
   version = 5;
   for (int i = 0; i < 100; ++i) {
-    if (i % 2 == 0) {
-      toAdd.key = (uint64_t)i;
-      success = partition->WriteNewVersion(toAdd, NULL, version);
-      ASSERT_TRUE(success);
-    }
+    toAdd.key = (uint64_t)i;
+    success = partition->WriteNewVersion(toAdd, actionPtrs[i+100], version);
+    ASSERT_TRUE(success);
   }
 
   for (int i = 0; i < 100; ++i) {
     toAdd.key = (uint64_t)i;
-    success = partition->GetLatestVersion(toAdd, &version);
+    success = partition->GetVersion(toAdd, 1, &rec);
     ASSERT_TRUE(success);
-                
-    if (i % 2 == 0) {
-      ASSERT_EQ((uint64_t)5, version);
-    }
-    else {
-      ASSERT_EQ((uint64_t)1, version);
-    }
+    ASSERT_FALSE(rec.isMaterialized);
+    ASSERT_EQ(actionPtrs[i], rec.rec);
+    
+    // Version at time 4 should be the same as time 1.
+    success = partition->GetVersion(toAdd, 4, &rec);
+    ASSERT_TRUE(success);
+    ASSERT_FALSE(rec.isMaterialized);
+    ASSERT_EQ(actionPtrs[i], rec.rec);
+    
+    // Check that version at 5 is properly inserted.
+    success = partition->GetVersion(toAdd, 5, &rec);
+    ASSERT_TRUE(success);
+    ASSERT_FALSE(rec.isMaterialized);
+    ASSERT_EQ(actionPtrs[i+100], rec.rec);
+    
+    // Version at time 100 should be the same as time 5.
+    success = partition->GetVersion(toAdd, 100, &rec);
+    ASSERT_TRUE(success);
+    ASSERT_FALSE(rec.isMaterialized);
+    ASSERT_EQ(actionPtrs[i+100], rec.rec);
+
+    // Version at time 0 should not exist.
+    success = partition->GetVersion(toAdd, 0, &rec);
+    ASSERT_FALSE(success);
   }
 }
 

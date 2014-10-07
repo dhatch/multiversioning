@@ -43,7 +43,7 @@ protected:
     MVSchedulerConfig config = {
       0, 
       0,
-      (1 << 28),
+      (1 << 26),
       1,
       partitionSizes,
       leaderInputQueue,
@@ -115,7 +115,7 @@ TEST_F(SchedulerTest, Test) {
       success = tbl->GetVersion(0, toSchedule[i]->writeset[j], 
                                 toSchedule[i]->version, &rec);
       ASSERT_FALSE(rec.isMaterialized);
-      ASSERT_EQ(&toSchedule[i], rec.rec);
+      ASSERT_EQ(toSchedule[i], rec.rec);
     }           
   }
 }

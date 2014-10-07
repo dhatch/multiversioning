@@ -106,26 +106,22 @@ pin_thread(int cpu) {
 
 void*
 alloc_mem(size_t size, int cpu) {
-  /*
-  void *ret = (void*)(cpu+1);
-  if (ret == (void*)(cpu+1)) {
+  if (TESTING) {
     return malloc(size);
   }
   else {
-    return NULL;
-  }
-  */
-
-  int numa_node = numa_node_of_cpu(cpu);
-  //  std::cout << "memory allocated on node: " << numa_node << "\n";
-  numa_set_strict(1);
-  void *buf = numa_alloc_onnode(size, numa_node);
-  if (mlock(buf, size) < 0) {
-    numa_free(buf, size);
-    std::cout << "mlock couldn't pin memory to RAM!\n";
-    return NULL;
-  } 
-  else {
+    int numa_node = numa_node_of_cpu(cpu);
+    //  std::cout << "memory allocated on node: " << numa_node << "\n";
+    numa_set_strict(1);
+    void *buf = numa_alloc_onnode(size, numa_node);
     return buf;
+    if (mlock(buf, size) < 0) {
+      numa_free(buf, size);
+      std::cout << "mlock couldn't pin memory to RAM!\n";
+      return NULL;
+    } 
+    else {
+      return buf;
+    }
   }
 }

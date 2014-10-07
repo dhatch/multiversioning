@@ -1,5 +1,5 @@
-#ifndef 	MV_RECORD_H_
-#define 	MV_RECORD_H_
+#ifndef         MV_RECORD_H_
+#define         MV_RECORD_H_
 
 #include <stdint.h>
 #include <cassert>
@@ -10,27 +10,30 @@ class Action;
 
 typedef struct _MVRecord_ MVRecord;
 
+
 struct _MVRecord_ {
-	
-	// The unique creation timestamp
-	uint64_t createTimestamp;
-	
-	// The time at which this record became invalid.
-	uint64_t deleteTimestamp;
-	
-    uint64_t key;
-	
-	// The transaction responsible for creating a value associated with the 
-	// record.
-	Action *writer;
-	
-	// The actual value of the record.
-	void *value;
-	
-	// 
-	MVRecord *link;
-	
-	MVRecord *recordLink;
+  
+  static uint64_t INFINITY;
+        
+  // The unique creation timestamp
+  uint64_t createTimestamp;
+        
+  // The time at which this record became invalid.
+  uint64_t deleteTimestamp;
+        
+  uint64_t key;
+        
+  // The transaction responsible for creating a value associated with the 
+  // record.
+  Action *writer;
+        
+  // The actual value of the record.
+  void *value;
+        
+  // 
+  MVRecord *link;
+        
+  MVRecord *recordLink;
 } __attribute__((__packed__));
 
 /*
@@ -38,8 +41,8 @@ struct _MVRecord_ {
  * data structure. 
  */
 struct MVRecordList {
-	MVRecord *head;
-	MVRecord *tail;
+  MVRecord *head;
+  MVRecord *tail;
 };
 
 /*
@@ -49,25 +52,25 @@ struct MVRecordList {
  */
 class MVRecordAllocator {
 
-	friend class MVAllocatorTest;
-	
+  friend class MVAllocatorTest;
+        
  private:
-	MVRecord *freeList;
-        uint64_t size;
+  MVRecord *freeList;
+  uint64_t size;
  public:
 
-        void* operator new(std::size_t sz, int cpu) {
-          return alloc_mem(sz, cpu);
-        };
-	
-	// Constructor takes a size parameter, which is the total number of bytes 
-	// allocator can work with.
-	MVRecordAllocator(uint64_t size, int cpu);
-	
-	// 
-	bool GetRecord(MVRecord **out);
-	void ReturnMVRecords(MVRecordList recordList);	
-        void WriteAllocator();
+  void* operator new(std::size_t sz, int cpu) {
+    return alloc_mem(sz, cpu);
+  };
+        
+  // Constructor takes a size parameter, which is the total number of bytes 
+  // allocator can work with.
+  MVRecordAllocator(uint64_t size, int cpu);
+        
+  // 
+  bool GetRecord(MVRecord **out);
+  void ReturnMVRecords(MVRecordList recordList);  
+  void WriteAllocator();
 };
 
-#endif 		/* MV_RECORD_H_ */
+#endif          /* MV_RECORD_H_ */
