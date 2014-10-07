@@ -36,15 +36,16 @@ protected:
     leaderInputQueue = new SimpleQueue<ActionBatch>(inputArray, queueSize);
     leaderOutputQueue = new SimpleQueue<ActionBatch>(outputArray, queueSize);
 
-    size_t *partitionSizes = (size_t*)malloc(sizeof(size_t));
+    size_t *partitionSizes = (size_t*)malloc(sizeof(size_t)*2);
     partitionSizes[0] = 1<<20;
+    partitionSizes[1] = 1<<20;
 
     // Create the scheduler state. Use a single thread.
     MVSchedulerConfig config = {
       0, 
       0,
       (1 << 26),
-      1,
+      2,
       partitionSizes,
       leaderInputQueue,
       leaderOutputQueue,
@@ -85,7 +86,7 @@ TEST_F(SchedulerTest, Test) {
       // Generate a unique key for each write and add the record to the 
       // read/write set.
       uint64_t key = GetUniqueKey(previousKeys);
-      temp.tableId = 0;
+      temp.tableId = rand() % 2;
       temp.key = key;
       temp.threadId = 0;
 
@@ -106,12 +107,15 @@ TEST_F(SchedulerTest, Test) {
   leaderOutputQueue->DequeueBlocking();
   
   // Verify that transactions have been correctly scheduled.
-  MVTable *tbl;
-  bool success = DB.GetTable(0, &tbl);
+  MVTable *tbl0, *tbl1;
+  bool success = DB.GetTable(0, &tbl0);  
+  ASSERT_TRUE(success);
+  success = DB.GetTable(1, &tbl1);
   ASSERT_TRUE(success);
   for (int i = 0; i < 1000; ++i) {
     for (int j = 0; j < writesetSize; ++j) {
       Record rec;
+      MVTable *tbl = toSchedule[i]->writeset[j].tableId == 0? tbl0 : tbl1;
       success = tbl->GetVersion(0, toSchedule[i]->writeset[j], 
                                 toSchedule[i]->version, &rec);
       ASSERT_FALSE(rec.isMaterialized);

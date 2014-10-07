@@ -20,6 +20,9 @@ all:build/db
 test:CFLAGS+=-DTESTING=1
 test:build/tests
 
+clean_objs:
+	@rm -rf $(OBJECTS)
+
 build/%.o: src/%.cc $(DEPSDIR)/stamp 
 	@mkdir -p build
 	@echo + cc $<
@@ -40,13 +43,16 @@ start/%.o: start/%.cc $(DEPSDIR)/stamp
 
 build/db:start/main.o $(OBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
+	@rm -rf $(OBJECTS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
+	@rm -rf $(OBJECTS)
 
 $(DEPSDIR)/stamp:
 	@mkdir -p $(DEPSDIR)
 	@touch $@
+
 
 .PHONY: clean
 
