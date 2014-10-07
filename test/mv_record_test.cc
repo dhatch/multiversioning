@@ -13,7 +13,7 @@ protected:
   MVRecord *drained;
 
   virtual void SetUp() {
-    allocator = new MVRecordAllocator(sizeof(MVRecord)*1000, 0);
+    allocator = new (0) MVRecordAllocator(sizeof(MVRecord)*1000, 0);
   }
 
   virtual void DrainAllocator() {

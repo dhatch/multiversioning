@@ -20,11 +20,21 @@ class Catalog
 
   // 
   unordered_map<uint32_t, uint64_t> tablePartitionSizes;
+  
+  volatile uint64_t 
+    __attribute__((__packed__, __aligned__(CACHE_LINE))) lockWord;
+  
+  bool finalized;
 
  public:
         
   // Constructor.
   Catalog();
+
+  void PutPartition(uint32_t tableId, uint32_t partitionId, 
+                    MVTablePartition *partition);
+
+  void Finalize();
 
   // Add a table to the catalog.
   // 

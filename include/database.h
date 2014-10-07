@@ -1,5 +1,5 @@
-#ifndef 	DATABASE_H_
-#define 	DATABASE_H_
+#ifndef         DATABASE_H_
+#define         DATABASE_H_
 
 #include <catalog.h>
 
@@ -10,18 +10,21 @@
 class Database {
 
  private:
-	Catalog catalog;
+  Catalog catalog;
 
  public:
-	Database();	
-	
-	// Wrapper around Catalog's PutTable method (include/catalog.h).
-	bool PutTable(uint32_t tableId, MVTable *in);
-	
-	// Wrapper around Catalog's GetTable method (include/catalog.h).
-	bool GetTable(uint32_t tableId, MVTable **out);	
+  Database();     
+
+  void PutPartition(uint32_t tableId, uint32_t partitionNumber, 
+                    MVTablePartition *partition);
+        
+  // Wrapper around Catalog's PutTable method (include/catalog.h).
+  bool PutTable(uint32_t tableId, MVTable *in);
+        
+  // Wrapper around Catalog's GetTable method (include/catalog.h).
+  bool GetTable(uint32_t tableId, MVTable **out); 
 };
 
 extern Database DB;
 
-#endif 		/* DATABASE_H_ */
+#endif          /* DATABASE_H_ */

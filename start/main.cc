@@ -9,7 +9,7 @@
 #include <set>
 #include <iostream>
 
-#define INPUT_SIZE 512
+#define INPUT_SIZE 1024
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 
@@ -32,7 +32,7 @@ timespec diff_time(timespec end, timespec start) {
 
 
 MVSchedulerConfig SetupLeaderSched(int cpuNumber, int numSchedThreads, 
-                                   size_t alloc, size_t part) {
+                                   size_t alloc, size_t *partSizes) {
   // Set up queues for coordinating with other threads in the system.
   char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 71);            
   SimpleQueue<ActionBatch> *leaderInputQueue = 
@@ -74,7 +74,8 @@ MVSchedulerConfig SetupLeaderSched(int cpuNumber, int numSchedThreads,
     cpuNumber,                       // cpuNumber
       0,                             // threadId
       alloc,                         // allocatorSize
-      part,                          // partitionSize
+      1,                             // number of tables
+      partSizes,                     // partition sizes
       leaderInputQueue,              // leaderInputQueue
       leaderOutputQueue,             // leaderOutputQueue
       leaderEpochStartQueues,        // leaderEpochStartQueue
@@ -90,12 +91,13 @@ MVSchedulerConfig SetupSubordinateSched(int cpuNumber,
                                         uint32_t threadId, 
                                         MVSchedulerConfig leaderConfig, 
                                         size_t alloc, 
-                                        size_t part) {
+                                        size_t *partSizes) {
   MVSchedulerConfig config {
     cpuNumber,                                          // cpuNumber
       threadId,                                         // threadId
       alloc,                                            // allocatorSize
-      part,                                             // partitionSize
+      1,                                                // number of tables
+      partSizes,                                        // partitionSize
       NULL,                                             // leaderInputQueue
       NULL,                                             // leaderOutputQueue
       NULL,                                             // leaderEpochStartQueue
@@ -115,14 +117,21 @@ MVScheduler** SetupSchedulers(int numProcs,
                               size_t tableSize) {
   
   size_t partitionChunk = tableSize/numProcs;
+  size_t *tblPartitionSizes = (size_t*)malloc(sizeof(size_t));
+  tblPartitionSizes[0] = partitionChunk;
 
-    MVScheduler **schedArray = (MVScheduler**)alloc_mem(sizeof(MVScheduler*)*numProcs, 79);
-    MVSchedulerConfig leaderConfig = SetupLeaderSched(OFFSET_CORE(0),  // cpuNumber
-                                                      numProcs, allocatorSize, partitionChunk);
+    MVScheduler **schedArray = 
+      (MVScheduler**)alloc_mem(sizeof(MVScheduler*)*numProcs, 79);
+    MVSchedulerConfig leaderConfig = 
+      SetupLeaderSched(OFFSET_CORE(0),  // cpuNumber
+                       numProcs, allocatorSize, tblPartitionSizes);
+
     schedArray[0] = new MVScheduler(leaderConfig);
 
     for (int i = 1; i < numProcs; ++i) {
-      MVSchedulerConfig subordConfig = SetupSubordinateSched(OFFSET_CORE(i), i, leaderConfig, allocatorSize, partitionChunk);
+      MVSchedulerConfig subordConfig = 
+        SetupSubordinateSched(OFFSET_CORE(i), i, leaderConfig, allocatorSize, 
+                              tblPartitionSizes);
         schedArray[i] = new MVScheduler(subordConfig);
     }
     
@@ -193,7 +202,7 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords) 
                     toAdd.threadId = threadId;
                     ret[j]->readset.push_back(toAdd);
                     ret[j]->writeset.push_back(toAdd);
-                    //     ret[j]->combinedHash |= (((uint64_t)1)<<threadId);
+                    ret[j]->combinedHash |= (((uint64_t)1)<<threadId);
                     break;
                 }
             }
@@ -295,12 +304,13 @@ void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs,
   timespec start_time, end_time;
   hasher->Run();
   outputQueue->DequeueBlocking();
-
+  ProfilerStart("/home/jmf/multiversioning/db.prof");
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
   for (int i = 0; i < numEpochs; ++i) {
     outputQueue->DequeueBlocking();
   }
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
+  ProfilerStop();
   timespec elapsed_time = diff_time(end_time, start_time);
   double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
   std::cout << elapsedMilli << '\n';

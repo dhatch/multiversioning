@@ -56,11 +56,11 @@ class CompositeKey {
   }
 
   static inline uint64_t Hash(const CompositeKey *key) {
-      return CityHash64((char*)key, 16);
+      return Hash128to64(std::make_pair(key->key, (uint64_t)(key->tableId)));
   }
   
   static inline uint64_t HashKey(const CompositeKey *key) {
-      return CityHash64((char*)key, 12);
+      return Hash128to64(std::make_pair((uint64_t)key->tableId, key->key));
   }
 
 } __attribute__((__packed__));

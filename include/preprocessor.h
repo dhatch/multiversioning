@@ -1,5 +1,5 @@
-#ifndef 	PREPROCESSOR_H_
-#define 	PREPROCESSOR_H_
+#ifndef         PREPROCESSOR_H_
+#define         PREPROCESSOR_H_
 
 #include <runnable.hh>
 #include <concurrent_queue.h>
@@ -26,11 +26,20 @@ struct ActionBatch {
 class MVActionHasher : public Runnable {
  private:
   
+  uint32_t numHashers;
+
   // A batch of transactions is input through this queue.
   SimpleQueue<ActionBatch> *inputQueue;
   
   // Once a batch of transactions is completed, output to this queue.
   SimpleQueue<ActionBatch> *outputQueue;  
+
+  // 
+  SimpleQueue<ActionBatch> **leaderEpochStartQueues;
+  SimpleQueue<ActionBatch> **leaderEpochStopQueues;
+  
+  SimpleQueue<ActionBatch> *subordInputQueue;
+  SimpleQueue<ActionBatch> *subordOutputQueue;
 
  protected:
   
@@ -61,9 +70,9 @@ class MVActionHasher : public Runnable {
 struct MVSchedulerConfig {
   int cpuNumber;
   uint32_t threadId;
-  size_t allocatorSize;
-  size_t partitionSize;
-
+  size_t allocatorSize;         // Scheduler thread's local sticky allocator
+  uint32_t numTables;           // Number of tables in the system
+  size_t *tblPartitionSizes;    // Size of each table's partition
     
   // Coordination queues required by the leader thread.
   SimpleQueue<ActionBatch> *leaderInputQueue;
@@ -81,33 +90,33 @@ struct MVSchedulerConfig {
  * several physical cores.
  */
 class MVScheduler : public Runnable {
-	friend class SchedulerTest;
-	
+        friend class SchedulerTest;
+        
  private:
-	static inline uint32_t GetCCThread(CompositeKey key);
+        static inline uint32_t GetCCThread(CompositeKey key);
 
     MVSchedulerConfig config;
-    //	VersionBufferAllocator *alloc;
+    //  VersionBufferAllocator *alloc;
 
-    MVTablePartition *partition;
+    MVTablePartition **partitions;
 
-	uint32_t epoch;
-	uint32_t txnCounter;
+        uint32_t epoch;
+        uint32_t txnCounter;
     uint64_t txnMask;
 
     uint32_t threadId;
 
  protected:
-	virtual void StartWorking();
-	void ProcessWriteset(Action *action, uint64_t timestamp);
-	void ScheduleTransaction(Action *action, uint64_t version);	
+        virtual void StartWorking();
+        void ProcessWriteset(Action *action, uint64_t timestamp);
+        void ScheduleTransaction(Action *action, uint64_t version);     
     void Leader(uint32_t epoch);
     void Subordinate(uint32_t epoch);
     virtual void Init();
  public:
-	static uint32_t NUM_CC_THREADS;
-	MVScheduler(MVSchedulerConfig config);
+        static uint32_t NUM_CC_THREADS;
+        MVScheduler(MVSchedulerConfig config);
 };
 
 
-#endif 		/* PREPROCESSOR_H_ */
+#endif          /* PREPROCESSOR_H_ */

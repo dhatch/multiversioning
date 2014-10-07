@@ -62,8 +62,9 @@ void MVActionHasher::ProcessAction(Action *action, uint32_t epoch,
     
     // Find which concurrency control thread is in charge of this key. Write out
     // the threadId and change the combinedHash bitmask appropriately.
+      action->writeset[i].threadId = 0;
     uint32_t threadId = 
-      CompositeKey::HashKey(&action->writeset[i]) % MVScheduler::NUM_CC_THREADS;
+        CompositeKey::HashKey(&action->writeset[i]) % MVScheduler::NUM_CC_THREADS;
     action->writeset[i].threadId = threadId;
     action->combinedHash |= (((uint64_t)1)<<threadId);
   }
@@ -71,11 +72,17 @@ void MVActionHasher::ProcessAction(Action *action, uint32_t epoch,
 
 void MVScheduler::Init() {
   std::cout << "Called init on core: " << m_cpu_number << "\n";
+  
+  // Initialize the allocator and the partitions.
   auto alloc = new (m_cpu_number) MVRecordAllocator(config.allocatorSize, 
                                                     m_cpu_number);
-  this->partition = new MVTablePartition(config.partitionSize, 
-                                         m_cpu_number, 
-                                         alloc);
+  for (uint32_t i = 0; i < this->config.numTables; ++i) {
+    
+    // Track the partition locally and add it to the database's catalog.
+    this->partitions[i] = new MVTablePartition(config.tblPartitionSizes[i],
+                                               m_cpu_number, alloc);
+    DB.PutPartition(i, config.threadId, this->partitions[i]);
+  }
   this->threadId = config.threadId;
 }
 
@@ -86,6 +93,9 @@ MVScheduler::MVScheduler(MVSchedulerConfig config) :
   this->epoch = 0;
   this->txnCounter = 0;
   this->txnMask = ((uint64_t)1<<config.threadId);
+  this->partitions = 
+    (MVTablePartition**)alloc_mem(config.cpuNumber, 
+                                  sizeof(MVTablePartition*)*config.numTables);
   
   std::cout << "Thread id: " << config.threadId << "\n";
   std::cout << "Mask: " << txnMask << "\n";
@@ -179,7 +189,8 @@ void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
     size_t size = action->writeset.size();
     for (uint32_t i = 0; i < size; ++i) {
         if (action->writeset[i].threadId == threadId) {
-            this->partition->WriteNewVersion(action->writeset[i], action, timestamp);
+            this->partitions[action->writeset[i].tableId]->
+              WriteNewVersion(action->writeset[i], action, timestamp);
         }
     }
 }

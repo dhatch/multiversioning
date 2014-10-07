@@ -15,94 +15,107 @@ protected:
         
   MVScheduler *sched;
   int numRecords;
+  SimpleQueue<ActionBatch> *leaderInputQueue;
+  SimpleQueue<ActionBatch> *leaderOutputQueue;
+
   unordered_map<uint64_t, uint64_t> versionTracker;
   unordered_map<uint64_t, Action*> actionTracker;
 
   virtual void SetUp() {          
-    InitTable();
+    
+    // Create a table with few records so that we can test that dependencies 
+    // are maintained properly.
+    numRecords = 100;
 
+    // Allocate input/output queues for concurrency control stage.
+    uint64_t queueSize = 256;
+    char *inputArray = (char*)alloc_mem(CACHE_LINE*queueSize, 1);
+    char *outputArray = (char*)alloc_mem(CACHE_LINE*queueSize, 1);
+    memset(inputArray, 0, CACHE_LINE*queueSize);
+    memset(outputArray, 0, CACHE_LINE*queueSize);
+    leaderInputQueue = new SimpleQueue<ActionBatch>(inputArray, queueSize);
+    leaderOutputQueue = new SimpleQueue<ActionBatch>(outputArray, queueSize);
+
+    size_t *partitionSizes = (size_t*)malloc(sizeof(size_t));
+    partitionSizes[0] = 1<<20;
+
+    // Create the scheduler state. Use a single thread.
     MVSchedulerConfig config = {
       0, 
       0,
-      (1 << 29),
-      (1 << 20),
-      NULL,
-      NULL,
+      (1 << 28),
+      1,
+      partitionSizes,
+      leaderInputQueue,
+      leaderOutputQueue,
       NULL,
       NULL,
       NULL,
       NULL,
     };
-
     sched = new MVScheduler(config);
     sched->txnCounter = 1;
   }
-
-  virtual void SchedWrapper(Action *action) {
-    sched->ScheduleTransaction(action);
-  }
-
-  virtual void InitTable() {
-    MVRecordAllocator *recordAlloc = 
-      new MVRecordAllocator((1<<20)*sizeof(MVRecord), 0);
-    ASSERT_TRUE(recordAlloc != NULL);
-
-    MVTablePartition *part = new MVTablePartition((1 << 16), 0, recordAlloc);
-    ASSERT_TRUE(part != NULL);
-
-    MVTablePartition **partArray = 
-      (MVTablePartition**)malloc(sizeof(MVTable*));
-    partArray[0] = part;
-
-    MVTable *tbl = new MVTable(1, partArray);
-    bool success = DB.PutTable(0, tbl);
-    ASSERT_TRUE(success);
-                
-    numRecords = 100;
-    CompositeKey temp;
-    for (int i = 0; i < numRecords; ++i) {
-      temp.tableId = 0;
-      temp.key = (uint64_t)i;
-
-      bool success = false;
-      success = tbl->WriteNewVersion(0, temp, NULL, 0);
-      ASSERT_TRUE(success);
-      versionTracker[(uint64_t)i] = 0;
-      actionTracker[(uint64_t)i] = NULL;
-    }
-  }
 };
 
+uint64_t GetUniqueKey(std::set<uint64_t> &previousKeys) {
+  while (true) {
+    uint64_t key = (uint64_t)(rand() % 100);
+    if (previousKeys.find(key) == previousKeys.end()) {
+      previousKeys.insert(key);
+      return key;
+    }
+  }
+}
+
 TEST_F(SchedulerTest, Test) {
-    Action toSchedule[1000];
-  int writesetSize = 1;
-  memset(toSchedule, 0, sizeof(Action)*1000);
+  Action **toSchedule = (Action**)malloc(1000*sizeof(Action*));
+  int writesetSize = 10;
   srand(time(NULL));    
 
+  // Setup the input transactions. 
   CompositeKey temp;
+  std::set<uint64_t> previousKeys;      // Track keys used by a particular txn
   for (int i = 0; i < 1000; ++i) {
+    previousKeys.clear();
+    
+    Action *toAdd = new Action();
     for (int j = 0; j < writesetSize; ++j) {
-      uint64_t key = (uint64_t)((i + j)%numRecords);
+      
+      // Generate a unique key for each write and add the record to the 
+      // read/write set.
+      uint64_t key = GetUniqueKey(previousKeys);
       temp.tableId = 0;
       temp.key = key;
+      temp.threadId = 0;
 
-      toSchedule[i].readset.push_back(temp);
-      toSchedule[i].writeset.push_back(temp);
+      toAdd->readset.push_back(temp);
+      toAdd->writeset.push_back(temp);
     }
-    toSchedule[i].combinedHash = 1;
+    
+    // Set the transaction's bitmask so that it's not ignored by the scheduler.
+    toAdd->combinedHash = 1;
+    toAdd->version = (uint64_t)i;
+    toSchedule[i] = toAdd;
+  }
 
-    SchedWrapper(&toSchedule[i]);
-                
-    // For every element in the writeset, ensure that the "latest version" of
-    // the corresponding record in the table is equal to the timestamp assigned
-    // to this particular transaction.
+  // Kick off the scheduler.
+  ActionBatch batch = {toSchedule, 1000};
+  leaderInputQueue->EnqueueBlocking(batch);
+  sched->Run();
+  leaderOutputQueue->DequeueBlocking();
+  
+  // Verify that transactions have been correctly scheduled.
+  MVTable *tbl;
+  bool success = DB.GetTable(0, &tbl);
+  ASSERT_TRUE(success);
+  for (int i = 0; i < 1000; ++i) {
     for (int j = 0; j < writesetSize; ++j) {
-      MVTable *tbl;
-      bool success = DB.GetTable(0, &tbl);
-      ASSERT_TRUE(success);
-      uint64_t version;
-      tbl->GetLatestVersion(0, toSchedule[i].writeset[j], &version);
-      ASSERT_EQ(toSchedule[i].version, version);
+      Record rec;
+      success = tbl->GetVersion(0, toSchedule[i]->writeset[j], 
+                                toSchedule[i]->version, &rec);
+      ASSERT_FALSE(rec.isMaterialized);
+      ASSERT_EQ(&toSchedule[i], rec.rec);
     }           
   }
 }
