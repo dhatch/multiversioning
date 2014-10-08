@@ -72,6 +72,11 @@ fetch_and_decrement(volatile uint64_t *variable)
     return counter_value - 1;
 }    
 
+static inline void
+barrier() {
+  asm volatile("":::"memory");
+}
+
 // An indivisible unit of work. 
 static inline void
 single_work() 

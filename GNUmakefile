@@ -1,5 +1,5 @@
-CFLAGS=-O3 -g -Werror -Wall -Wextra -std=c++0x
-LIBS=-lnuma -lpthread -lrt -lcityhash -ltcmalloc_minimal  -lprofiler
+CFLAGS=-g -Werror -Wall -Wextra -w -std=c++0x
+LIBS=-lnuma -lpthread -lrt -lcityhash -lprofiler
 CXX=g++
 
 INCLUDE=include
@@ -15,19 +15,16 @@ DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
 all:CFLAGS+=-DTESTING=0
+all:LIBS+=-ltcmalloc_minimal
 all:build/db
 
 test:CFLAGS+=-DTESTING=1
 test:build/tests
 
-clean_objs:
-	@rm -rf $(OBJECTS)
-
 build/%.o: src/%.cc $(DEPSDIR)/stamp 
 	@mkdir -p build
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
-	@rm $(DEPSDIR)/$*.d
 
 $(TESTOBJECTS):$(OBJECTS)
 
@@ -47,7 +44,6 @@ build/db:start/main.o $(OBJECTS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
-	@rm -rf $(OBJECTS)
 
 $(DEPSDIR)/stamp:
 	@mkdir -p $(DEPSDIR)

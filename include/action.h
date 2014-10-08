@@ -8,10 +8,11 @@
 #include <pthread.h>
 #include <time.h>
 #include <cstring>
-#include <preprocessor.h>
+//#include <preprocessor.h>
 #include <city.h>
 
 class Action;
+
 
 class CompositeKey {
  public:
@@ -119,6 +120,30 @@ class Action {
   virtual bool NowPhase() { return true; }
   virtual void LaterPhase() { }
   virtual bool IsLinked(Action **cont) { *cont = NULL; return false; }
+};
+
+
+struct LockBucketEntry {  
+  volatile LockBucketEntry *next;
+};
+
+class LockingCompositeKey {
+ public:
+  uint32_t tableId;
+  uint64_t key;
+  LockBucketEntry bucketEntry;
+  
+  static inline uint64_t Hash(const LockingCompositeKey *key) {
+      return Hash128to64(std::make_pair(key->key, (uint64_t)(key->tableId)));
+  }
+};
+
+class LockingAction {
+ public:
+  std::vector<LockingCompositeKey> readset;
+  std::vector<LockingCompositeKey> writeset;
+  
+  virtual bool Execute() { return true; }
 };
 
 #endif // ACTION_H
