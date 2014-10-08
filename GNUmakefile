@@ -1,5 +1,5 @@
 CFLAGS=-g -Werror -Wall -Wextra -w -std=c++0x
-LIBS=-lnuma -lpthread -lrt -lcityhash -lprofiler
+LIBS=-lnuma -lpthread -lrt -lcityhash -ltcmalloc_minimal -lprofiler
 CXX=g++
 
 INCLUDE=include

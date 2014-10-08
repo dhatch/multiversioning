@@ -31,7 +31,8 @@ LockManager::LockManager(uint64_t numEntries, int cpu) {
 void LockManager::AcquireLocks(LockingAction *action) {
   int writesetSize = action->writeset.size();
   for (int i = 0; i < writesetSize; ++i) {
-    uint64_t bucketNumber = LockingCompositeKey::Hash(&action->writeset[i]);
+    uint64_t bucketNumber = 
+      LockingCompositeKey::Hash(&action->writeset[i]) % this->numEntries;
     this->entries[bucketNumber].AppendEntry(&action->writeset[i].bucketEntry);
   }
 }
