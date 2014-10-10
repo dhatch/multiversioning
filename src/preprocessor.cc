@@ -72,15 +72,21 @@ void MVActionHasher::ProcessAction(Action *action, uint32_t epoch,
 
 void MVScheduler::Init() {
   std::cout << "Called init on core: " << m_cpu_number << "\n";
-  
+
+  this->partitions = 
+    (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
+                                  config.cpuNumber);
+  assert(this->partitions != NULL);
+
   // Initialize the allocator and the partitions.
   auto alloc = new (m_cpu_number) MVRecordAllocator(config.allocatorSize, 
                                                     m_cpu_number);
   for (uint32_t i = 0; i < this->config.numTables; ++i) {
-    
+
     // Track the partition locally and add it to the database's catalog.
     this->partitions[i] = new MVTablePartition(config.tblPartitionSizes[i],
                                                m_cpu_number, alloc);
+    assert(this->partitions[i] != NULL);
     DB.PutPartition(i, config.threadId, this->partitions[i]);
   }
   this->threadId = config.threadId;
@@ -93,10 +99,7 @@ MVScheduler::MVScheduler(MVSchedulerConfig config) :
   this->epoch = 0;
   this->txnCounter = 0;
   this->txnMask = ((uint64_t)1<<config.threadId);
-  this->partitions = 
-    (MVTablePartition**)alloc_mem(config.cpuNumber, 
-                                  sizeof(MVTablePartition*)*config.numTables);
-  
+
   std::cout << "Thread id: " << config.threadId << "\n";
   std::cout << "Mask: " << txnMask << "\n";
 

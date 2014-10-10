@@ -1,5 +1,6 @@
 #include <mv_table.h>
 #include <cpuinfo.h>
+#include <iostream>
 
 MVTable::MVTable(uint32_t numPartitions) {
   this->numPartitions = numPartitions;
@@ -40,7 +41,9 @@ MVTablePartition::MVTablePartition(uint64_t size,
   // Allocate a contiguous chunk of memory in which to store the table's slots
   this->tableSlots = (MVRecord**)alloc_mem(sizeof(MVRecord*)*size, cpu);
   assert(this->tableSlots != NULL);
-  memset(this->tableSlots, 0x00, sizeof(MVRecord*)*size); 
+  memset(this->tableSlots, 0x0, sizeof(MVRecord*)*size); 
+  std::cout << "AHAHA\n";
+  std::cout << "asldkjfasdf\n";
 }
 
 bool MVTablePartition::GetVersion(const CompositeKey &pkey, uint64_t version, 

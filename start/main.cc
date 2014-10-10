@@ -1,7 +1,7 @@
 #include <database.h>
 #include <preprocessor.h>
 #include <cpuinfo.h>
-#include <blah.h>
+#include <config.h>
 
 #include <gperftools/profiler.h>
 
@@ -327,6 +327,7 @@ void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs,
 // arg2: number of txns in an epoch
 // arg3: number of epochs
 int main(int argc, char **argv) {
+  
   /*
     assert(argc == 7);
     int numProcs = atoi(argv[1]);
@@ -346,7 +347,17 @@ int main(int argc, char **argv) {
     }
     exit(0);
   */
+
   ExperimentConfig cfg(argc, argv);
-  while (true)
-    ;
+  std::cout << cfg.ccType << "\n";
+  if (cfg.ccType == MULTIVERSION) {
+    DoExperiment(cfg.mvConfig.numCCThreads, cfg.mvConfig.numRecords, 
+                 cfg.mvConfig.epochSize, 
+                 cfg.mvConfig.numTxns/cfg.mvConfig.epochSize, 
+                 cfg.mvConfig.txnSize);
+    exit(0);
+  }
+  else {
+
+  }
 }
