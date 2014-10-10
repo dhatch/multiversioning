@@ -1,4 +1,4 @@
-CFLAGS=-g -Werror -Wall -Wextra -w -std=c++0x
+CFLAGS=-O3 -g -Werror -Wall -Wextra -std=c++0x
 LIBS=-lnuma -lpthread -lrt -lcityhash -ltcmalloc_minimal -lprofiler
 CXX=g++
 
@@ -16,10 +16,12 @@ DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
 all:CFLAGS+=-DTESTING=0
 all:LIBS+=-ltcmalloc_minimal
-all:build/db
+all:env build/db
 
 test:CFLAGS+=-DTESTING=1
-test:build/tests
+test:env build/tests
+
+-include $(wildcard $(DEPSDIR)/*.d)
 
 build/%.o: src/%.cc $(DEPSDIR)/stamp 
 	@mkdir -p build
@@ -31,16 +33,13 @@ $(TESTOBJECTS):$(OBJECTS)
 test/%.o: test/%.cc $(DEPSDIR)/stamp 
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) -Wno-missing-field-initializers -Wno-conversion-null $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
-	@rm $(DEPSDIR)/$*.d
 
 start/%.o: start/%.cc $(DEPSDIR)/stamp 
 	@echo + cc $<
-	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
-	@rm $(DEPSDIR)/$*.d
+	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -Istart -c -o $@ $<
 
 build/db:start/main.o $(OBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
-	@rm -rf $(OBJECTS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
@@ -49,8 +48,7 @@ $(DEPSDIR)/stamp:
 	@mkdir -p $(DEPSDIR)
 	@touch $@
 
-
-.PHONY: clean
+.PHONY: clean env
 
 clean:
 	rm -rf build $(DEPSDIR) $(TESTOBJECTS) start/*.o

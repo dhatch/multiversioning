@@ -28,6 +28,7 @@ TEST_F(LockManagerTest, TestLock) {
     LockingAction *toAdd = new LockingAction();
     for (int j = 0; j < writesetSize; ++j) {
       uint64_t key = GetUniqueKey(previousKeys);
+      compKey.key = key;
       toAdd->writeset.push_back(compKey);
     }
     manager->AcquireLocks(toAdd);
