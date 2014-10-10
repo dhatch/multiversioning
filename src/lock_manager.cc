@@ -36,3 +36,41 @@ void LockManager::AcquireLocks(LockingAction *action) {
     this->entries[bucketNumber].AppendEntry(&action->writeset[i].bucketEntry);
   }
 }
+
+BucketEntryAllocator::BucketEntryAllocator(uint32_t numEntries, int cpu) {
+  // Allocate lock bucket entries. Link them together.
+  LockBucketEntry *entries = 
+    (LockBucketEntry*)alloc_mem(((size_t)numEntries)*sizeof(LockBucketEntry), 
+                                cpu);
+  assert(entries != NULL);
+  memset(entries, 0x0, ((size_t)numEntries)*sizeof(LockBucketEntry));
+  
+  // Avoid locality from sequential allocation.
+  for (uint32_t i = 0; i < numEntries/2; ++i) {
+    entries[i].next = &entries[numEntries-1-i];
+    entries[numEntries-1-i].next = &entries[i+1];
+  }
+  entries[numEntries/2].next = NULL;
+  freeList = entries;
+}
+
+bool BucketEntryAllocator::GetEntry(LockBucketEntry **OUT_ENTRY) {
+  if (freeList != NULL) {
+    LockBucketEntry *ret = freeList;
+    freeList = (LockBucketEntry*)freeList->next;
+    ret->next = NULL;
+    ret->action = NULL;
+    *OUT_ENTRY = ret;
+    return true;
+  }
+  else {
+    *OUT_ENTRY = NULL;
+    return false;
+  }
+}
+
+void BucketEntryAllocator::ReturnEntry(LockBucketEntry *entry) {
+  entry->action = NULL;
+  entry->next = freeList;
+  freeList = entry;
+}

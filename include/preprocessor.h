@@ -114,6 +114,11 @@ class MVScheduler : public Runnable {
     void Subordinate(uint32_t epoch);
     virtual void Init();
  public:
+    
+    void* operator new (std::size_t sz, int cpu) {
+      return alloc_mem(sz, cpu);
+    }
+
         static uint32_t NUM_CC_THREADS;
         MVScheduler(MVSchedulerConfig config);
 };

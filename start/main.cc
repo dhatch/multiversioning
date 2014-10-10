@@ -127,13 +127,13 @@ MVScheduler** SetupSchedulers(int numProcs,
       SetupLeaderSched(OFFSET_CORE(0),  // cpuNumber
                        numProcs, allocatorSize, tblPartitionSizes);
 
-    schedArray[0] = new MVScheduler(leaderConfig);
+    schedArray[0] = new (leaderConfig.cpuNumber) MVScheduler(leaderConfig);
 
     for (int i = 1; i < numProcs; ++i) {
       MVSchedulerConfig subordConfig = 
         SetupSubordinateSched(OFFSET_CORE(i), i, leaderConfig, allocatorSize, 
                               tblPartitionSizes);
-        schedArray[i] = new MVScheduler(subordConfig);
+      schedArray[i] = new (leaderConfig.cpuNumber) MVScheduler(subordConfig);
     }
     
     *inputQueueRef_OUT = leaderConfig.leaderInputQueue;
@@ -338,7 +338,7 @@ int main(int argc, char **argv) {
     int exptId = atoi(argv[6]);
 
     srand(time(NULL));
-    MVScheduler::NUM_CC_THREADS = (uint32_t)numProcs;
+
     if (exptId == 0) {
       DoExperiment(numProcs, numRecords, epochSize, numEpochs, txnSize);
     }
@@ -351,6 +351,7 @@ int main(int argc, char **argv) {
   ExperimentConfig cfg(argc, argv);
   std::cout << cfg.ccType << "\n";
   if (cfg.ccType == MULTIVERSION) {
+      MVScheduler::NUM_CC_THREADS = (uint32_t)cfg.mvConfig.numCCThreads;
     DoExperiment(cfg.mvConfig.numCCThreads, cfg.mvConfig.numRecords, 
                  cfg.mvConfig.epochSize, 
                  cfg.mvConfig.numTxns/cfg.mvConfig.epochSize, 

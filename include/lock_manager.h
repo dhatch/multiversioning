@@ -1,7 +1,8 @@
-#ifndef 	LOCK_MANAGER_H_
-#define		LOCK_MANAGER_H_
+#ifndef         LOCK_MANAGER_H_
+#define         LOCK_MANAGER_H_
 
 #include <action.h>
+#include <cpuinfo.h>
 
 class LockBucket {  
  public:
@@ -12,6 +13,22 @@ class LockBucket {
   
   void AppendEntry(LockBucketEntry *entry);
 } __attribute__((__packed__, __aligned__(CACHE_LINE)));
+
+class BucketEntryAllocator {
+ private:
+  LockBucketEntry *freeList;
+
+ public:
+  void* operator new(std::size_t sz, int cpu) {
+    return alloc_mem(sz, cpu);
+  }
+
+  BucketEntryAllocator(uint32_t numEntries, int cpu);
+  
+  bool GetEntry(LockBucketEntry **OUT_ENTRY);
+  
+  void ReturnEntry(LockBucketEntry *entry);
+};
 
 class LockManager {
   friend class LockManagerTest;
@@ -26,4 +43,4 @@ class LockManager {
   void AcquireLocks(LockingAction *action);
 };
 
-#endif 		// LOCK_MANAGER_H_
+#endif          // LOCK_MANAGER_H_

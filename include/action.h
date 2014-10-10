@@ -123,7 +123,10 @@ class Action {
 };
 
 
+class LockingAction;
+
 struct LockBucketEntry {  
+  LockingAction *action;
   volatile LockBucketEntry *next;
 };
 
@@ -132,14 +135,16 @@ class LockingCompositeKey {
   uint32_t tableId;
   uint64_t key;
   LockBucketEntry bucketEntry;
-  
+
   static inline uint64_t Hash(const LockingCompositeKey *key) {
       return Hash128to64(std::make_pair(key->key, (uint64_t)(key->tableId)));
   }
 };
 
 class LockingAction {
- public:
+ public:  
+  volatile uint32_t __attribute__((__packed__, __aligned__(CACHE_LINE))) 
+    dependencyCount;
   std::vector<LockingCompositeKey> readset;
   std::vector<LockingCompositeKey> writeset;
   

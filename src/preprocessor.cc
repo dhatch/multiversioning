@@ -64,7 +64,8 @@ void MVActionHasher::ProcessAction(Action *action, uint32_t epoch,
     // the threadId and change the combinedHash bitmask appropriately.
       action->writeset[i].threadId = 0;
     uint32_t threadId = 
-        CompositeKey::HashKey(&action->writeset[i]) % MVScheduler::NUM_CC_THREADS;
+      CompositeKey::HashKey(&action->writeset[i]) % 
+      MVScheduler::NUM_CC_THREADS;
     action->writeset[i].threadId = threadId;
     action->combinedHash |= (((uint64_t)1)<<threadId);
   }
