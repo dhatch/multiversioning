@@ -2,6 +2,8 @@
 #include <preprocessor.h>
 #include <cpuinfo.h>
 #include <config.h>
+#include <lock_thread.h>
+
 
 #include <gperftools/profiler.h>
 
@@ -322,6 +324,123 @@ void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs,
   resultFile.close();
 }
 
+LockingAction** CreateSingleLockingActionBatch(uint32_t numTxns, 
+                                               uint32_t txnSize, 
+                                            uint64_t numRecords) { 
+  LockingAction **ret = 
+    (LockingAction**)alloc_mem(numTxns*sizeof(LockingAction*), 71);
+  assert(ret != NULL);
+  memset(ret, 0x0, numTxns*sizeof(LockingAction*));
+  std::set<uint64_t> seenKeys; 
+  LockingCompositeKey k;
+  k.bucketEntry.isRead = false;
+  k.bucketEntry.next = (volatile LockBucketEntry*)NULL;
+  k.tableId = 0;
+
+  for (uint32_t i = 0; i < numTxns; ++i) {
+    seenKeys.clear();
+    LockingAction *action = new LockingAction();    
+    for (uint32_t j = 0; j < txnSize; ++j) {
+      while (true) {
+        uint64_t key = rand() % numRecords;
+        if (seenKeys.count(key) == 0) {
+          seenKeys.insert(key);
+          k.key = key;
+          k.bucketEntry.action = action;
+          action->writeset.push_back(k);
+          break;
+        }
+      }
+    }
+    ret[i] = action;
+  }
+  return ret;
+}
+
+LockActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads, 
+                               uint32_t numTxns, uint32_t numRecords) {
+  LockActionBatch *ret = 
+    (LockActionBatch*)malloc(sizeof(LockActionBatch)*numThreads);
+  uint32_t txnsPerThread = numTxns/numThreads;
+  for (uint32_t i = 0; i < numThreads; ++i) {
+    LockingAction **actions = 
+      CreateSingleLockingActionBatch(txnsPerThread, txnSize, numRecords);
+    ret[i] = {
+      .batchSize = txnsPerThread,
+      .actions = actions,
+    };
+  }
+  return ret;
+}
+
+LockThread** SetupLockThreads(SimpleQueue<LockActionBatch> **inputQueue, 
+                              SimpleQueue<LockActionBatch> **outputQueue, 
+                              uint32_t allocatorSize, 
+                              LockManager *mgr, 
+                              int numThreads) {
+  LockThread **ret = (LockThread**)malloc(sizeof(LockThread*)*numThreads);
+  assert(ret != NULL);
+  for (int i = 0; i < numThreads; ++i) {
+    LockThreadConfig cfg = {
+      .allocatorSize = allocatorSize,
+      .inputQueue = inputQueue[i],
+      .outputQueue = outputQueue[i],
+      .mgr = mgr,
+    };
+    ret[i] = new (i) LockThread(cfg, i);
+  }
+  return ret;
+}
+
+void LockingExperiment(LockingConfig config) {
+  SimpleQueue<LockActionBatch> **inputs = 
+    (SimpleQueue<LockActionBatch>**)malloc(sizeof(SimpleQueue<LockActionBatch>*)
+                                           *config.numThreads);
+  for (uint32_t i = 0; i < config.numThreads; ++i) {
+    char *data = (char*)alloc_mem(CACHE_LINE*1024, 71);
+    inputs[i] = new SimpleQueue<LockActionBatch>(data, 1024);
+  }
+
+  SimpleQueue<LockActionBatch> **outputs = 
+    (SimpleQueue<LockActionBatch>**)malloc(sizeof(SimpleQueue<LockActionBatch>*)
+                                           *config.numThreads);
+  for (uint32_t i = 0; i < config.numThreads; ++i) {
+    char *data = (char*)alloc_mem(CACHE_LINE*1024, 71);
+    outputs[i] = new SimpleQueue<LockActionBatch>(data, 1024);
+  }
+  
+  LockManager *mgr = new LockManager(config.numRecords, 0);
+  LockThread **threads = SetupLockThreads(inputs, outputs, 256, mgr, 
+                                          config.numThreads);
+  LockActionBatch *batches = SetupLockingInput(config.txnSize, 
+                                               config.numThreads,
+                                               config.numTxns,
+                                               config.numRecords);
+  int success = pin_thread(79);
+  assert(success == 0);
+
+  timespec start_time, end_time, elapsed_time;
+  for (uint32_t i = 0; i < config.numThreads; ++i) {
+    inputs[i]->EnqueueBlocking(batches[i]);
+    threads[i]->Run();
+  }
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);  
+  for (uint32_t i = 0; i < config.numThreads; ++i) {
+    outputs[i]->DequeueBlocking();
+  }
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
+  elapsed_time = diff_time(end_time, start_time);
+
+  double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
+  std::cout << elapsedMilli << '\n';
+  std::ofstream resultFile;
+  resultFile.open("locking.txt", std::ios::app | std::ios::out);
+  resultFile << elapsedMilli << " " << config.numTxns << " ";
+  resultFile << config.numThreads << "\n";
+  //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
+  resultFile.close();  
+}
+
 // arg0: number of scheduler threads
 // arg1: number of records in the database
 // arg2: number of txns in an epoch
@@ -359,6 +478,7 @@ int main(int argc, char **argv) {
     exit(0);
   }
   else {
-
+    LockingExperiment(cfg.lockConfig);
+    exit(0);
   }
 }

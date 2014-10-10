@@ -127,6 +127,7 @@ class LockingAction;
 
 struct LockBucketEntry {  
   LockingAction *action;
+  bool isRead;
   volatile LockBucketEntry *next;
 };
 

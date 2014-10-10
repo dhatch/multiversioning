@@ -54,7 +54,7 @@ protected:
       NULL,
       NULL,
     };
-    sched = new MVScheduler(config);
+    sched = new (config.cpuNumber) MVScheduler(config);
     sched->txnCounter = 1;
   }
 };
