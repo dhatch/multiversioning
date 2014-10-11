@@ -52,8 +52,3 @@ $(DEPSDIR)/stamp:
 
 clean:
 	rm -rf build $(DEPSDIR) $(TESTOBJECTS) start/*.o
-
-
-
-
-
