@@ -341,7 +341,6 @@ LockingAction** CreateSingleLockingActionBatch(uint32_t numTxns,
   assert(ret != NULL);
   memset(ret, 0x0, numTxns*sizeof(LockingAction*));
   std::set<uint64_t> seenKeys; 
-  std::set<uint64_t> seenHashes;
   LockingCompositeKey k;
   k.bucketEntry.isRead = false;
   k.bucketEntry.next = (volatile LockBucketEntry*)NULL;
@@ -349,16 +348,12 @@ LockingAction** CreateSingleLockingActionBatch(uint32_t numTxns,
 
   for (uint32_t i = 0; i < numTxns; ++i) {
     seenKeys.clear();
-    seenHashes.clear();
     LockingAction *action = new LockingAction();    
     for (uint32_t j = 0; j < txnSize; ++j) {
       while (true) {
           k.key = rand() % numRecords;
-          uint64_t hash = LockingCompositeKey::Hash(&k) % numRecords;
-          if (seenKeys.find(k.key) == seenKeys.end() && 
-              seenHashes.find(hash) == seenHashes.end()) {
+          if (seenKeys.find(k.key) == seenKeys.end()) {
               seenKeys.insert(k.key);
-              seenHashes.insert(hash);
               //          k.key = key;
               k.bucketEntry.action = action;
               action->writeset.push_back(k);

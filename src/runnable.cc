@@ -1,6 +1,7 @@
 #include <runnable.hh>
 #include <util.h>
 #include <cpuinfo.h>
+#include <pthread.h>
 
 Runnable::Runnable(int cpu_number) {
     m_start_signal = 0;
@@ -22,20 +23,24 @@ Runnable::Run() {
 
 void*
 Runnable::Bootstrap(void *arg) {
-    Runnable *worker = (Runnable*)arg;
+  Runnable *worker = (Runnable*)arg;
     
-    // Pin the thread to a cpu
-    if (pin_thread((int)worker->m_cpu_number) == -1) {
-        std::cout << "Couldn't bind to a cpu!\n";
-        exit(-1);
-    }
+  // Pin the thread to a cpu
+  if (pin_thread((int)worker->m_cpu_number) == -1) {
+    std::cout << "Couldn't bind to a cpu!\n";
+    exit(-1);
+  }
     
-    worker->Init();
+  assert((uint64_t)worker->m_thread != 0);
     
-    // Signal that we've initialized
-    fetch_and_increment(&worker->m_start_signal);	
+  //  worker->m_pthreadId = (uint64_t)pthread_getthreadid_np();
+  //  assert(worker->m_pthreadId != 0);
+  worker->Init();
+    
+  // Signal that we've initialized
+  fetch_and_increment(&worker->m_start_signal);	
 
-	// Start the runnable thread
-    worker->StartWorking();
-    return NULL;
+  // Start the runnable thread
+  worker->StartWorking();
+  return NULL;
 }

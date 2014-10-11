@@ -10,7 +10,7 @@ void LockThread::StartWorking() {
   while (true) {
     LockActionBatch b = config.inputQueue->DequeueBlocking();
     for (uint64_t i = 0; i < b.batchSize; ++i) {
-      config.mgr->AcquireLocks(b.actions[i]);
+      config.mgr->AcquireLocks(b.actions[i], this->m_thread);
     }
     config.outputQueue->EnqueueBlocking(b);
   }

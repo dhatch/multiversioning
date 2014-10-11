@@ -8,10 +8,10 @@ LockBucket::LockBucket() {
   this->lockWord = 0;
 }
 
-void LockBucket::AppendEntry(LockBucketEntry *entry) {
+void LockBucket::AppendEntry(LockBucketEntry *entry, uint64_t threadId) {
   entry->next = NULL;
   //  LockBucketEntry *oldTail;
-  lock(&this->lockWord);
+  reentrant_lock(&this->lockWord, threadId);
   if (tail != NULL) {
       tail->next = entry;
   }
@@ -44,12 +44,13 @@ LockManager::LockManager(uint64_t numEntries, int cpu) {
   
 }
 
-void LockManager::AcquireLocks(LockingAction *action) {
+void LockManager::AcquireLocks(LockingAction *action, uint64_t threadId) {
   int writesetSize = action->writeset.size();
   for (int i = 0; i < writesetSize; ++i) {
     uint64_t bucketNumber = 
       LockingCompositeKey::Hash(&action->writeset[i]) % this->numEntries;
-    this->entries[bucketNumber].AppendEntry(&action->writeset[i].bucketEntry);
+    this->entries[bucketNumber].AppendEntry(&action->writeset[i].bucketEntry, 
+                                            threadId);
   }
   
   barrier();

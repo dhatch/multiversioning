@@ -11,6 +11,7 @@ protected:
   volatile uint64_t                     m_start_signal;
   int                                   m_cpu_number;
   pthread_t                             m_thread;
+  uint64_t                              m_pthreadId;
 
   virtual void
   StartWorking() = 0;
