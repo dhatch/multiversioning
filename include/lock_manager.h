@@ -11,7 +11,7 @@ class LockBucket {
   volatile uint64_t lockWord;
   LockBucket();
   
-  void AppendEntry(LockBucketEntry *entry, uint64_t threadId);
+  void AppendEntry(LockBucketEntry *entry, uint32_t threadId);
   void ReleaseLock();
 } __attribute__((__packed__, __aligned__(CACHE_LINE)));
 
@@ -41,7 +41,7 @@ class LockManager {
  public:
   LockManager(uint64_t numEntries, int cpu);
 
-  void AcquireLocks(LockingAction *action, uint64_t threadId);
+  void AcquireLocks(LockingAction *action, uint32_t threadId);
 };
 
 #endif          // LOCK_MANAGER_H_

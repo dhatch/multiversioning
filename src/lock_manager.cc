@@ -8,7 +8,7 @@ LockBucket::LockBucket() {
   this->lockWord = 0;
 }
 
-void LockBucket::AppendEntry(LockBucketEntry *entry, uint64_t threadId) {
+void LockBucket::AppendEntry(LockBucketEntry *entry, uint32_t threadId) {
   entry->next = NULL;
   //  LockBucketEntry *oldTail;
   reentrant_lock(&this->lockWord, threadId);
@@ -32,7 +32,8 @@ void LockBucket::AppendEntry(LockBucketEntry *entry, uint64_t threadId) {
 }
 
 void LockBucket::ReleaseLock() {
-    unlock(&this->lockWord);
+  //    unlock(&this->lockWord);
+    reentrant_unlock(&this->lockWord);
 }
 
 LockManager::LockManager(uint64_t numEntries, int cpu) {
@@ -44,7 +45,7 @@ LockManager::LockManager(uint64_t numEntries, int cpu) {
   
 }
 
-void LockManager::AcquireLocks(LockingAction *action, uint64_t threadId) {
+void LockManager::AcquireLocks(LockingAction *action, uint32_t threadId) {
   int writesetSize = action->writeset.size();
   for (int i = 0; i < writesetSize; ++i) {
     uint64_t bucketNumber = 

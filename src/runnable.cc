@@ -31,7 +31,7 @@ Runnable::Bootstrap(void *arg) {
     exit(-1);
   }
     
-  assert((uint64_t)worker->m_thread != 0);
+  assert((uint32_t)worker->m_thread != 0);
     
   //  worker->m_pthreadId = (uint64_t)pthread_getthreadid_np();
   //  assert(worker->m_pthreadId != 0);
