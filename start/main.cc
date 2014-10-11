@@ -19,6 +19,7 @@
 Database DB;
 
 int NumProcs;
+uint32_t numLockingRecords;
 
 timespec diff_time(timespec end, timespec start) {
     timespec temp;
@@ -165,11 +166,6 @@ void SetupDatabase(int numProcs, uint64_t allocatorSize, uint64_t tableSize) {
 }
 */
 
-bool SortCmp(CompositeKey key1, CompositeKey key2) {
-    uint32_t thread1 = CompositeKey::Hash(&key1) % MVScheduler::NUM_CC_THREADS;
-    uint32_t thread2 = CompositeKey::Hash(&key2) % MVScheduler::NUM_CC_THREADS;
-    return thread1 > thread2;
-}
 
 ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords) {
   Action **ret = (Action**)alloc_mem(sizeof(Action*)*epochSize, 79);
@@ -324,14 +320,28 @@ void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs,
   resultFile.close();
 }
 
+bool SortCmp(LockingCompositeKey key1, LockingCompositeKey key2) {
+    uint64_t hash1 = LockingCompositeKey::Hash(&key1) % numLockingRecords;
+    uint64_t hash2 = LockingCompositeKey::Hash(&key2) % numLockingRecords;
+    return hash1 > hash2;
+    //    return (key1.tableId > key2.tableId) || (key1.key > key2.key);
+    //    uint32_t thread1 = CompositeKey::Hash(&key1) % MVScheduler::NUM_CC_THREADS;
+    //    uint32_t thread2 = CompositeKey::Hash(&key2) % MVScheduler::NUM_CC_THREADS;
+    //    return thread1 > thread2;
+}
+
 LockingAction** CreateSingleLockingActionBatch(uint32_t numTxns, 
                                                uint32_t txnSize, 
                                             uint64_t numRecords) { 
+    std::cout << "Num records: " << numRecords << "\n";
+    std::cout << "Txn size: " << txnSize << "\n";
+    numLockingRecords = numRecords;
   LockingAction **ret = 
     (LockingAction**)alloc_mem(numTxns*sizeof(LockingAction*), 71);
   assert(ret != NULL);
   memset(ret, 0x0, numTxns*sizeof(LockingAction*));
   std::set<uint64_t> seenKeys; 
+  std::set<uint64_t> seenHashes;
   LockingCompositeKey k;
   k.bucketEntry.isRead = false;
   k.bucketEntry.next = (volatile LockBucketEntry*)NULL;
@@ -339,23 +349,30 @@ LockingAction** CreateSingleLockingActionBatch(uint32_t numTxns,
 
   for (uint32_t i = 0; i < numTxns; ++i) {
     seenKeys.clear();
+    seenHashes.clear();
     LockingAction *action = new LockingAction();    
     for (uint32_t j = 0; j < txnSize; ++j) {
       while (true) {
-        uint64_t key = rand() % numRecords;
-        if (seenKeys.count(key) == 0) {
-          seenKeys.insert(key);
-          k.key = key;
-          k.bucketEntry.action = action;
-          action->writeset.push_back(k);
-          break;
+          k.key = rand() % numRecords;
+          uint64_t hash = LockingCompositeKey::Hash(&k) % numRecords;
+          if (seenKeys.find(k.key) == seenKeys.end() && 
+              seenHashes.find(hash) == seenHashes.end()) {
+              seenKeys.insert(k.key);
+              seenHashes.insert(hash);
+              //          k.key = key;
+              k.bucketEntry.action = action;
+              action->writeset.push_back(k);
+              break;
         }
       }
     }
+    std::sort(action->writeset.begin(), action->writeset.end(), SortCmp);
     ret[i] = action;
   }
   return ret;
 }
+
+
 
 LockActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads, 
                                uint32_t numTxns, uint32_t numRecords) {
@@ -366,8 +383,8 @@ LockActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads,
     LockingAction **actions = 
       CreateSingleLockingActionBatch(txnsPerThread, txnSize, numRecords);
     ret[i] = {
-      .batchSize = txnsPerThread,
-      .actions = actions,
+      txnsPerThread,
+      actions,
     };
   }
   return ret;
@@ -382,10 +399,10 @@ LockThread** SetupLockThreads(SimpleQueue<LockActionBatch> **inputQueue,
   assert(ret != NULL);
   for (int i = 0; i < numThreads; ++i) {
     LockThreadConfig cfg = {
-      .allocatorSize = allocatorSize,
-      .inputQueue = inputQueue[i],
-      .outputQueue = outputQueue[i],
-      .mgr = mgr,
+      allocatorSize,
+      inputQueue[i],
+      outputQueue[i],
+      mgr,
     };
     ret[i] = new (i) LockThread(cfg, i);
   }
@@ -393,6 +410,7 @@ LockThread** SetupLockThreads(SimpleQueue<LockActionBatch> **inputQueue,
 }
 
 void LockingExperiment(LockingConfig config) {
+    
   SimpleQueue<LockActionBatch> **inputs = 
     (SimpleQueue<LockActionBatch>**)malloc(sizeof(SimpleQueue<LockActionBatch>*)
                                            *config.numThreads);
@@ -418,11 +436,17 @@ void LockingExperiment(LockingConfig config) {
                                                config.numRecords);
   int success = pin_thread(79);
   assert(success == 0);
-
+  
+  for (uint32_t i = 0; i < config.numThreads; ++i) {
+      threads[i]->Run();
+  }
+  
+  barrier();
+  
   timespec start_time, end_time, elapsed_time;
   for (uint32_t i = 0; i < config.numThreads; ++i) {
     inputs[i]->EnqueueBlocking(batches[i]);
-    threads[i]->Run();
+
   }
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);  
   for (uint32_t i = 0; i < config.numThreads; ++i) {
@@ -446,7 +470,7 @@ void LockingExperiment(LockingConfig config) {
 // arg2: number of txns in an epoch
 // arg3: number of epochs
 int main(int argc, char **argv) {
-  
+    srand(time(NULL));
   /*
     assert(argc == 7);
     int numProcs = atoi(argv[1]);

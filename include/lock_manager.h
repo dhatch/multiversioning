@@ -6,12 +6,13 @@
 
 class LockBucket {  
  public:
-  volatile LockBucketEntry *tail;
-  volatile LockBucketEntry *head;
-  
+    LockBucketEntry *tail;
+   LockBucketEntry *head;
+  volatile uint64_t lockWord;
   LockBucket();
   
   void AppendEntry(LockBucketEntry *entry);
+  void ReleaseLock();
 } __attribute__((__packed__, __aligned__(CACHE_LINE)));
 
 class BucketEntryAllocator {

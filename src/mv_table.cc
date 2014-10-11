@@ -128,7 +128,7 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
   assert(success);        // Can't deal with allocation failures yet.
   assert(toAdd->link == NULL && toAdd->recordLink == NULL);
   toAdd->createTimestamp = version;
-  toAdd->deleteTimestamp = MVRecord::INFINITY;
+  toAdd->deleteTimestamp = version;// MVRecord::INFINITY;
   toAdd->writer = action;
   toAdd->key = pkey.key;  
 
@@ -144,8 +144,7 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
     if (cur->key == pkey.key) {
       toAdd->link = cur->link;
       toAdd->recordLink = cur;
-      cur->link = NULL;
-      cur->deleteTimestamp = version;
+      //      cur->deleteTimestamp = version;
       break;
     }
 

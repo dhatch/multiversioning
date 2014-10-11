@@ -5,18 +5,34 @@
 LockBucket::LockBucket() {
   this->tail = NULL;
   this->head = NULL;
+  this->lockWord = 0;
 }
 
 void LockBucket::AppendEntry(LockBucketEntry *entry) {
   entry->next = NULL;
-  LockBucketEntry *oldTail = (LockBucketEntry*)xchgq((uint64_t*)&tail, 
-                                                     (uint64_t)entry);
+  //  LockBucketEntry *oldTail;
+  lock(&this->lockWord);
+  if (tail != NULL) {
+      tail->next = entry;
+  }
+  else {
+      head = entry;
+  }
+  tail = entry;
+  /*
+  oldTail = tail;
+  tail = entry;
   if (oldTail == NULL) {
     this->head = entry;
   }
   else {
     oldTail->next = entry;
   }
+  */
+}
+
+void LockBucket::ReleaseLock() {
+    unlock(&this->lockWord);
 }
 
 LockManager::LockManager(uint64_t numEntries, int cpu) {
@@ -34,6 +50,14 @@ void LockManager::AcquireLocks(LockingAction *action) {
     uint64_t bucketNumber = 
       LockingCompositeKey::Hash(&action->writeset[i]) % this->numEntries;
     this->entries[bucketNumber].AppendEntry(&action->writeset[i].bucketEntry);
+  }
+  
+  barrier();
+
+  for (int i = 0; i < writesetSize; ++i) {
+    uint64_t bucketNumber = 
+      LockingCompositeKey::Hash(&action->writeset[i]) % this->numEntries;
+    this->entries[bucketNumber].ReleaseLock();
   }
 }
 
