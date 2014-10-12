@@ -36,30 +36,51 @@ void LockBucket::ReleaseLock() {
     reentrant_unlock(&this->lockWord);
 }
 
-LockManager::LockManager(uint64_t numEntries, int cpu) {
+LockManagerTable::LockManagerTable(uint64_t numEntries) {
   this->numEntries = numEntries;
-  void *lockManagerBuckets = alloc_mem(sizeof(LockBucket)*numEntries, cpu);
-  assert(lockManagerBuckets != NULL);
-  memset(lockManagerBuckets, 0x0, sizeof(LockBucket)*numEntries);
-  this->entries = (LockBucket*)lockManagerBuckets;
-  
+  void *buckets = malloc(sizeof(LockBucket)*numEntries);
+  assert(buckets != NULL);
+  memset(buckets, 0x00, sizeof(LockBucket)*numEntries);
+  this->entries = (LockBucket*)buckets;
+}
+
+inline void LockManagerTable::AcquireLock(LockingCompositeKey *key, 
+                                          uint32_t threadId) {
+  uint64_t bucketNumber = LockingCompositeKey::Hash(key) % this->numEntries;
+  this->entries[bucketNumber].AppendEntry(&key->bucketEntry,
+                                          threadId);
+}
+
+inline void LockManagerTable::CompleteLockPhase(LockingCompositeKey *key) {
+  uint64_t bucketNumber = 
+      LockingCompositeKey::Hash(key) % this->numEntries;
+    this->entries[bucketNumber].ReleaseLock();
+}
+
+LockManager::LockManager(const unordered_map<uint32_t, uint64_t>& tableInfo, 
+                         uint32_t numTables) {
+  this->numTables = numTables;
+  for (auto iter = tableInfo.begin(); iter != tableInfo.end(); ++iter) {
+    uint32_t tableId = iter->first;
+    uint64_t tableSize = iter->second;
+    LockManagerTable *tbl = new LockManagerTable(tableSize);    
+    this->tables[tableId] = tbl;
+  }
 }
 
 void LockManager::AcquireLocks(LockingAction *action, uint32_t threadId) {
   int writesetSize = action->writeset.size();
   for (int i = 0; i < writesetSize; ++i) {
-    uint64_t bucketNumber = 
-      LockingCompositeKey::Hash(&action->writeset[i]) % this->numEntries;
-    this->entries[bucketNumber].AppendEntry(&action->writeset[i].bucketEntry, 
-                                            threadId);
+    uint32_t tbl = action->writeset[i].tableId;
+    assert(tbl < this->numTables);
+    tables[tbl]->AcquireLock(&action->writeset[i], threadId);
   }
   
   barrier();
 
   for (int i = 0; i < writesetSize; ++i) {
-    uint64_t bucketNumber = 
-      LockingCompositeKey::Hash(&action->writeset[i]) % this->numEntries;
-    this->entries[bucketNumber].ReleaseLock();
+    uint32_t tbl = action->writeset[i].tableId;
+    tables[tbl]->CompleteLockPhase(&action->writeset[i]);
   }
 }
 

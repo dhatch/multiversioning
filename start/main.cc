@@ -422,7 +422,9 @@ void LockingExperiment(LockingConfig config) {
     outputs[i] = new SimpleQueue<LockActionBatch>(data, 1024);
   }
   
-  LockManager *mgr = new LockManager(config.numRecords, 0);
+  unordered_map<uint32_t, uint64_t> tblInfo;
+  tblInfo[0] = config.numRecords;
+  LockManager *mgr = new LockManager(tblInfo, 1);
   LockThread **threads = SetupLockThreads(inputs, outputs, 256, mgr, 
                                           config.numThreads);
   LockActionBatch *batches = SetupLockingInput(config.txnSize, 

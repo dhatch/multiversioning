@@ -3,6 +3,9 @@
 
 #include <action.h>
 #include <cpuinfo.h>
+#include <unordered_map>
+
+using namespace std;
 
 class LockBucket {  
  public:
@@ -14,6 +17,19 @@ class LockBucket {
   void AppendEntry(LockBucketEntry *entry, uint32_t threadId);
   void ReleaseLock();
 } __attribute__((__packed__, __aligned__(CACHE_LINE)));
+
+class LockManagerTable {
+ private:
+  LockBucket *entries;
+  uint64_t numEntries;
+
+ public:
+  LockManagerTable(uint64_t numEntries);
+  
+  void AcquireLock(LockingCompositeKey *key, uint32_t threadId);
+  
+  void CompleteLockPhase(LockingCompositeKey *key);  
+};
 
 class BucketEntryAllocator {
  private:
@@ -35,11 +51,11 @@ class LockManager {
   friend class LockManagerTest;
 
  private:
-  LockBucket *entries;
-  uint64_t numEntries;
+  unordered_map<uint32_t, LockManagerTable*> tables;
+  uint32_t numTables;
   
  public:
-  LockManager(uint64_t numEntries, int cpu);
+  LockManager(const unordered_map<uint32_t, uint64_t>& tableInfo, uint32_t numTables);
 
   void AcquireLocks(LockingAction *action, uint32_t threadId);
 };
