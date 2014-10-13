@@ -107,27 +107,44 @@ MVScheduler::MVScheduler(MVSchedulerConfig config) :
   //    this->alloc = NULL;
 }
 
-
-void MVScheduler::StartWorking() {
-
-    uint32_t epoch = 0;
-  while (true) {
-
-    if (config.threadId == 0) {
-        Leader(epoch);
-    }
-    else {
-        Subordinate(epoch);
-    }
-    epoch += 1;
-
-  }
-}
-
 static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
     return (((uint64_t)epoch << 32) | txnCounter);
 }
 
+void MVScheduler::StartWorking() {
+
+  uint32_t epoch = 0;
+  while (true) {
+    
+    // Take an input batch
+    ActionBatch curBatch = config.inputQueue->DequeueBlocking();
+    
+    // Signal subordinates
+    for (uint32_t i = 0; i < config.numSubords; ++i) {
+      config.pubQueues[i]->EnqueueBlocking(curBatch);
+    }
+
+    // Process batch of txns
+    uint32_t txnCounter = 0;
+    for (uint32_t i = 0; i < curBatch.numActions; ++i) {
+      uint64_t version = compute_version(epoch, txnCounter);
+      ScheduleTransaction(curBatch.actionBuf[i], version);
+      txnCounter += 1;
+    }
+    
+    // Wait for subordinates
+    for (uint32_t i = 0; i < config.numSubords; ++i) {
+      config.subQueues[i]->DequeueBlocking();
+    }    
+    
+    // Signal leader
+    config.outputQueue->EnqueueBlocking(curBatch);
+    epoch += 1;
+  }
+}
+
+
+/*
 void MVScheduler::Subordinate(uint32_t epoch) {
   assert(config.threadId != 0 && config.threadId < NUM_CC_THREADS);
 
@@ -172,6 +189,8 @@ void MVScheduler::Leader(uint32_t epoch) {
     
   config.leaderOutputQueue->EnqueueBlocking(curBatch);
 }
+*/
+
 
 /*
  * Hash the given key, and find which concurrency control thread is

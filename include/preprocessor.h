@@ -73,7 +73,15 @@ struct MVSchedulerConfig {
   size_t allocatorSize;         // Scheduler thread's local sticky allocator
   uint32_t numTables;           // Number of tables in the system
   size_t *tblPartitionSizes;    // Size of each table's partition
-    
+  
+  uint32_t numSubords;
+
+  SimpleQueue<ActionBatch> *inputQueue;
+  SimpleQueue<ActionBatch> *outputQueue;
+  SimpleQueue<ActionBatch> **pubQueues;
+  SimpleQueue<ActionBatch> **subQueues;
+  
+  /*
   // Coordination queues required by the leader thread.
   SimpleQueue<ActionBatch> *leaderInputQueue;
   SimpleQueue<ActionBatch> *leaderOutputQueue;
@@ -83,6 +91,7 @@ struct MVSchedulerConfig {
   // Coordination queues required by the subordinate threads.
   SimpleQueue<ActionBatch> *subordInputQueue;
   SimpleQueue<ActionBatch> *subordOutputQueue;
+  */
 };
 
 /*
@@ -110,8 +119,8 @@ class MVScheduler : public Runnable {
         virtual void StartWorking();
         void ProcessWriteset(Action *action, uint64_t timestamp);
         void ScheduleTransaction(Action *action, uint64_t version);     
-    void Leader(uint32_t epoch);
-    void Subordinate(uint32_t epoch);
+        //    void Leader(uint32_t epoch);
+        //    void Subordinate(uint32_t epoch);
     virtual void Init();
  public:
     

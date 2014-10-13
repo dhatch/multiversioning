@@ -34,7 +34,101 @@ timespec diff_time(timespec end, timespec start) {
     return temp;
 }
 
+void CreateQueues(int cpuNumber, uint32_t subCount, 
+                  SimpleQueue<ActionBatch>*** OUT_PUB_QUEUES,
+                  SimpleQueue<ActionBatch>*** OUT_SUB_QUEUES) {
+  // Allocate space to keep queues for subordinates
+  void *pubTemp = alloc_mem(sizeof(SimpleQueue<ActionBatch>*)*subCount, 
+                            cpuNumber);
+  void *subTemp = alloc_mem(sizeof(SimpleQueue<ActionBatch>*)*subCount,
+                            cpuNumber);
+  auto pubQueues = (SimpleQueue<ActionBatch>**)pubTemp;
+  auto subQueues = (SimpleQueue<ActionBatch>**)subTemp;
 
+  // Allocate space for queue data
+  char *pubArray = (char*)alloc_mem(CACHE_LINE*4*subCount, cpuNumber);
+  assert(pubArray != NULL);
+  memset(pubArray, 0x00, CACHE_LINE*4*subCount);
+  char *subArray = &pubArray[CACHE_LINE*2*subCount];
+      
+  // Allocate space for queue meta-data
+  auto pubMetaData = 
+    (SimpleQueue<ActionBatch>*)alloc_mem(sizeof(SimpleQueue<ActionBatch>)*2*subCount, 
+                                         cpuNumber);
+  assert(pubMetaData != NULL);
+  memset(pubMetaData, 0x0, sizeof(SimpleQueue<ActionBatch>)*2*subCount);
+  auto subMetaData = &pubMetaData[subCount];
+
+  // Initialize meta-data with SimpleQueue constructor
+  for (uint32_t i = 0; i < subCount; ++i) {
+    auto pubQueue = 
+      new (&pubMetaData[i]) 
+      SimpleQueue<ActionBatch>(&pubArray[2*CACHE_LINE*i], 2);
+    auto subQueue =
+      new (&subMetaData[i])
+      SimpleQueue<ActionBatch>(&subArray[2*CACHE_LINE*i], 2);
+    assert(pubQueue != NULL && subQueue != NULL);
+    pubQueues[i] = pubQueue;
+    subQueues[i] = subQueue;
+  }
+  
+  *OUT_PUB_QUEUES = pubQueues;
+  *OUT_SUB_QUEUES = subQueues;
+}
+
+MVSchedulerConfig SetupSched(int cpuNumber, int threadId, int numThreads, 
+                             size_t alloc, size_t *partSizes, 
+                             SimpleQueue<ActionBatch> *inputQueue, 
+                             SimpleQueue<ActionBatch> *outputQueue) {
+  uint32_t subCount;
+  SimpleQueue<ActionBatch> **pubQueues, **subQueues;
+  if (cpuNumber % 10 == 0) {
+    if (cpuNumber == 0) {
+      
+      // Figure out how many subordinates this thread is in charge of.
+      uint32_t localSubordinates = numThreads > 10? 9 : numThreads-1;
+      uint32_t numRemoteSockets = 
+        numThreads/10 + (numThreads % 10 == 0? 0 : 1) - 1;
+      subCount = (uint32_t)(localSubordinates + numRemoteSockets);
+      
+      CreateQueues(cpuNumber, subCount, &pubQueues, &subQueues);
+    }
+    else {
+      int myDiv = cpuNumber/10;
+      int totalDiv = numThreads/10;
+      if (myDiv < totalDiv) {
+        subCount = 9;
+      }
+      else {
+        subCount = (uint32_t)(numThreads - cpuNumber);
+      }      
+
+      CreateQueues(cpuNumber, subCount, &pubQueues, &subQueues);      
+    }
+  }
+  else {
+    subCount = 0;
+    pubQueues = NULL;
+    subQueues = NULL;
+  }
+
+  MVSchedulerConfig cfg = {
+    cpuNumber,
+    threadId,
+    alloc,
+    1,
+    partSizes,
+    subCount,
+    inputQueue,
+    outputQueue,
+    pubQueues,
+    subQueues,    
+  };
+  return cfg;
+}
+
+
+/*
 MVSchedulerConfig SetupLeaderSched(int cpuNumber, int numSchedThreads, 
                                    size_t alloc, size_t *partSizes) {
   // Set up queues for coordinating with other threads in the system.
@@ -113,35 +207,65 @@ MVSchedulerConfig SetupSubordinateSched(int cpuNumber,
     assert(config.subordInputQueue != NULL && config.subordOutputQueue != NULL);
     return config;
 }
+*/
 
 MVScheduler** SetupSchedulers(int numProcs, 
                               SimpleQueue<ActionBatch> **inputQueueRef_OUT, 
                               SimpleQueue<ActionBatch> **outputQueueRef_OUT, 
                               size_t allocatorSize, 
-                              size_t tableSize) {
-  
+                              size_t tableSize) {  
+
   size_t partitionChunk = tableSize/numProcs;
   size_t *tblPartitionSizes = (size_t*)malloc(sizeof(size_t));
   tblPartitionSizes[0] = partitionChunk;
 
-    MVScheduler **schedArray = 
-      (MVScheduler**)alloc_mem(sizeof(MVScheduler*)*numProcs, 79);
-    MVSchedulerConfig leaderConfig = 
-      SetupLeaderSched(OFFSET_CORE(0),  // cpuNumber
-                       numProcs, allocatorSize, tblPartitionSizes);
+  // Set up queues for leader thread
+  char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 71);            
+  SimpleQueue<ActionBatch> *leaderInputQueue = 
+    new SimpleQueue<ActionBatch>(inputArray, INPUT_SIZE);
+  char *outputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 71);
+  SimpleQueue<ActionBatch> *leaderOutputQueue = 
+    new SimpleQueue<ActionBatch>(outputArray, INPUT_SIZE);
+  
+  MVScheduler **schedArray = 
+    (MVScheduler**)alloc_mem(sizeof(MVScheduler*)*numProcs, 79);
+  
+  MVSchedulerConfig globalLeaderConfig = SetupSched(0, 0, numProcs, 
+                                                    allocatorSize,
+                                                    tblPartitionSizes, 
+                                                    leaderInputQueue, 
+                                                    leaderOutputQueue);
 
-    schedArray[0] = new (leaderConfig.cpuNumber) MVScheduler(leaderConfig);
-
-    for (int i = 1; i < numProcs; ++i) {
-      MVSchedulerConfig subordConfig = 
-        SetupSubordinateSched(OFFSET_CORE(i), i, leaderConfig, allocatorSize, 
-                              tblPartitionSizes);
-      schedArray[i] = new (leaderConfig.cpuNumber) MVScheduler(subordConfig);
+  schedArray[0] = 
+    new (globalLeaderConfig.cpuNumber) MVScheduler(globalLeaderConfig);
+  MVSchedulerConfig localLeaderConfig = globalLeaderConfig;
+  
+  for (int i = 1; i < numProcs; ++i) {
+    if (i % 10 == 0) {
+      int leaderNum = i/10;
+      auto inputQueue = globalLeaderConfig.pubQueues[9+leaderNum-1];
+      auto outputQueue = globalLeaderConfig.subQueues[9+leaderNum-1];
+      MVSchedulerConfig config = SetupSched(i, i, numProcs, allocatorSize, 
+                                            tblPartitionSizes, 
+                                            inputQueue, 
+                                            outputQueue);
+      schedArray[i] = new (config.cpuNumber) MVScheduler(config);
+      localLeaderConfig = config;
     }
-    
-    *inputQueueRef_OUT = leaderConfig.leaderInputQueue;
-    *outputQueueRef_OUT = leaderConfig.leaderOutputQueue;
-    return schedArray;
+    else {
+      auto inputQueue = localLeaderConfig.pubQueues[i-1];
+      auto outputQueue = localLeaderConfig.subQueues[i-1];
+      MVSchedulerConfig subConfig = SetupSched(i, i, numProcs, allocatorSize, 
+                                               tblPartitionSizes, 
+                                               inputQueue, 
+                                               outputQueue);
+      schedArray[i] = new (subConfig.cpuNumber) MVScheduler(subConfig);
+    }
+  }
+  
+  *inputQueueRef_OUT = leaderInputQueue;
+  *outputQueueRef_OUT = leaderOutputQueue;
+  return schedArray;
 }
 
 /*
