@@ -107,6 +107,7 @@ pin_thread(int cpu) {
 void*
 lock_malloc(size_t size) {
   void *buf = malloc(size);
+  /*
   if (mlock(buf, size) != 0) {
     free(buf);
     std::cout << "mlock couldn't pin memory to RAM!\n";
@@ -115,6 +116,8 @@ lock_malloc(size_t size) {
   else {
     return buf;
   }
+  */
+  return buf;
 }
 
 void*
@@ -157,5 +160,17 @@ void* alloc_interleaved(size_t size, uint32_t threads) {
     }
   }  
   numa_bitmask_free(mask);
+  return buf;
+}
+
+void* alloc_interleaved_all(size_t size) {
+  void *buf = numa_alloc_interleaved(size);
+  if (buf != NULL) {
+    if (mlock(buf, size) != 0) {
+      numa_free(buf, size);
+      std::cout << "mlock couldn't pin memory to RAM!\n";
+      buf = NULL;
+    }
+  }  
   return buf;
 }

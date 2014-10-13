@@ -37,6 +37,11 @@ timespec diff_time(timespec end, timespec start) {
 void CreateQueues(int cpuNumber, uint32_t subCount, 
                   SimpleQueue<ActionBatch>*** OUT_PUB_QUEUES,
                   SimpleQueue<ActionBatch>*** OUT_SUB_QUEUES) {
+  if (subCount == 0) {
+    *OUT_PUB_QUEUES = NULL;
+    *OUT_SUB_QUEUES = NULL;
+    return;
+  }
   // Allocate space to keep queues for subordinates
   void *pubTemp = alloc_mem(sizeof(SimpleQueue<ActionBatch>*)*subCount, 
                             cpuNumber);
@@ -80,6 +85,7 @@ MVSchedulerConfig SetupSched(int cpuNumber, int threadId, int numThreads,
                              size_t alloc, size_t *partSizes, 
                              SimpleQueue<ActionBatch> *inputQueue, 
                              SimpleQueue<ActionBatch> *outputQueue) {
+  assert(inputQueue != NULL && outputQueue != NULL);
   uint32_t subCount;
   SimpleQueue<ActionBatch> **pubQueues, **subQueues;
   if (cpuNumber % 10 == 0) {
@@ -100,7 +106,7 @@ MVSchedulerConfig SetupSched(int cpuNumber, int threadId, int numThreads,
         subCount = 9;
       }
       else {
-        subCount = (uint32_t)(numThreads - cpuNumber);
+        subCount = (uint32_t)(numThreads - cpuNumber - 1);
       }      
 
       CreateQueues(cpuNumber, subCount, &pubQueues, &subQueues);      
@@ -253,8 +259,9 @@ MVScheduler** SetupSchedulers(int numProcs,
       localLeaderConfig = config;
     }
     else {
-      auto inputQueue = localLeaderConfig.pubQueues[i-1];
-      auto outputQueue = localLeaderConfig.subQueues[i-1];
+      int index = i%10;      
+      auto inputQueue = localLeaderConfig.pubQueues[index-1];
+      auto outputQueue = localLeaderConfig.subQueues[index-1];
       MVSchedulerConfig subConfig = SetupSched(i, i, numProcs, allocatorSize, 
                                                tblPartitionSizes, 
                                                inputQueue, 
@@ -575,7 +582,7 @@ void LockingExperiment(LockingConfig config) {
     outputs[i]->DequeueBlocking();
   }
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
-  //  ProfilerStop();
+  //    ProfilerStop();
   elapsed_time = diff_time(end_time, start_time);
 
   double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;

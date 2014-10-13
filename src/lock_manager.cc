@@ -50,8 +50,8 @@ void LockBucket::ReleaseLock() {
 
 LockManagerTable::LockManagerTable(uint64_t numEntries, uint32_t threads) {
   this->numEntries = numEntries;
-  //  void *buckets = alloc_interleaved(sizeof(LockBucket)*numEntries, threads);
   void *buckets = lock_malloc(sizeof(LockBucket)*numEntries);
+
   assert(buckets != NULL);
   memset(buckets, 0x00, sizeof(LockBucket)*numEntries);
   this->entries = (LockBucket*)buckets;
@@ -76,9 +76,9 @@ LockManager::LockManager(const unordered_map<uint32_t, uint64_t>& tableInfo,
                          uint32_t numTables, uint32_t threads) {
   this->numTables = numTables;
   this->tables = 
-    (LockManagerTable**)alloc_interleaved(sizeof(LockManagerTable*)*numTables, threads);
+    //    (LockManagerTable**)alloc_interleaved_all(sizeof(LockManagerTable*)*numTables);
   //  this->tables = 
-  //    (LockManagerTable**)lock_malloc(sizeof(LockManagerTable*)*numTables);
+    (LockManagerTable**)lock_malloc(sizeof(LockManagerTable*)*numTables);
   assert(this->tables != NULL);
   memset(this->tables, 0x00, sizeof(LockManagerTable*)*numTables);
   for (auto iter = tableInfo.begin(); iter != tableInfo.end(); ++iter) {

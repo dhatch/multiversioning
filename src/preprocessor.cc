@@ -75,8 +75,7 @@ void MVScheduler::Init() {
   std::cout << "Called init on core: " << m_cpu_number << "\n";
 
   this->partitions = 
-    (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
-                                  config.cpuNumber);
+    (MVTablePartition**)lock_malloc(sizeof(MVTablePartition*)*config.numTables);
   assert(this->partitions != NULL);
 
   // Initialize the allocator and the partitions.
