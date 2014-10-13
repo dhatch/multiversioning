@@ -10,7 +10,19 @@ LockBucket::LockBucket() {
 
 void LockBucket::AppendEntry(LockBucketEntry *entry, uint32_t threadId) {
   entry->next = NULL;
+  barrier();
+  LockBucketEntry *oldTail = (LockBucketEntry*)xchgq((volatile uint64_t*)&tail, 
+                                                     (uint64_t)entry);
+  barrier();
+  if (oldTail == NULL) {
+    head = entry;
+  }
+  else {
+    oldTail->next = entry;
+  }
+
   //  LockBucketEntry *oldTail;
+  /*
   reentrant_lock(&this->lockWord, threadId);
   if (tail != NULL) {
       tail->next = entry;
@@ -19,6 +31,7 @@ void LockBucket::AppendEntry(LockBucketEntry *entry, uint32_t threadId) {
       head = entry;
   }
   tail = entry;
+  */
   /*
   oldTail = tail;
   tail = entry;
@@ -32,13 +45,13 @@ void LockBucket::AppendEntry(LockBucketEntry *entry, uint32_t threadId) {
 }
 
 void LockBucket::ReleaseLock() {
-  //    unlock(&this->lockWord);
     reentrant_unlock(&this->lockWord);
 }
 
-LockManagerTable::LockManagerTable(uint64_t numEntries) {
+LockManagerTable::LockManagerTable(uint64_t numEntries, uint32_t threads) {
   this->numEntries = numEntries;
-  void *buckets = malloc(sizeof(LockBucket)*numEntries);
+  //  void *buckets = alloc_interleaved(sizeof(LockBucket)*numEntries, threads);
+  void *buckets = lock_malloc(sizeof(LockBucket)*numEntries);
   assert(buckets != NULL);
   memset(buckets, 0x00, sizeof(LockBucket)*numEntries);
   this->entries = (LockBucket*)buckets;
@@ -46,24 +59,32 @@ LockManagerTable::LockManagerTable(uint64_t numEntries) {
 
 inline void LockManagerTable::AcquireLock(LockingCompositeKey *key, 
                                           uint32_t threadId) {
+  assert(this->numEntries == 1000000);
   uint64_t bucketNumber = LockingCompositeKey::Hash(key) % this->numEntries;
   this->entries[bucketNumber].AppendEntry(&key->bucketEntry,
                                           threadId);
 }
 
 inline void LockManagerTable::CompleteLockPhase(LockingCompositeKey *key) {
+  assert(this->numEntries == 1000000);
   uint64_t bucketNumber = 
       LockingCompositeKey::Hash(key) % this->numEntries;
     this->entries[bucketNumber].ReleaseLock();
 }
 
 LockManager::LockManager(const unordered_map<uint32_t, uint64_t>& tableInfo, 
-                         uint32_t numTables) {
+                         uint32_t numTables, uint32_t threads) {
   this->numTables = numTables;
+  this->tables = 
+    (LockManagerTable**)alloc_interleaved(sizeof(LockManagerTable*)*numTables, threads);
+  //  this->tables = 
+  //    (LockManagerTable**)lock_malloc(sizeof(LockManagerTable*)*numTables);
+  assert(this->tables != NULL);
+  memset(this->tables, 0x00, sizeof(LockManagerTable*)*numTables);
   for (auto iter = tableInfo.begin(); iter != tableInfo.end(); ++iter) {
     uint32_t tableId = iter->first;
     uint64_t tableSize = iter->second;
-    LockManagerTable *tbl = new LockManagerTable(tableSize);    
+    LockManagerTable *tbl = new LockManagerTable(tableSize, threads);    
     this->tables[tableId] = tbl;
   }
 }
@@ -77,11 +98,12 @@ void LockManager::AcquireLocks(LockingAction *action, uint32_t threadId) {
   }
   
   barrier();
-
+  /*
   for (int i = 0; i < writesetSize; ++i) {
     uint32_t tbl = action->writeset[i].tableId;
     tables[tbl]->CompleteLockPhase(&action->writeset[i]);
   }
+  */
 }
 
 BucketEntryAllocator::BucketEntryAllocator(uint32_t numEntries, int cpu) {

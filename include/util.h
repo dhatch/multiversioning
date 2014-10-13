@@ -42,7 +42,7 @@ xchgq(volatile uint64_t *addr, uint64_t new_val)
 
 static inline void
 reentrant_lock(volatile uint64_t *word, uint32_t threadId) {
-  uint64_t mask = 0xFFFFFFFF00000000;
+  static uint64_t mask = 0xFFFFFFFF00000000;
   barrier();
   if (((*word & mask) >> 32) == threadId) {
     barrier();
@@ -60,7 +60,7 @@ reentrant_lock(volatile uint64_t *word, uint32_t threadId) {
 
 static inline void
 reentrant_unlock(volatile uint64_t *word) {
-  uint64_t mask = 0x00000000FFFFFFFF;
+  static uint64_t mask = 0x00000000FFFFFFFF;
   *word -= 1;
   if ((*word & mask) == 0) {
     xchgq(word, 0);

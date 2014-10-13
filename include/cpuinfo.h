@@ -34,4 +34,10 @@ alloc_mem(size_t size, int cpu);
 void*
 alloc_huge(size_t size);
 
+void*
+lock_malloc(size_t size);
+
+void*
+alloc_interleaved(size_t size, uint32_t threads);
+
 #endif

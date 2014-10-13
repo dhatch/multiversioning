@@ -303,13 +303,13 @@ void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs,
   timespec start_time, end_time;
   hasher->Run();
   outputQueue->DequeueBlocking();
-  ProfilerStart("/home/jmf/multiversioning/db.prof");
+  //  ProfilerStart("/home/jmf/multiversioning/db.prof");
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
   for (int i = 0; i < numEpochs; ++i) {
     outputQueue->DequeueBlocking();
   }
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
-  ProfilerStop();
+  //  ProfilerStop();
   timespec elapsed_time = diff_time(end_time, start_time);
   double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
   std::cout << elapsedMilli << '\n';
@@ -424,7 +424,7 @@ void LockingExperiment(LockingConfig config) {
   
   unordered_map<uint32_t, uint64_t> tblInfo;
   tblInfo[0] = config.numRecords;
-  LockManager *mgr = new LockManager(tblInfo, 1);
+  LockManager *mgr = new LockManager(tblInfo, 1, config.numThreads);
   LockThread **threads = SetupLockThreads(inputs, outputs, 256, mgr, 
                                           config.numThreads);
   LockActionBatch *batches = SetupLockingInput(config.txnSize, 
@@ -439,17 +439,19 @@ void LockingExperiment(LockingConfig config) {
   }
   
   barrier();
-  
+
   timespec start_time, end_time, elapsed_time;
   for (uint32_t i = 0; i < config.numThreads; ++i) {
     inputs[i]->EnqueueBlocking(batches[i]);
 
   }
+  //  ProfilerStart("/home/jmf/multiversioning/locking.prof");
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);  
   for (uint32_t i = 0; i < config.numThreads; ++i) {
     outputs[i]->DequeueBlocking();
   }
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
+  //  ProfilerStop();
   elapsed_time = diff_time(end_time, start_time);
 
   double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;

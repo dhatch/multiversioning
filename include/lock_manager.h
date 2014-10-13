@@ -9,8 +9,8 @@ using namespace std;
 
 class LockBucket {  
  public:
-    LockBucketEntry *tail;
-   LockBucketEntry *head;
+    volatile LockBucketEntry *tail;
+   volatile LockBucketEntry *head;
   volatile uint64_t lockWord;
   LockBucket();
   
@@ -24,7 +24,7 @@ class LockManagerTable {
   uint64_t numEntries;
 
  public:
-  LockManagerTable(uint64_t numEntries);
+  LockManagerTable(uint64_t numEntries, uint32_t threads);
   
   void AcquireLock(LockingCompositeKey *key, uint32_t threadId);
   
@@ -51,11 +51,11 @@ class LockManager {
   friend class LockManagerTest;
 
  private:
-  unordered_map<uint32_t, LockManagerTable*> tables;
+  LockManagerTable **tables;
   uint32_t numTables;
   
  public:
-  LockManager(const unordered_map<uint32_t, uint64_t>& tableInfo, uint32_t numTables);
+  LockManager(const unordered_map<uint32_t, uint64_t>& tableInfo, uint32_t numTables, uint32_t threads);
 
   void AcquireLocks(LockingAction *action, uint32_t threadId);
 };
