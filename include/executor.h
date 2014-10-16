@@ -80,6 +80,7 @@ class RecordAllocator {
  public:
   RecordAllocator(size_t recordSize, uint32_t numRecords, int cpu);  
   bool GetRecord(Record **OUT_REC);
+  void FreeSingle(Record *rec);
   void Recycle(RecordList recList);
 };
 
@@ -92,6 +93,8 @@ struct ExecutorConfig {
   SimpleQueue<ActionBatch> *inputQueue;
   SimpleQueue<ActionBatch> *outputQueue;
   uint32_t numTables;
+  uint32_t *recordSizes;
+  uint32_t *allocatorSizes;
   uint32_t numQueuesPerTable;
   SimpleQueue<RecordList> ***recycleQueues;
 };
@@ -107,6 +110,9 @@ class Executor : public Runnable {
   RecordAllocator **allocators;
 
  protected:
+  void* operator new(std::size_t sz, int cpu);
+
+  //  Executor(ExecutorConfig config);
   virtual void StartWorking();
   virtual void Init();
   void ReturnVersion(MVRecord *record);
@@ -114,8 +120,6 @@ class Executor : public Runnable {
   void ProcessBatch(const ActionBatch &batch);
   bool ProcessSingle(Action *action);
   bool ProcessTxn(Action *action);
-
-
 
  public:
   Executor(ExecutorConfig config);  

@@ -65,7 +65,18 @@ inline bool PendingActionList::IsEmpty() {
   return head == NULL;
 }
 
+Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) {
+  
+}
+
 void Executor::Init() {
+  this->allocators = 
+    (RecordAllocator**)malloc(sizeof(RecordAllocator*)*config.numTables);
+  for (uint32_t i = 0; i < config.numTables; ++i) {
+    uint32_t recSize = config.recordSizes[i];
+    uint32_t allocSize = config.allocatorSizes[i];
+    this->allocators[i] = new RecordAllocator(recSize, allocSize, config.cpu);
+  }
 }
 
 void Executor::StartWorking() {
@@ -310,6 +321,11 @@ bool RecordAllocator::GetRecord(Record **OUT_REC) {
     *OUT_REC = NULL;
     return false;
   }
+}
+
+void RecordAllocator::FreeSingle(Record *rec) {
+  rec->next = freeList;
+  freeList = rec;
 }
 
 void RecordAllocator::Recycle(RecordList recList) {
