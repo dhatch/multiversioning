@@ -8,26 +8,44 @@
 #include <pthread.h>
 #include <time.h>
 #include <cstring>
-//#include <preprocessor.h>
 #include <city.h>
+#include <mv_record.h>
 
 class Action;
 
+enum ActionState {
+  STICKY,
+  PROCESSING,
+  SUBSTANTIATED,
+};
+
+struct Record {
+  Record *next;
+  void *value;
+};
+
+struct RecordList {
+  Record *head;
+  Record **tail;
+};
 
 class CompositeKey {
  public:
   uint32_t tableId;
   uint64_t key;
   uint32_t threadId;
-
+  MVRecord *value;
+  
   CompositeKey(uint32_t table, uint64_t key) {
     this->tableId = table;
     this->key = key;
+    this->value = NULL;
   }
   
   CompositeKey() {
     this->tableId = 0;
     this->key = 0;
+    this->value = NULL;
   }
 
   bool operator==(const CompositeKey &other) const {
@@ -66,7 +84,6 @@ class CompositeKey {
 
 } __attribute__((__packed__));
 
-
 struct Range {
     int start;
     int end;
@@ -84,9 +101,14 @@ class VersionBuffer;
 class Action {
 
  protected:
-	void* Read(CompositeKey key);
-	void* Write(CompositeKey key);
-
+  /*
+  void* Read(uint32_t index) {
+    return readset[index].value;
+  }
+  void Write(uint32_t index, void *value) {
+    writeset[index].value = value;
+  }
+  */
  public:  
     uint64_t version;
     uint64_t combinedHash;
@@ -104,22 +126,18 @@ class Action {
   //  volatile uint64_t system_end_time;
   std::vector<CompositeKey> readset;
   std::vector<CompositeKey> writeset;
-  std::vector<Range> readRange;
-  std::vector<Range> writeRange;
 
   //  char readVersions[64*10];
   //  VersionBuffer readVersions[10];
 
   //  std::vector<int> real_writes;
-  //  volatile uint64_t __attribute__((aligned(CACHE_LINE))) sched_start_time;    
-  //  volatile uint64_t __attribute__((aligned(CACHE_LINE))) sched_end_time;    
+  //  volatile uint64_t __attribute__((aligned(CACHE_LINE))) sched_start_time;
+  //  volatile uint64_t __attribute__((aligned(CACHE_LINE))) sched_end_time;  
   //  volatile uint64_t __attribute__((aligned(CACHE_LINE))) lock_word;
 
   volatile uint64_t __attribute__((aligned(CACHE_LINE))) state;
-  
-  virtual bool NowPhase() { return true; }
-  virtual void LaterPhase() { }
-  virtual bool IsLinked(Action **cont) { *cont = NULL; return false; }
+  virtual bool Run() { }
+  //  virtual bool IsLinked(Action **cont) { *cont = NULL; return false; }
 };
 
 

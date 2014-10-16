@@ -13,11 +13,12 @@ void MVTable::AddPartition(uint32_t partitionId, MVTablePartition *partition) {
   this->tablePartitions[partitionId] = partition;
 }
 
-bool MVTable::GetVersion(uint32_t partition, const CompositeKey &pkey, 
-                         uint64_t version, Record *OUT_REC) {
+MVRecord* MVTable::GetMVRecord(uint32_t partition, const CompositeKey &pkey, 
+                               uint64_t version) {
   assert(partition < numPartitions);
-  return tablePartitions[partition]->GetVersion(pkey, version, OUT_REC);
+  return tablePartitions[partition]->GetMVRecord(pkey, version);
 }
+
 
 bool MVTable::GetLatestVersion(uint32_t partition, const CompositeKey &pkey, 
                                uint64_t *version) {
@@ -46,8 +47,35 @@ MVTablePartition::MVTablePartition(uint64_t size,
   std::cout << "asldkjfasdf\n";
 }
 
+MVRecord* MVTablePartition::GetMVRecord(const CompositeKey &pkey, 
+                                        uint64_t version) {
+  // Get the slot number the record hashes to, and try to find if a previous
+  // version of the record already exists.
+  uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
+  MVRecord *cur = tableSlots[slotNumber];
+
+  while (cur != NULL) {
+                
+    // We found the record. Link to the old record.
+    if (cur->key == pkey.key) {
+      while (cur != NULL && cur->deleteTimestamp > version) {
+        // Found a valid version
+        if (cur->createTimestamp <= version && cur->deleteTimestamp > version) {
+          return cur;
+        }
+        cur = cur->recordLink;
+      }
+      break;
+    }
+    cur = cur->link;
+  }
+  return NULL;
+}
+
+/*
 bool MVTablePartition::GetVersion(const CompositeKey &pkey, uint64_t version, 
                                   Record *OUT_rec) {
+  
   // Get the slot number the record hashes to, and try to find if a previous
   // version of the record already exists.
   uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
@@ -81,6 +109,7 @@ bool MVTablePartition::GetVersion(const CompositeKey &pkey, uint64_t version,
   }
   return false;
 }
+*/
 
 /*
 void MVTablePartition::WritePartition() {
@@ -128,7 +157,7 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
   assert(success);        // Can't deal with allocation failures yet.
   assert(toAdd->link == NULL && toAdd->recordLink == NULL);
   toAdd->createTimestamp = version;
-  toAdd->deleteTimestamp = version;// MVRecord::INFINITY;
+  toAdd->deleteTimestamp = MVRecord::INFINITY;
   toAdd->writer = action;
   toAdd->key = pkey.key;  
 
@@ -144,7 +173,7 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
     if (cur->key == pkey.key) {
       toAdd->link = cur->link;
       toAdd->recordLink = cur;
-      //      cur->deleteTimestamp = version;
+      cur->deleteTimestamp = version;
       break;
     }
 

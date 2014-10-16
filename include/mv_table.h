@@ -4,13 +4,6 @@
 #include <mv_record.h>
 #include <action.h>
 
-struct Record {
-  bool isMaterialized;
-  void *rec;
-};
-
-
-
 /*
  * Single-writer hash table. Each scheduler thread contains a unique 
  * MVTablePartition for every table in the system.
@@ -49,7 +42,8 @@ class MVTablePartition {
   // return value: true if the write is successful, false otherwise. 
   bool WriteNewVersion(CompositeKey pkey, Action *action, uint64_t version);
 
-  bool GetVersion(const CompositeKey &pkey, uint64_t version, Record *OUT_rec);
+
+  MVRecord* GetMVRecord(const CompositeKey &pkey, uint64_t version);
         
   //  void WritePartition();
         
@@ -112,10 +106,9 @@ class MVTable {
   MVTablePartition* GetPartition(uint32_t partition) {
     return tablePartitions[partition];
   }
-
-  bool GetVersion(uint32_t partition, const CompositeKey &pkey, 
-                  uint64_t version, Record *OUT_REC);
-
+  
+  MVRecord* GetMVRecord(uint32_t partition, const CompositeKey &pkey, 
+                        uint64_t version);
 };
 
 #endif          /* MV_TABLE_H_ */

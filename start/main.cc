@@ -16,7 +16,7 @@
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 
-Database DB;
+Database DB(1);
 
 int NumProcs;
 uint32_t numLockingRecords;
@@ -125,10 +125,12 @@ MVSchedulerConfig SetupSched(int cpuNumber, int threadId, int numThreads,
     1,
     partSizes,
     subCount,
+    0,
     inputQueue,
     outputQueue,
     pubQueues,
-    subQueues,    
+    subQueues,
+    NULL,
   };
   return cfg;
 }

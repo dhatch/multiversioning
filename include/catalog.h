@@ -3,6 +3,7 @@
 
 #include <mv_table.h>
 #include <unordered_map>
+#include <vector>
 
 using namespace std;
 
@@ -16,8 +17,9 @@ class Catalog
  private:
         
   // Store table mappings in this hash table.
-  unordered_map<uint32_t, MVTable*> tableMappings;
-
+  MVTable **tableMappings;
+  uint32_t numTables;
+  
   // 
   unordered_map<uint32_t, uint64_t> tablePartitionSizes;
   
@@ -29,7 +31,7 @@ class Catalog
  public:
         
   // Constructor.
-  Catalog();
+  Catalog(uint32_t numTables);
 
   void PutPartition(uint32_t tableId, uint32_t partitionId, 
                     MVTablePartition *partition);
@@ -42,7 +44,7 @@ class Catalog
   // param in: A reference to the table we're adding to the catalog.
   //
   // return value: true if the put succeeds, otherwise false.
-  bool PutTable(uint32_t tableId, MVTable *in);
+  //  bool PutTable(uint32_t tableId, MVTable *in);
 
   // Get a reference to a table.
   //
@@ -51,7 +53,7 @@ class Catalog
   //
   // return value: true if we're able to find a table mapped to the given 
   //                               tableId.
-  bool GetTable(uint32_t tableId, MVTable **out);     
+  MVTable* GetTable(uint32_t tableId);     
 };
 
 #endif          /* CATALOG_H_ */

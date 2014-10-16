@@ -10,19 +10,20 @@
 class Database {
 
  private:
-  Catalog catalog;
+  Catalog *catalog;
 
  public:
-  Database();     
+  Database(uint32_t numTables);     
 
   void PutPartition(uint32_t tableId, uint32_t partitionNumber, 
                     MVTablePartition *partition);
         
   // Wrapper around Catalog's PutTable method (include/catalog.h).
-  bool PutTable(uint32_t tableId, MVTable *in);
+  //bool PutTable(uint32_t tableId, MVTable *in);
         
   // Wrapper around Catalog's GetTable method (include/catalog.h).
-  bool GetTable(uint32_t tableId, MVTable **out); 
+  MVTable* GetTable(uint32_t tableId);
+  //  bool GetTable(uint32_t tableId, MVTable **out); 
 };
 
 extern Database DB;

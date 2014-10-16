@@ -60,7 +60,7 @@ void MVRecordAllocator::ReturnMVRecords(MVRecordList recordList) {
         
   // XXX Should we validate that MVRecords are properly linked?
   if (recordList.tail != NULL) {
-    (recordList.tail)->link = freeList;
+    *(recordList.tail) = freeList;
     freeList = recordList.head;
   }
   else {

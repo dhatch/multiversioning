@@ -1,17 +1,15 @@
 #include <database.h>
 
-Database::Database() {
+Database::Database(uint32_t numTables) {
+  this->catalog = new Catalog(numTables);
 }
 
 void Database::PutPartition(uint32_t tableId, uint32_t partitionNumber, 
                             MVTablePartition *partition) {
-  catalog.PutPartition(tableId, partitionNumber, partition);
+  catalog->PutPartition(tableId, partitionNumber, partition);
 }
 
-bool Database::PutTable(uint32_t tableId, MVTable *in) {
-  return catalog.PutTable(tableId, in);
+MVTable* Database::GetTable(uint32_t tableId) {
+  return catalog->GetTable(tableId);
 }
 
-bool Database::GetTable(uint32_t tableId, MVTable **out) {
-  return catalog.GetTable(tableId, out);
-}

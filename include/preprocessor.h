@@ -75,12 +75,14 @@ struct MVSchedulerConfig {
   size_t *tblPartitionSizes;    // Size of each table's partition
   
   uint32_t numSubords;
+  uint32_t numRecycleQueues;
 
   SimpleQueue<ActionBatch> *inputQueue;
   SimpleQueue<ActionBatch> *outputQueue;
   SimpleQueue<ActionBatch> **pubQueues;
   SimpleQueue<ActionBatch> **subQueues;
-  
+  SimpleQueue<MVRecordList> **recycleQueues;
+
   /*
   // Coordination queues required by the leader thread.
   SimpleQueue<ActionBatch> *leaderInputQueue;
@@ -105,12 +107,12 @@ class MVScheduler : public Runnable {
         static inline uint32_t GetCCThread(CompositeKey key);
 
     MVSchedulerConfig config;
-    //  VersionBufferAllocator *alloc;
+    MVRecordAllocator *alloc;
 
     MVTablePartition **partitions;
 
-        uint32_t epoch;
-        uint32_t txnCounter;
+    uint32_t epoch;
+    uint32_t txnCounter;
     uint64_t txnMask;
 
     uint32_t threadId;

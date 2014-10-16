@@ -7,20 +7,17 @@
 #include <cpuinfo.h>
 
 class Action;
+class Record;
 
 typedef struct _MVRecord_ MVRecord;
 
 
 struct _MVRecord_ {
   
-  static uint64_t INFINITY;
-        
-  // The unique creation timestamp
+  static uint64_t INFINITY;        
+
   uint64_t createTimestamp;
-        
-  // The time at which this record became invalid.
   uint64_t deleteTimestamp;
-        
   uint64_t key;
         
   // The transaction responsible for creating a value associated with the 
@@ -28,12 +25,13 @@ struct _MVRecord_ {
   Action *writer;
         
   // The actual value of the record.
-  void *value;
-        
-  // 
-  MVRecord *link;
-        
+  Record *value;        
+
+  MVRecord *link;        
   MVRecord *recordLink;
+  
+  MVRecord *allocLink;
+  uint32_t writingThread;
 } __attribute__((__packed__));
 
 /*
@@ -42,7 +40,7 @@ struct _MVRecord_ {
  */
 struct MVRecordList {
   MVRecord *head;
-  MVRecord *tail;
+  MVRecord **tail;
 };
 
 /*

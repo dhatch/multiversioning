@@ -79,7 +79,7 @@ void MVScheduler::Init() {
   assert(this->partitions != NULL);
 
   // Initialize the allocator and the partitions.
-  auto alloc = new (m_cpu_number) MVRecordAllocator(config.allocatorSize, 
+  this->alloc = new (m_cpu_number) MVRecordAllocator(config.allocatorSize, 
                                                     m_cpu_number);
   for (uint32_t i = 0; i < this->config.numTables; ++i) {
 
@@ -138,6 +138,14 @@ void MVScheduler::StartWorking() {
     
     // Signal leader
     config.outputQueue->EnqueueBlocking(curBatch);
+    
+    // Check for recycled MVRecords
+    for (uint32_t i = 0; i < config.numRecycleQueues; ++i) {
+      MVRecordList recycled;
+      while (config.recycleQueues[i]->Dequeue(&recycled)) {
+        this->alloc->ReturnMVRecords(recycled);
+      }
+    }
     epoch += 1;
   }
 }
