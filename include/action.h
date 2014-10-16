@@ -21,7 +21,7 @@ enum ActionState {
 
 struct Record {
   Record *next;
-  void *value;
+  char value[0];
 };
 
 struct RecordList {

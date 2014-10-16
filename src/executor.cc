@@ -104,6 +104,14 @@ void Executor::StartWorking() {
     
     // Check if there's any garbage we can recycle. Insert into our record 
     // allocators.
+    for (uint32_t i = 0; i < config.numTables; ++i) {
+      for (uint32_t j = 0; j < config.numQueuesPerTable; ++j) {
+        RecordList recycled;
+        while (config.recycleQueues[i][j]->Dequeue(&recycled)) {
+          allocators[i]->Recycle(recycled);
+        }
+      }
+    }
   }
 }
 
@@ -276,4 +284,35 @@ void GarbageBin::FinishEpoch(uint32_t epoch) {
     ReturnGarbage();
     snapshotEpoch = epoch;
   }
+}
+
+RecordAllocator::RecordAllocator(size_t recordSize, uint32_t numRecords, 
+                                 int cpu) {
+  Record *data = 
+    (Record*)alloc_mem(numRecords*(sizeof(Record)+recordSize), cpu);
+  memset(data, 0x00, numRecords*(sizeof(Record)+recordSize));
+  for (uint32_t i = 0; i < numRecords; ++i) {
+    data[i].next = &data[i+1];
+  }
+  data[numRecords-1].next = NULL;
+  freeList = data;
+}
+
+bool RecordAllocator::GetRecord(Record **OUT_REC) {
+  if (freeList != NULL) {
+    Record *temp = freeList;
+    freeList = freeList->next;
+    temp->next = NULL;
+    *OUT_REC = temp;    
+    return true;
+  }
+  else {
+    *OUT_REC = NULL;
+    return false;
+  }
+}
+
+void RecordAllocator::Recycle(RecordList recList) {
+  *(recList.tail) = freeList;
+  freeList = recList.head;
 }

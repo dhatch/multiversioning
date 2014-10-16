@@ -73,6 +73,16 @@ class PendingActionList {
   bool IsEmpty();
 };
 
+class RecordAllocator {
+ private:
+  Record *freeList;
+  
+ public:
+  RecordAllocator(size_t recordSize, uint32_t numRecords, int cpu);  
+  bool GetRecord(Record **OUT_REC);
+  void Recycle(RecordList recList);
+};
+
 struct ExecutorConfig {
   uint32_t threadId;
   uint32_t numExecutors;
@@ -81,6 +91,9 @@ struct ExecutorConfig {
   volatile uint32_t *lowWaterMarkPtr;
   SimpleQueue<ActionBatch> *inputQueue;
   SimpleQueue<ActionBatch> *outputQueue;
+  uint32_t numTables;
+  uint32_t numQueuesPerTable;
+  SimpleQueue<RecordList> ***recycleQueues;
 };
 
 class Executor : public Runnable {
@@ -91,6 +104,7 @@ class Executor : public Runnable {
   PendingActionList *pendingList;
   uint32_t epoch;
 
+  RecordAllocator **allocators;
 
  protected:
   virtual void StartWorking();
