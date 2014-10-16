@@ -238,35 +238,109 @@ MVSchedulerConfig SetupSubordinateSched(int cpuNumber,
     return config;
 }
 */
-/*
 
-ExecutorConfig SetupExec(int cpuNumber, int threadId, int numThreads, 
-                         volatile uint32_t *epoch, 
-                         volatile uint32_t *waterMarkPtr,
-                         uint32_t *recordSizes, uint32_t *allocSizes,
-                         SimpleQueue<ActionBatch> *inputQueue, 
-                         SimpleQueue<ActionBatch> *outputQueue) {
-  assert(inputQueue != NULL);
-  if (threadId == 0) {
-    
-  }
-  else {
+GarbageBinConfig SetupGCConfig(uint32_t numCCThreads, uint32_t numWorkerThreads,
+                               uint32_t numTables,
+                               int cpuNumber,
+                               volatile uint32_t *lowWaterMarkPtr) {
 
-  }
+  // First initialize garbage collection meta data. We need space to keep 
+  // references to remote threads's GC queues.
+  uint32_t concControlGC_sz = numCCThreads*sizeof(SimpleQueue<MVRecordList>*);
+  uint32_t workerGC_sz = 
+    numWorkerThreads*numTables*sizeof(SimpleQueue<RecordList>*);
+  uint32_t gc_sz = concControlGC_sz + workerGC_sz;
+  void *blob = alloc_mem(gc_sz, cpuNumber);
+  memset(blob, 0x0, gc_sz);
   
+  SimpleQueue<MVRecordList> **ccGCQueues = (SimpleQueue<MVRecordList>**)blob;
+  SimpleQueue<RecordList> **workerGCQueues = 
+    (SimpleQueue<RecordList>**)((char*)blob + concControlGC_sz);
+
+  GarbageBinConfig gcConfig = {
+    numCCThreads,
+    numWorkerThreads,
+    numTables,
+    lowWaterMarkPtr,
+    ccGCQueues,
+    workerGCQueues,
+  };
+  return gcConfig;
+}
+
+// Setup GC queues for a single worker. Other worker threads will insert 
+// recycled data into these queues.
+SimpleQueue<RecordList>* SetupGCQueues(uint32_t cpuNumber, 
+                                       uint32_t queuesPerTable, 
+                                       uint32_t numTables) {
+  // Allocate a blob of data to hold queue meta data (head & tail ptrs), and
+  // actual queue entries.
+  uint32_t metaDataSz = 
+    sizeof(SimpleQueue<RecordList>)*queuesPerTable*numTables;
+  uint32_t dataSz = CACHE_LINE*RECYCLE_QUEUE_SIZE*numTables*queuesPerTable;
+  uint32_t totalSz = metaDataSz + dataSz;
+  void *blob = alloc_mem(totalSz, cpuNumber);
+  memset(blob, 0x00, totalSz);
+
+  // The first part of the blob corresponds to queue space, the second is queue 
+  // entry space
+  SimpleQueue<RecordList> *queueData = (SimpleQueue<RecordList>*)blob;
+  char *data = (char*)blob + metaDataSz;
+
+  // Use for computing appropriate offsets
+  uint32_t qSz = sizeof(SimpleQueue<RecordList>);
+  uint32_t singleDataSz = CACHE_LINE*RECYCLE_QUEUE_SIZE;
+  
+  // Initialize queues
+  for (uint32_t i = 0; i < numTables; ++i) {
+    for (uint32_t j = 0; j < queuesPerTable; ++j) {
+      
+      uint32_t queueOffset = (i*queuesPerTable + j);
+      uint32_t dataOffset = queueOffset*singleDataSz;
+
+      SimpleQueue<RecordList> *temp = new (&queueData[queueOffset]) 
+        SimpleQueue<RecordList>(data + dataOffset, RECYCLE_QUEUE_SIZE);        
+    }
+  }
+  return queueData;
+}
+
+ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId, 
+                         uint32_t numWorkerThreads, 
+                         volatile uint32_t *epoch, 
+                         volatile uint32_t *lowWaterMarkPtr,
+                         uint32_t *recordSizes, 
+                         uint32_t *allocSizes,
+                         SimpleQueue<ActionBatch> *inputQueue, 
+                         SimpleQueue<ActionBatch> *outputQueue,
+                         uint32_t numCCThreads,
+                         uint32_t numTables, 
+                         uint32_t queuesPerTable) {  
+  assert(inputQueue != NULL);  
+  
+  // GC config
+  GarbageBinConfig gcConfig = SetupGCConfig(numCCThreads, numWorkerThreads, 
+                                            numTables, 
+                                            cpuNumber,
+                                            lowWaterMarkPtr);
+
+  // GC queues for this particular worker
+  SimpleQueue<RecordList> *gcQueues = SetupGCQueues(cpuNumber, queuesPerTable, 
+                                                    numTables);
   ExecutorConfig config = {
     threadId,
-    numThreads,
+    numWorkerThreads,
     cpuNumber,
     epoch,
-    waterMarkPtr,
+    lowWaterMarkPtr,
     inputQueue,
     outputQueue,
     1,
     recordSizes,
     allocSizes,
     1,
-    NULL;
+    gcQueues,
+    gcConfig,
   };
   return config;
 }
@@ -274,11 +348,10 @@ ExecutorConfig SetupExec(int cpuNumber, int threadId, int numThreads,
 Executor** SetupExecutors(uint32_t numProcs, 
                           SimpleQueue<ActionBatch> *inputQueue,
                           SimpleQueue<ActionBatch> *outputQueue) {
-  Executor **execArray = (Executor**)malloc(sizeof(Executor*)*numProcs);
-  memset(execArray, 0x00, sizeof(Executor*)*numProcs);
-  
+  //  Executor **execArray = (Executor**)malloc(sizeof(Executor*)*numProcs);
+  //  memset(execArray, 0x00, sizeof(Executor*)*numProcs);
+  return NULL;
 }
-*/
 
 MVScheduler** SetupSchedulers(int numProcs, 
                               SimpleQueue<ActionBatch> **inputQueueRef_OUT, 

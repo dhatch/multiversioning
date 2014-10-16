@@ -11,6 +11,19 @@ struct ActionListNode {
   ActionListNode *prev;
 };
 
+/*
+struct CCGarbageChannels {
+  uint32_t numChannels;
+  SimpleQueue<MVRecordList> *ccChannels[0];
+};
+
+struct WorkerGarbageChannels {
+  uint32_t numTables;
+  uint32_t numWorkers;
+  SimpleQueue<RecordList> *workerChannels[0];
+};
+*/
+
 struct GarbageBinConfig {
   uint32_t numCCThreads;
   uint32_t numWorkers;
@@ -18,7 +31,7 @@ struct GarbageBinConfig {
   volatile uint32_t *lowWaterMarkPtr;
   
   SimpleQueue<MVRecordList> **ccChannels;
-  SimpleQueue<RecordList> ***workerChannels;
+  SimpleQueue<RecordList> **workerChannels;
 };
 
 class GarbageBin {
@@ -96,7 +109,8 @@ struct ExecutorConfig {
   uint32_t *recordSizes;
   uint32_t *allocatorSizes;
   uint32_t numQueuesPerTable;
-  SimpleQueue<RecordList> ***recycleQueues;
+  SimpleQueue<RecordList> *recycleQueues;
+  GarbageBinConfig garbageConfig;
 };
 
 class Executor : public Runnable {
@@ -120,6 +134,8 @@ class Executor : public Runnable {
   void ProcessBatch(const ActionBatch &batch);
   bool ProcessSingle(Action *action);
   bool ProcessTxn(Action *action);
+
+  void RecycleData();
 
  public:
   Executor(ExecutorConfig config);  

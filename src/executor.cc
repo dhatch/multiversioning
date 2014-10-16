@@ -115,12 +115,21 @@ void Executor::StartWorking() {
     
     // Check if there's any garbage we can recycle. Insert into our record 
     // allocators.
-    for (uint32_t i = 0; i < config.numTables; ++i) {
-      for (uint32_t j = 0; j < config.numQueuesPerTable; ++j) {
-        RecordList recycled;
-        while (config.recycleQueues[i][j]->Dequeue(&recycled)) {
-          allocators[i]->Recycle(recycled);
-        }
+    RecycleData();
+  }
+}
+
+// Check if other worker threads have returned data to be recycled.
+void Executor::RecycleData() {
+  uint32_t numTables = config.numTables;
+  uint32_t numQueues = config.numQueuesPerTable;
+  for (uint32_t i = 0; i < numTables; ++i) {
+    for (uint32_t j = 0; j < numQueues; ++j) {
+      RecordList recycled;
+      
+      // Use non-blocking dequeue
+      while (config.recycleQueues[i*numQueues+j].Dequeue(&recycled)) {
+        allocators[i]->Recycle(recycled);
       }
     }
   }
@@ -270,11 +279,12 @@ void GarbageBin::ReturnGarbage() {
     curStickies[i].tail = &curStickies[i].head;
   }
   
+  uint32_t tblCount = config.numTables;
   for (uint32_t i = 0; i < config.numWorkers; ++i) {
-    for (uint32_t j = 0; j < config.numTables; ++j) {
+    for (uint32_t j = 0; j < tblCount; ++j) {
       
       // Same logic as "stickies"
-      if (!config.workerChannels[i][j]->
+      if (!config.workerChannels[i*tblCount+j]->
           Enqueue(snapshotRecords[i][j])) {
         *(curRecords[i][j].tail) = snapshotRecords[i][j].head;
         curRecords[i][j].tail = snapshotRecords[i][j].tail;
