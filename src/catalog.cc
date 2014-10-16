@@ -15,8 +15,8 @@ void Catalog::PutPartition(uint32_t tableId, uint32_t partitionId,
   assert(!finalized);
 
   // Check whether we've seen this table before.
-  MVTable *tbl;
-  if (tableMappings[tableId] == NULL) {
+  MVTable *tbl = tableMappings[tableId];
+  if (tbl == NULL) {
     // Haven't seen the table. Create a new one.
     tbl = new MVTable(MVScheduler::NUM_CC_THREADS);
     tableMappings[tableId] = tbl;
