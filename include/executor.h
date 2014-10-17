@@ -124,7 +124,7 @@ class Executor : public Runnable {
   RecordAllocator **allocators;
 
  protected:
-  void* operator new(std::size_t sz, int cpu);
+
 
   //  Executor(ExecutorConfig config);
   virtual void StartWorking();
@@ -138,6 +138,9 @@ class Executor : public Runnable {
   void RecycleData();
 
  public:
+  void* operator new(std::size_t sz, int cpu) {
+    return alloc_mem(sz, cpu);
+  }
   Executor(ExecutorConfig config);  
 };
 

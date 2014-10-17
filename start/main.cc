@@ -345,12 +345,58 @@ ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId,
   return config;
 }
 
-Executor** SetupExecutors(uint32_t numProcs, 
+Executor** SetupExecutors(uint32_t cpuStart,
+                          uint32_t numWorkers, 
+                          uint32_t numCCThreads,
+                          uint32_t queuesPerTable,
                           SimpleQueue<ActionBatch> *inputQueue,
-                          SimpleQueue<ActionBatch> *outputQueue) {
-  //  Executor **execArray = (Executor**)malloc(sizeof(Executor*)*numProcs);
-  //  memset(execArray, 0x00, sizeof(Executor*)*numProcs);
-  return NULL;
+                          SimpleQueue<ActionBatch> *outputQueue,
+                          uint32_t queuesPerCCThread,
+                          SimpleQueue<MVRecordList> ***ccQueues) {  
+  Executor **execs = (Executor**)malloc(sizeof(Executor*)*numWorkers);
+  volatile uint32_t *epochArray = 
+    (volatile uint32_t*)malloc(sizeof(uint32_t)*(numWorkers+1));  
+
+  uint32_t numTables = 1;
+
+  uint32_t *sizeData = (uint32_t*)malloc(sizeof(uint32_t)*2);
+  sizeData[0] = sizeof(uint64_t);
+  sizeData[1] = (1<<29)/sizeData[0];
+
+  // First pass, create configs. Each config contains a reference to each 
+  // worker's local GC queue.
+  ExecutorConfig configs[numWorkers];  
+  for (uint32_t i = 0; i < numWorkers; ++i) {
+    configs[i] = SetupExec(cpuStart+i, i, numWorkers, &epochArray[i], 
+                           &epochArray[numWorkers],
+                           &sizeData[0],
+                           &sizeData[1],
+                           inputQueue,
+                           outputQueue,
+                           numCCThreads,
+                           1,
+                           queuesPerTable);
+  }
+  
+  // Second pass, connect recycled data producers with consumers
+  for (uint32_t i = 0; i < numWorkers; ++i) {
+    
+    // Connect to cc threads
+    for (uint32_t j = 0; j < numCCThreads; ++j) {
+      configs[i].garbageConfig.ccChannels[j] = ccQueues[j][i%queuesPerCCThread];
+    }
+
+    // Connect to every workers gc queue
+    for (uint32_t j = 0; j < numWorkers; ++j) {
+      for (uint32_t k = 0; k < numTables; ++k) {
+        configs[i].garbageConfig.workerChannels[j] = 
+          &configs[j].recycleQueues[k*queuesPerTable+(i%queuesPerTable)];
+      }
+      execs[i] = new ((int)(cpuStart+i)) Executor(configs[i]);
+    }    
+    
+  }
+  return execs;
 }
 
 MVScheduler** SetupSchedulers(int numProcs, 
