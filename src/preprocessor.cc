@@ -136,8 +136,10 @@ void MVScheduler::StartWorking() {
       config.subQueues[i]->DequeueBlocking();
     }    
     
-    // Signal leader
-    config.outputQueue->EnqueueBlocking(curBatch);
+    // Signal that we're done
+    for (uint32_t i = 0; i < config.numOutputs; ++i) {
+      config.outputQueues[i].EnqueueBlocking(curBatch);
+    }
     
     // Check for recycled MVRecords
     for (uint32_t i = 0; i < config.numRecycleQueues; ++i) {
@@ -220,7 +222,7 @@ void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
     for (uint32_t i = 0; i < size; ++i) {
         if (action->writeset[i].threadId == threadId) {
             this->partitions[action->writeset[i].tableId]->
-              WriteNewVersion(action->writeset[i], action, timestamp);
+              WriteNewVersion(action->writeset[i], action, action->version);
         }
     }
 }

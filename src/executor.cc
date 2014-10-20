@@ -8,14 +8,17 @@ PendingActionList::PendingActionList(uint32_t freeListSize) {
     freeList[i].next = &freeList[i+1];
   }
   freeList[freeListSize-1].next = NULL;
+  this->pendingCount = 0;
+  this->head = 0;
+  this->tail = 0;
+  this->cursor = NULL;
 }
 
 inline void PendingActionList::EnqueuePending(Action *action) {
   assert(freeList != NULL);
   ActionListNode *node = freeList;
-  freeList = freeList->next;
-  
-  pendingCount += 1;
+  freeList = freeList->next;  
+
   node->next = NULL;  
   if (tail == NULL) {
     assert(head == NULL && pendingCount == 0);
@@ -27,6 +30,7 @@ inline void PendingActionList::EnqueuePending(Action *action) {
     tail->next = NULL;
     node->prev = tail;
   }
+  pendingCount += 1;
   tail = node;
 }
 
@@ -66,7 +70,7 @@ inline bool PendingActionList::IsEmpty() {
 }
 
 Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) {
-  
+  this->config = cfg;
 }
 
 void Executor::Init() {
@@ -77,6 +81,8 @@ void Executor::Init() {
     uint32_t allocSize = config.allocatorSizes[i];
     this->allocators[i] = new RecordAllocator(recSize, allocSize, config.cpu);
   }
+  this->pendingList = new PendingActionList(1000);
+  //  this->garbageBin = new GarbageBin(config.garbageConfig);
 }
 
 void Executor::StartWorking() {
@@ -164,11 +170,13 @@ bool Executor::ProcessSingle(Action *action) {
         return true;
       }
       else {
+        assert(false);
         action->state = STICKY;
         return false;
       }
     }
     else {      // cmp_and_swap failed
+      assert(false);
       return false;
     }
   }
@@ -180,92 +188,136 @@ bool Executor::ProcessSingle(Action *action) {
 bool Executor::ProcessTxn(Action *action) {
   assert(action != NULL && action->state == PROCESSING);
   bool ready = true;
+  bool abort = false;
   uint32_t numReads = action->readset.size();
   uint32_t numWrites = action->writeset.size();
 
   // First ensure that all transactions on which the current one depends on have
   // been processed.
   for (size_t i = 0; i < numReads; ++i) {
-    CompositeKey curKey = action->readset[i];
-    MVRecord *record = 
-      DB.GetTable(curKey.tableId)->GetMVRecord(curKey.tableId, curKey, 
-                                               action->version);
-    Action *dependAction = record->writer;    
-
-    if (dependAction == NULL || ProcessSingle(dependAction)) {
-      // Track the value of the record.
+    if (action->readset[i].value == NULL) {
+      CompositeKey curKey = action->readset[i];
+      MVRecord *record = 
+        DB.GetTable(curKey.tableId)->GetMVRecord(curKey.tableId, curKey, 
+                                                 action->version);
+      // If the record does not exist, abort.
+      if (record == NULL) {
+        abort = true;
+      }
+    
+      // If this read is part of an RMW, then we need to read the previous 
+      // version of the record
+      if (record->writer == action) {
+        record = record->recordLink;
+        if (record == NULL) {
+          abort = true;
+        }
+      }
+      // Keep a reference to the record
       action->readset[i].value = record;
     }
-    else {
-      // Record not available, another thread is processing dependAction.
+    
+    // Check that the txn which is supposed to have produced the value of the 
+    // record has been executed.    
+    Action *dependAction = action->readset[i].value->writer;
+    if (dependAction != NULL && !ProcessSingle(dependAction)) {
       ready = false;
     }
-  }
+    else if (action->readset[i].value->value == NULL) {
+      abort = true;
+    }
+  }    
 
   for (size_t i = 0; i < numWrites; ++i) {
-    CompositeKey curKey = action->writeset[i];
-    MVRecord *record = 
-      DB.GetTable(curKey.tableId)->GetMVRecord(curKey.tableId, curKey, 
-                                               action->version);
-    Action *dependAction = record->writer;
     
-    if (dependAction == NULL || ProcessSingle(dependAction)) {
-      action->writeset[i].value = record;
+    // Keep a reference to the sticky we need to evaluate. 
+    if (action->writeset[i].value == NULL) {
+      
+      // Find the sticky
+      CompositeKey curKey = action->writeset[i];
+      MVRecord *record = 
+        DB.GetTable(curKey.tableId)->GetMVRecord(curKey.tableId, curKey, 
+                                                 action->version);
+
+      // Sticky better exist
+      assert(record != NULL);
+      action->writeset[i].value = record;      
     }
-    else {
-      ready = false;
+    
+    // Ensure that the previous version of this record has been written
+    MVRecord *prev = action->writeset[i].value->recordLink;
+    if (prev != NULL) {
+      // There exists a previous version
+      Action *dependAction = prev->writer;
+      if (dependAction != NULL && !ProcessSingle(dependAction)) {
+        ready = false;
+      }
     }
   }
   
-  if (ready) {
-    if (action->Run()) {
-      // Install updates      
-      uint32_t numWrites = action->writeset.size();
-      for (uint32_t i = 0; i < numWrites; ++i) {
-        MVRecord *previous = action->writeset[i].value->recordLink;
-        if (previous != NULL && previous->value != NULL) {
-          garbageBin->AddRecord(previous->writingThread, 
-                                action->writeset[i].tableId,
-                                previous->value);
-        }
+  // If abort is true at this point, it's because the txn tried to read a 
+  // non-existent record
+  if (!ready) {
+    return false;
+  }
+  
+  // Transaction aborted
+  if (abort || !action->Run()) {
+    for (uint32_t i = 0; i < numWrites; ++i) {
+      uint32_t tbl = action->writeset[i].tableId;
+      uint32_t recSize = config.recordSizes[tbl];
+      Record *curValuePtr = action->writeset[i].value->value;
+      Record *prevValuePtr = NULL;
+      MVRecord *predecessor = action->writeset[i].value->recordLink;
+      if (predecessor != NULL) {
+        prevValuePtr = predecessor->value;
+      }
+      
+      if (prevValuePtr != NULL) {
+        memcpy(curValuePtr, prevValuePtr, sizeof(uint64_t)+recSize);
       }
     }
-    else {
-      // Abort. 
-      uint32_t numWrites = action->writeset.size();
-      for (uint32_t i = 0; i < numWrites; ++i) {
-        MVRecord *previous = action->writeset[i].value->recordLink;
-        if (previous != NULL) {
-          action->writeset[i].value->value = previous->value;
-        }
-      }
-    }
+    
+  }
 
-    // Add MVRecords and Records rendered invisible by this update
-    for (uint32_t i = 0; i < action->writeset.size(); ++i) {
-      MVRecord *deleted = action->writeset[i].value->recordLink;
-      if (deleted != NULL) {
-        garbageBin->AddMVRecord(action->writeset[i].threadId, deleted);
+  // Garbage collect the previous versions
+  for (uint32_t i = 0; i < numWrites; ++i) {
+    MVRecord *previous = action->writeset[i].value->recordLink;
+    if (previous != NULL) {
+      assert(previous->writer == NULL || 
+             previous->writer->state == SUBSTANTIATED);
+      if (previous->value != NULL) {
+        garbageBin->AddRecord(previous->writingThread, 
+                              action->writeset[i].tableId,
+                              previous->value);
       }
+      garbageBin->AddMVRecord(action->writeset[i].threadId, previous);      
     }
-  }  
+  }
+  
+  xchgq(&action->state, SUBSTANTIATED);
   return ready;
 }
 
 void GarbageBin::AddMVRecord(uint32_t ccThread, MVRecord *rec) {
+  /*
   rec->allocLink = NULL;
   *(curStickies[ccThread].tail) = rec;
   curStickies[ccThread].tail = &rec->allocLink;
+  */
 }
 
 void GarbageBin::AddRecord(uint32_t workerThread, uint32_t tableId, 
                            Record *rec) {
+  /*
   rec->next = NULL;
   *(curRecords[workerThread][tableId].tail) = rec;
   curRecords[workerThread][tableId].tail = &rec->next;  
+  */
 }
 
 void GarbageBin::ReturnGarbage() {
+  /*
   for (uint32_t i = 0; i < config.numCCThreads; ++i) {
     
     // Try to enqueue garbage. If enqueue fails, we'll just try again during the
@@ -294,9 +346,11 @@ void GarbageBin::ReturnGarbage() {
       curRecords[i][j].tail = &curRecords[i][j].head;
     }
   }
+  */
 }
 
 void GarbageBin::FinishEpoch(uint32_t epoch) {
+  /*
   barrier();
   uint32_t lowWatermark = *config.lowWaterMarkPtr;
   barrier();
@@ -305,6 +359,7 @@ void GarbageBin::FinishEpoch(uint32_t epoch) {
     ReturnGarbage();
     snapshotEpoch = epoch;
   }
+  */
 }
 
 RecordAllocator::RecordAllocator(size_t recordSize, uint32_t numRecords, 

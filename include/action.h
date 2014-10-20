@@ -101,14 +101,18 @@ class VersionBuffer;
 class Action {
 
  protected:
-  /*
+
   void* Read(uint32_t index) {
-    return readset[index].value;
+    return readset[index].value->value;
   }
-  void Write(uint32_t index, void *value) {
-    writeset[index].value = value;
+
+  void* GetWriteRef(uint32_t index) {
+    
+    // Memory for the write should always be initialized.
+    assert(writeset[index].value->value != NULL);
+    return writeset[index].value->value;
   }
-  */
+
  public:  
     uint64_t version;
     uint64_t combinedHash;
@@ -136,7 +140,7 @@ class Action {
   //  volatile uint64_t __attribute__((aligned(CACHE_LINE))) lock_word;
 
   volatile uint64_t __attribute__((aligned(CACHE_LINE))) state;
-  virtual bool Run() { }
+  virtual bool Run() { return true; }
   //  virtual bool IsLinked(Action **cont) { *cont = NULL; return false; }
 };
 

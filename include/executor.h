@@ -116,7 +116,6 @@ struct ExecutorConfig {
 class Executor : public Runnable {
  private:
   ExecutorConfig config;
-  MVRecordList *deadRecords;
   GarbageBin *garbageBin;
   PendingActionList *pendingList;
   uint32_t epoch;

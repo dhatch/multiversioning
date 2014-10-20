@@ -74,11 +74,13 @@ struct MVSchedulerConfig {
   uint32_t numTables;           // Number of tables in the system
   size_t *tblPartitionSizes;    // Size of each table's partition
   
+  uint32_t numOutputs;
+
   uint32_t numSubords;
   uint32_t numRecycleQueues;
 
   SimpleQueue<ActionBatch> *inputQueue;
-  SimpleQueue<ActionBatch> *outputQueue;
+  SimpleQueue<ActionBatch> *outputQueues;
   SimpleQueue<ActionBatch> **pubQueues;
   SimpleQueue<ActionBatch> **subQueues;
   SimpleQueue<MVRecordList> **recycleQueues;
