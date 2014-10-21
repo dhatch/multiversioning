@@ -28,6 +28,7 @@ struct GarbageBinConfig {
   uint32_t numCCThreads;
   uint32_t numWorkers;
   uint32_t numTables;
+  int cpu;
   volatile uint32_t *lowWaterMarkPtr;
   
   SimpleQueue<MVRecordList> **ccChannels;
@@ -40,12 +41,12 @@ class GarbageBin {
   // curStickies and curRecords correspond to "live" queues, in which new 
   // garbage is thrown
   MVRecordList *curStickies;
-  RecordList **curRecords;
+  RecordList *curRecords;
   
   // snapshotStickies and snapshotRecords correspond to a snapshot as of a 
   // specific epoch
   MVRecordList *snapshotStickies;
-  RecordList **snapshotRecords;
+  RecordList *snapshotRecords;
   uint32_t snapshotEpoch;
 
   GarbageBinConfig config;
@@ -123,7 +124,6 @@ class Executor : public Runnable {
   RecordAllocator **allocators;
 
  protected:
-
 
   //  Executor(ExecutorConfig config);
   virtual void StartWorking();

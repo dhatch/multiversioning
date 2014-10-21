@@ -16,6 +16,8 @@ PendingActionList::PendingActionList(uint32_t freeListSize) {
 
 inline void PendingActionList::EnqueuePending(Action *action) {
   assert(freeList != NULL);
+  assert(action != NULL);
+
   ActionListNode *node = freeList;
   freeList = freeList->next;  
 
@@ -62,7 +64,9 @@ inline void PendingActionList::ResetCursor() {
 }
 
 inline ActionListNode* PendingActionList::GetNext() {
-  return cursor;
+  ActionListNode *temp = cursor;
+  cursor = cursor->next;
+  return temp;
 }
 
 inline bool PendingActionList::IsEmpty() {
@@ -82,13 +86,12 @@ void Executor::Init() {
     this->allocators[i] = new RecordAllocator(recSize, allocSize, config.cpu);
   }
   this->pendingList = new PendingActionList(1000);
-  //  this->garbageBin = new GarbageBin(config.garbageConfig);
+  this->garbageBin = new GarbageBin(config.garbageConfig);
 }
 
 void Executor::StartWorking() {
   uint32_t epoch = 1;
   while (true) {
-    
     // Process the new batch of transactions
     ActionBatch batch = config.inputQueue->DequeueBlocking();    
     ProcessBatch(batch);
@@ -170,13 +173,11 @@ bool Executor::ProcessSingle(Action *action) {
         return true;
       }
       else {
-        assert(false);
         action->state = STICKY;
         return false;
       }
     }
     else {      // cmp_and_swap failed
-      assert(false);
       return false;
     }
   }
@@ -198,7 +199,7 @@ bool Executor::ProcessTxn(Action *action) {
     if (action->readset[i].value == NULL) {
       CompositeKey curKey = action->readset[i];
       MVRecord *record = 
-        DB.GetTable(curKey.tableId)->GetMVRecord(curKey.tableId, curKey, 
+        DB.GetTable(curKey.tableId)->GetMVRecord(curKey.threadId, curKey, 
                                                  action->version);
       // If the record does not exist, abort.
       if (record == NULL) {
@@ -236,7 +237,7 @@ bool Executor::ProcessTxn(Action *action) {
       // Find the sticky
       CompositeKey curKey = action->writeset[i];
       MVRecord *record = 
-        DB.GetTable(curKey.tableId)->GetMVRecord(curKey.tableId, curKey, 
+        DB.GetTable(curKey.tableId)->GetMVRecord(curKey.threadId, curKey, 
                                                  action->version);
 
       // Sticky better exist
@@ -260,6 +261,14 @@ bool Executor::ProcessTxn(Action *action) {
   if (!ready) {
     return false;
   }
+
+  for (uint32_t i = 0; i < numWrites; ++i) {
+    uint32_t tbl = action->writeset[i].tableId;
+    Record **valuePtr = &action->writeset[i].value->value;
+    action->writeset[i].value->writingThread = config.threadId;
+    bool success = allocators[tbl]->GetRecord(valuePtr);
+    assert(success);
+  }
   
   // Transaction aborted
   if (abort || !action->Run()) {
@@ -276,8 +285,7 @@ bool Executor::ProcessTxn(Action *action) {
       if (prevValuePtr != NULL) {
         memcpy(curValuePtr, prevValuePtr, sizeof(uint64_t)+recSize);
       }
-    }
-    
+    }    
   }
 
   // Garbage collect the previous versions
@@ -299,32 +307,59 @@ bool Executor::ProcessTxn(Action *action) {
   return ready;
 }
 
+GarbageBin::GarbageBin(GarbageBinConfig config) {
+  assert(sizeof(MVRecordList) == sizeof(RecordList));
+  this->config = config;
+
+  // total number of structs
+  uint32_t numStructs = 
+    (config.numCCThreads + config.numWorkers*config.numTables);
+  uint32_t ccOffset = config.numCCThreads*sizeof(MVRecordList);
+  uint32_t workerOffset = 
+    config.numWorkers*config.numTables*sizeof(MVRecordList);
+
+  // twice #structs: one for live, one for snapshot
+  void *data = alloc_mem(2*numStructs*sizeof(MVRecordList), config.cpu);
+  memset(data, 0x00, 2*numStructs*sizeof(MVRecordList));
+  
+  this->curStickies = (MVRecordList*)data;
+  this->snapshotStickies = (MVRecordList*)((char*)data + ccOffset);
+  for (uint32_t i = 0; i < 2*config.numCCThreads; ++i) {
+    curStickies[i].tail = &curStickies[i].head;
+    curStickies[i].head = NULL;
+  }
+  
+  this->curRecords = (RecordList*)((char*)data + 2*ccOffset);
+  this->snapshotRecords = (RecordList*)((char*)data + 2*ccOffset+workerOffset);
+  for (uint32_t i = 0; i < 2*config.numWorkers; ++i) {
+    curRecords[i].tail = &curRecords[i].head;
+    curRecords[i].head = NULL;
+  }
+}
+
 void GarbageBin::AddMVRecord(uint32_t ccThread, MVRecord *rec) {
-  /*
   rec->allocLink = NULL;
   *(curStickies[ccThread].tail) = rec;
   curStickies[ccThread].tail = &rec->allocLink;
-  */
 }
 
 void GarbageBin::AddRecord(uint32_t workerThread, uint32_t tableId, 
                            Record *rec) {
-  /*
   rec->next = NULL;
-  *(curRecords[workerThread][tableId].tail) = rec;
-  curRecords[workerThread][tableId].tail = &rec->next;  
-  */
+  *(curRecords[workerThread*config.numTables+tableId].tail) = rec;
+  curRecords[workerThread*config.numTables+tableId].tail = &rec->next;  
 }
 
 void GarbageBin::ReturnGarbage() {
-  /*
   for (uint32_t i = 0; i < config.numCCThreads; ++i) {
     
     // Try to enqueue garbage. If enqueue fails, we'll just try again during the
     // next call.
-    if (!config.ccChannels[i]->Enqueue(snapshotStickies[i])) {
-      *(curStickies[i].tail) = snapshotStickies[i].head;
-      curStickies[i].tail = snapshotStickies[i].tail;
+    if (snapshotStickies[i].head != NULL) {
+      if (!config.ccChannels[i]->Enqueue(snapshotStickies[i])) {
+        *(curStickies[i].tail) = snapshotStickies[i].head;
+        curStickies[i].tail = snapshotStickies[i].tail;
+      }
     }
     snapshotStickies[i] = curStickies[i];
     curStickies[i].head = NULL;
@@ -333,24 +368,26 @@ void GarbageBin::ReturnGarbage() {
   
   uint32_t tblCount = config.numTables;
   for (uint32_t i = 0; i < config.numWorkers; ++i) {
-    for (uint32_t j = 0; j < tblCount; ++j) {
-      
+    for (uint32_t j = 0; j < tblCount; ++j) {      
+      uint32_t index = i*tblCount + j;
+
       // Same logic as "stickies"
-      if (!config.workerChannels[i*tblCount+j]->
-          Enqueue(snapshotRecords[i][j])) {
-        *(curRecords[i][j].tail) = snapshotRecords[i][j].head;
-        curRecords[i][j].tail = snapshotRecords[i][j].tail;
+      if (snapshotRecords[index].head != NULL) {
+        if (!config.workerChannels[index]->Enqueue(snapshotRecords[index])) {
+          *(curRecords[index].tail) = snapshotRecords[index].head;
+          curRecords[index].tail = snapshotRecords[index].tail;
+        }
       }
-      snapshotRecords[i][j] = curRecords[i][j];
-      curRecords[i][j].head = NULL;
-      curRecords[i][j].tail = &curRecords[i][j].head;
+      snapshotRecords[index] = curRecords[index];
+      curRecords[index].head = NULL;
+      curRecords[index].tail = &curRecords[index].head;
     }
   }
-  */
+  
+  std::cout << "Success!\n";
 }
 
 void GarbageBin::FinishEpoch(uint32_t epoch) {
-  /*
   barrier();
   uint32_t lowWatermark = *config.lowWaterMarkPtr;
   barrier();
@@ -359,7 +396,6 @@ void GarbageBin::FinishEpoch(uint32_t epoch) {
     ReturnGarbage();
     snapshotEpoch = epoch;
   }
-  */
 }
 
 RecordAllocator::RecordAllocator(size_t recordSize, uint32_t numRecords, 

@@ -145,9 +145,11 @@ void MVScheduler::StartWorking() {
     for (uint32_t i = 0; i < config.numRecycleQueues; ++i) {
       MVRecordList recycled;
       while (config.recycleQueues[i]->Dequeue(&recycled)) {
+        std::cout << "Recycled!\n";
         this->alloc->ReturnMVRecords(recycled);
       }
     }
+    std::cout << "Done epoch";
     epoch += 1;
   }
 }

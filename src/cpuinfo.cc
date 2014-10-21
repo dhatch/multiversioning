@@ -133,7 +133,8 @@ alloc_mem(size_t size, int cpu) {
     if (buf == NULL) {
         return buf;
     }
-
+    return buf;
+    /*
     if (mlock(buf, size) != 0) {
       numa_free(buf, size);
       std::cout << "mlock couldn't pin memory to RAM!\n";
@@ -142,6 +143,7 @@ alloc_mem(size_t size, int cpu) {
     else {
       return buf;
     }
+    */
   }
 }
 

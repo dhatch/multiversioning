@@ -82,8 +82,11 @@ void CreateQueues(int cpuNumber, uint32_t subCount,
   *OUT_SUB_QUEUES = subQueues;
 }
 
-MVSchedulerConfig SetupSched(int cpuNumber, int threadId, int numThreads, 
-                             size_t alloc, size_t *partSizes, 
+MVSchedulerConfig SetupSched(int cpuNumber, 
+                             int threadId, 
+                             int numThreads, 
+                             size_t alloc, 
+                             size_t *partSizes, 
                              uint32_t numRecycles,
                              SimpleQueue<ActionBatch> *inputQueue,
                              uint32_t numOutputs,
@@ -245,6 +248,7 @@ GarbageBinConfig SetupGCConfig(uint32_t numCCThreads, uint32_t numWorkerThreads,
                                uint32_t numTables,
                                int cpuNumber,
                                volatile uint32_t *lowWaterMarkPtr) {
+  assert(lowWaterMarkPtr != NULL);
 
   // First initialize garbage collection meta data. We need space to keep 
   // references to remote threads's GC queues.
@@ -263,6 +267,7 @@ GarbageBinConfig SetupGCConfig(uint32_t numCCThreads, uint32_t numWorkerThreads,
     numCCThreads,
     numWorkerThreads,
     numTables,
+    cpuNumber,
     lowWaterMarkPtr,
     ccGCQueues,
     workerGCQueues,
@@ -355,6 +360,9 @@ Executor** SetupExecutors(uint32_t cpuStart,
                           SimpleQueue<ActionBatch> *outputQueue,
                           uint32_t queuesPerCCThread,
                           SimpleQueue<MVRecordList> ***ccQueues) {  
+  assert(queuesPerCCThread == numWorkers);
+  assert(queuesPerTable == numWorkers);
+
   Executor **execs = (Executor**)malloc(sizeof(Executor*)*numWorkers);
   volatile uint32_t *epochArray = 
     (volatile uint32_t*)malloc(sizeof(uint32_t)*(numWorkers+1));  
@@ -390,6 +398,7 @@ Executor** SetupExecutors(uint32_t cpuStart,
     // Connect to cc threads
     for (uint32_t j = 0; j < numCCThreads; ++j) {
       configs[i].garbageConfig.ccChannels[j] = ccQueues[j][i%queuesPerCCThread];
+      assert(configs[i].garbageConfig.ccChannels[j] != NULL);
     }
 
     // Connect to every workers gc queue
@@ -398,6 +407,7 @@ Executor** SetupExecutors(uint32_t cpuStart,
         configs[i].garbageConfig.workerChannels[j] = 
           &configs[j].recycleQueues[k*queuesPerTable+(i%queuesPerTable)];
       }
+      assert(configs[i].garbageConfig.workerChannels[j] != NULL);
       execs[i] = new ((int)(cpuStart+i)) Executor(configs[i]);
     }
   }
@@ -450,7 +460,7 @@ MVScheduler** SetupSchedulers(int numProcs,
   MVSchedulerConfig globalLeaderConfig = SetupSched(0, 0, numProcs, 
                                                     allocatorSize,
                                                     tblPartitionSizes, 
-                                                    1,
+                                                    numOutputs,
                                                     leaderInputQueue,
                                                     numOutputs,
                                                     leaderOutputQueues);
@@ -468,7 +478,7 @@ MVScheduler** SetupSchedulers(int numProcs,
       auto outputQueue = globalLeaderConfig.subQueues[9+leaderNum-1];
       MVSchedulerConfig config = SetupSched(i, i, numProcs, allocatorSize, 
                                             tblPartitionSizes, 
-                                            1,
+                                            numOutputs,
                                             inputQueue, 
                                             1,
                                             outputQueue);
@@ -482,7 +492,7 @@ MVScheduler** SetupSchedulers(int numProcs,
       auto outputQueue = localLeaderConfig.subQueues[index-1];
       MVSchedulerConfig subConfig = SetupSched(i, i, numProcs, allocatorSize, 
                                                tblPartitionSizes, 
-                                               1,
+                                               numOutputs,
                                                inputQueue, 
                                                1,
                                                outputQueue);
@@ -615,9 +625,10 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     std::cout << "Setup input...\n";
     
     // Setup executors
-    Executor **execThreads = SetupExecutors(numCCThreads, numExecutors, 
+    Executor **execThreads = SetupExecutors(numCCThreads, 
+                                            numExecutors, 
                                             numCCThreads,
-                                            1,
+                                            numExecutors,
                                             schedOutputQueues,
                                             outputQueue,
                                             numExecutors,
