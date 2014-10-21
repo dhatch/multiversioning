@@ -9,8 +9,8 @@ PendingActionList::PendingActionList(uint32_t freeListSize) {
   }
   freeList[freeListSize-1].next = NULL;
   this->pendingCount = 0;
-  this->head = 0;
-  this->tail = 0;
+  this->head = NULL;
+  this->tail = NULL;
   this->cursor = NULL;
 }
 
@@ -20,7 +20,7 @@ inline void PendingActionList::EnqueuePending(Action *action) {
 
   ActionListNode *node = freeList;
   freeList = freeList->next;  
-
+  node->action = action;
   node->next = NULL;  
   if (tail == NULL) {
     assert(head == NULL && pendingCount == 0);
@@ -37,13 +37,14 @@ inline void PendingActionList::EnqueuePending(Action *action) {
 }
 
 inline void PendingActionList::DequeuePending(ActionListNode *node) {
-  
+  assert(node != cursor);
+
   if (node->next == NULL && node->prev == NULL) {
     head = NULL;
     tail = NULL;
   }
   else if (node->next == NULL) {
-    tail = node->prev;    
+    tail = node->prev;
   }
   else if (node->prev == NULL) {
     head = node->next;
@@ -65,7 +66,9 @@ inline void PendingActionList::ResetCursor() {
 
 inline ActionListNode* PendingActionList::GetNext() {
   ActionListNode *temp = cursor;
-  cursor = cursor->next;
+  if (cursor != NULL) {
+    cursor = cursor->next;
+  }
   return temp;
 }
 
@@ -152,6 +155,13 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
     if (!ProcessSingle(cur)) {
       pendingList->EnqueuePending(cur);
     }
+  }
+
+  // DEBUGGIN
+  pendingList->ResetCursor();
+  for (ActionListNode *node = pendingList->GetNext(); node != NULL;
+       node = pendingList->GetNext()) {
+    assert(node->action != NULL);
   }
   
   while (!pendingList->IsEmpty()) {

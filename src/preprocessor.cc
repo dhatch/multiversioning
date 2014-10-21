@@ -149,7 +149,7 @@ void MVScheduler::StartWorking() {
         this->alloc->ReturnMVRecords(recycled);
       }
     }
-    std::cout << "Done epoch";
+    //    std::cout << "Done epoch";
     epoch += 1;
   }
 }
