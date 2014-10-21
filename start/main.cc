@@ -366,6 +366,7 @@ Executor** SetupExecutors(uint32_t cpuStart,
   Executor **execs = (Executor**)malloc(sizeof(Executor*)*numWorkers);
   volatile uint32_t *epochArray = 
     (volatile uint32_t*)malloc(sizeof(uint32_t)*(numWorkers+1));  
+  memset((void*)epochArray, 0x0, sizeof(uint32_t)*(numWorkers+1));
 
   uint32_t numTables = 1;
 
@@ -582,10 +583,21 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
 
 }
 
-void SetupInput(SimpleQueue<ActionBatch> *input, int numEpochs, int epochSize, int numRecords, int txnsize) {
+void SetupInputArray(std::vector<ActionBatch> *input, int numEpochs, int epochSize, 
+                     int numRecords, int txnsize) {
+  for (int i = 0; i < numEpochs+1; ++i) {
+    ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, (uint32_t)i);
+    input->push_back(curBatch);
+
+  }
+}
+
+void SetupInput(SimpleQueue<ActionBatch> *input, int numEpochs, int epochSize, 
+                int numRecords, int txnsize) {
     for (int i = 0; i < numEpochs+1; ++i) {
       ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, (uint32_t)i);
-        input->EnqueueBlocking(curBatch);        
+      //      input->push_back(curBatch);
+      input->EnqueueBlocking(curBatch);        
     }
 }
 
@@ -621,7 +633,8 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     }
 
     // Set up the input.
-    SetupInput(schedInputQueue, numEpochs, epochSize, numRecords, txnSize);
+    std::vector<ActionBatch> inputPlaceholder;
+    SetupInputArray(&inputPlaceholder, numEpochs, epochSize, numRecords, txnSize);
     std::cout << "Setup input...\n";
     
     // Setup executors
@@ -634,6 +647,8 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
                                             numExecutors,
                                             schedGCQueues);
 
+    schedInputQueue->EnqueueBlocking(inputPlaceholder[0]);
+    
     // Run the experiment.
     for (int i = 0; i < numCCThreads; ++i) {
         schedThreads[i]->Run();
@@ -642,6 +657,11 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     for (int i = 0; i < numExecutors; ++i) {
       execThreads[i]->Run();
     }
+    
+    for (int i = 0; i < numEpochs; ++i) {
+      schedInputQueue->EnqueueBlocking(inputPlaceholder[i+1]);
+    }
+
     std::cout << "Running experiment. Epochs: " << numEpochs << "\n";
     timespec start_time, end_time;
 

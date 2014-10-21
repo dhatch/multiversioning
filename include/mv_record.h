@@ -41,6 +41,7 @@ struct _MVRecord_ {
 struct MVRecordList {
   MVRecord *head;
   MVRecord **tail;
+  uint64_t count;
 };
 
 /*
@@ -54,6 +55,7 @@ class MVRecordAllocator {
         
  private:
   MVRecord *freeList;
+  uint64_t count;
   uint64_t size;
  public:
 
@@ -71,6 +73,10 @@ class MVRecordAllocator {
   bool GetRecord(MVRecord **out);
   void ReturnMVRecords(MVRecordList recordList);  
   void WriteAllocator();
+
+  inline bool Warning() {
+    return count < 100;
+  }
 };
 
 #endif          /* MV_RECORD_H_ */

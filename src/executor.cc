@@ -100,25 +100,29 @@ void Executor::StartWorking() {
     
     // Tell other threads that this epoch is finished
     barrier();
-    config.epochPtr[config.threadId] = epoch;
+    *config.epochPtr = epoch;
     barrier();
-
+    
     // If this is the leader thread, try to advance the low-water mark to 
     // trigger garbage collection
     if (config.threadId == 0) {
-      uint32_t minEpoch = *config.epochPtr;
+      volatile uint32_t minEpoch = *config.epochPtr;
+      //      std::cout << "0:" << minEpoch << "\n";
       for (uint32_t i = 1; i < config.numExecutors; ++i) {
         barrier();
-        uint32_t temp = config.epochPtr[i];
+        volatile uint32_t temp = config.epochPtr[i];
+        //        std::cout << i << ":" << temp << "\n";
         barrier();
         
         if (temp < minEpoch) {
           minEpoch = temp;
         }
       }
+
       barrier();
       *config.lowWaterMarkPtr = minEpoch;
       barrier();
+      //  std::cout << "LowWaterMark: " << *config.lowWaterMarkPtr << "\n";
     }
     
     // Try to return records that are no longer visible to their owners
@@ -127,6 +131,8 @@ void Executor::StartWorking() {
     // Check if there's any garbage we can recycle. Insert into our record 
     // allocators.
     RecycleData();
+
+    epoch += 1;
   }
 }
 
@@ -140,6 +146,7 @@ void Executor::RecycleData() {
       
       // Use non-blocking dequeue
       while (config.recycleQueues[i*numQueues+j].Dequeue(&recycled)) {
+        //        std::cout << "Received " << recycled.count << " records\n";
         allocators[i]->Recycle(recycled);
       }
     }
@@ -147,9 +154,9 @@ void Executor::RecycleData() {
 }
 
 void Executor::ProcessBatch(const ActionBatch &batch) {
-
-  for (uint32_t i = config.threadId; i < batch.numActions; 
-       i += config.numExecutors) {
+  
+  for (uint32_t i = batch.numActions-1-config.threadId; i < batch.numActions;
+       i -= config.numExecutors) {
     Action *cur = batch.actionBuf[i];
     if (!ProcessSingle(cur)) {
       pendingList->EnqueuePending(cur);
@@ -321,6 +328,7 @@ bool Executor::ProcessTxn(Action *action) {
 GarbageBin::GarbageBin(GarbageBinConfig config) {
   assert(sizeof(MVRecordList) == sizeof(RecordList));
   this->config = config;
+  this->snapshotEpoch = 0;
 
   // total number of structs
   uint32_t numStructs = 
@@ -338,6 +346,7 @@ GarbageBin::GarbageBin(GarbageBinConfig config) {
   for (uint32_t i = 0; i < 2*config.numCCThreads; ++i) {
     curStickies[i].tail = &curStickies[i].head;
     curStickies[i].head = NULL;
+    curStickies[i].count = 0;
   }
   
   this->curRecords = (RecordList*)((char*)data + 2*ccOffset);
@@ -345,6 +354,7 @@ GarbageBin::GarbageBin(GarbageBinConfig config) {
   for (uint32_t i = 0; i < 2*config.numWorkers; ++i) {
     curRecords[i].tail = &curRecords[i].head;
     curRecords[i].head = NULL;
+    curRecords[i].count = 0;
   }
 }
 
@@ -352,6 +362,8 @@ void GarbageBin::AddMVRecord(uint32_t ccThread, MVRecord *rec) {
   rec->allocLink = NULL;
   *(curStickies[ccThread].tail) = rec;
   curStickies[ccThread].tail = &rec->allocLink;
+  curStickies[ccThread].count += 1;
+  assert(curStickies[ccThread].head != NULL);
 }
 
 void GarbageBin::AddRecord(uint32_t workerThread, uint32_t tableId, 
@@ -359,6 +371,7 @@ void GarbageBin::AddRecord(uint32_t workerThread, uint32_t tableId,
   rec->next = NULL;
   *(curRecords[workerThread*config.numTables+tableId].tail) = rec;
   curRecords[workerThread*config.numTables+tableId].tail = &rec->next;  
+  curRecords[workerThread*config.numTables+tableId].count += 1;
 }
 
 void GarbageBin::ReturnGarbage() {
@@ -370,11 +383,16 @@ void GarbageBin::ReturnGarbage() {
       if (!config.ccChannels[i]->Enqueue(snapshotStickies[i])) {
         *(curStickies[i].tail) = snapshotStickies[i].head;
         curStickies[i].tail = snapshotStickies[i].tail;
+        curStickies[i].count += snapshotStickies[i].count;
+      }
+      else {
+        //        std::cout << "Recycle!\n";
       }
     }
     snapshotStickies[i] = curStickies[i];
     curStickies[i].head = NULL;
     curStickies[i].tail = &curStickies[i].head;
+    curStickies[i].count = 0;
   }
   
   uint32_t tblCount = config.numTables;
@@ -387,15 +405,17 @@ void GarbageBin::ReturnGarbage() {
         if (!config.workerChannels[index]->Enqueue(snapshotRecords[index])) {
           *(curRecords[index].tail) = snapshotRecords[index].head;
           curRecords[index].tail = snapshotRecords[index].tail;
+          curRecords[index].count += snapshotRecords[index].count;
         }
       }
       snapshotRecords[index] = curRecords[index];
       curRecords[index].head = NULL;
       curRecords[index].tail = &curRecords[index].head;
+      curRecords[index].count = 0;
     }
   }
   
-  std::cout << "Success!\n";
+  //  std::cout << "Success!\n";
 }
 
 void GarbageBin::FinishEpoch(uint32_t epoch) {
@@ -406,6 +426,7 @@ void GarbageBin::FinishEpoch(uint32_t epoch) {
   if (lowWatermark >= snapshotEpoch) {
     ReturnGarbage();
     snapshotEpoch = epoch;
+    //    std::cout << "Success: " << epoch << "\n";
   }
 }
 

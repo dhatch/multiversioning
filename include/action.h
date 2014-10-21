@@ -27,6 +27,7 @@ struct Record {
 struct RecordList {
   Record *head;
   Record **tail;
+  uint64_t count;
 };
 
 class CompositeKey {

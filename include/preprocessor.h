@@ -126,6 +126,7 @@ class MVScheduler : public Runnable {
         //    void Leader(uint32_t epoch);
         //    void Subordinate(uint32_t epoch);
     virtual void Init();
+    virtual void Recycle();
  public:
     
     void* operator new (std::size_t sz, int cpu) {
