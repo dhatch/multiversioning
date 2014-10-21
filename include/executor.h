@@ -69,7 +69,6 @@ class PendingActionList {
   ActionListNode *freeList;
   
   // List meta-data
-  uint32_t pendingCount;
   ActionListNode *head;
   ActionListNode *tail;
 

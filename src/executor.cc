@@ -8,7 +8,6 @@ PendingActionList::PendingActionList(uint32_t freeListSize) {
     freeList[i].next = &freeList[i+1];
   }
   freeList[freeListSize-1].next = NULL;
-  this->pendingCount = 0;
   this->head = NULL;
   this->tail = NULL;
   this->cursor = NULL;
@@ -23,16 +22,16 @@ inline void PendingActionList::EnqueuePending(Action *action) {
   node->action = action;
   node->next = NULL;  
   if (tail == NULL) {
-    assert(head == NULL && pendingCount == 0);
+    assert(head == NULL);
     node->prev = NULL;
     head = node;  
   }
   else {
-    assert(head != NULL && pendingCount != 0);
+    assert(head != NULL);
     tail->next = NULL;
     node->prev = tail;
   }
-  pendingCount += 1;
+
   tail = node;
 }
 
