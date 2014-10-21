@@ -158,12 +158,14 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
   }
 
   // DEBUGGIN
+  /*
   pendingList->ResetCursor();
   for (ActionListNode *node = pendingList->GetNext(); node != NULL;
        node = pendingList->GetNext()) {
     assert(node->action != NULL);
   }
-  
+  */
+
   while (!pendingList->IsEmpty()) {
     pendingList->ResetCursor();
     for (ActionListNode *node = pendingList->GetNext(); node != NULL; 
