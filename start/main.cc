@@ -669,7 +669,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     ProfilerStart("/home/jmf/multiversioning/db.prof");
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
 
-    for (int i = 0; i < numEpochs; ++i) {
+    for (int i = 0; i < numEpochs-10; ++i) {
         outputQueue->DequeueBlocking();
         //        std::cout << "Iteration " << i << "\n";
     }

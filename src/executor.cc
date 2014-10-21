@@ -93,6 +93,7 @@ void Executor::Init() {
 
 void Executor::StartWorking() {
   uint32_t epoch = 1;
+  ActionBatch dummy;
   while (true) {
     // Process the new batch of transactions
     ActionBatch batch = config.inputQueue->DequeueBlocking();    
@@ -118,11 +119,17 @@ void Executor::StartWorking() {
           minEpoch = temp;
         }
       }
-
+      
+      uint32_t prev;
       barrier();
+      prev = *config.lowWaterMarkPtr;
       *config.lowWaterMarkPtr = minEpoch;
       barrier();
-      //  std::cout << "LowWaterMark: " << *config.lowWaterMarkPtr << "\n";
+      
+      for (uint32_t i = 0; i < minEpoch - prev; ++i) {
+        config.outputQueue->EnqueueBlocking(dummy);
+      }
+      // std::cout << "LowWaterMark: " << *config.lowWaterMarkPtr << "\n";
     }
     
     // Try to return records that are no longer visible to their owners
