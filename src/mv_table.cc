@@ -27,7 +27,7 @@ bool MVTable::GetLatestVersion(uint32_t partition, const CompositeKey &pkey,
   return tablePartitions[partition]->GetLatestVersion(pkey, version);
 }
 
-bool MVTable::WriteNewVersion(uint32_t partition, const CompositeKey &pkey, 
+bool MVTable::WriteNewVersion(uint32_t partition, CompositeKey &pkey, 
                               Action *action, uint64_t version) {
   assert(partition < numPartitions);      // Validate that partition is valid.
   return tablePartitions[partition]->WriteNewVersion(pkey, action, version);
@@ -148,7 +148,7 @@ bool MVTablePartition::GetLatestVersion(CompositeKey pkey,
 /*
  * Write out a new version for record pkey.
  */
-bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action, 
+bool MVTablePartition::WriteNewVersion(CompositeKey &pkey, Action *action, 
                                        uint64_t version) {
 
   // Allocate an MVRecord to hold the new record.
@@ -181,5 +181,6 @@ bool MVTablePartition::WriteNewVersion(CompositeKey pkey, Action *action,
     cur = cur->link;
   }
   *prev = toAdd;
+  pkey.value = toAdd;
   return true;
 }

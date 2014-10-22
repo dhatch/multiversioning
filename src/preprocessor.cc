@@ -75,7 +75,8 @@ void MVScheduler::Init() {
   std::cout << "Called init on core: " << m_cpu_number << "\n";
 
   this->partitions = 
-    (MVTablePartition**)lock_malloc(sizeof(MVTablePartition*)*config.numTables);
+    (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
+                                  m_cpu_number);
   assert(this->partitions != NULL);
 
   // Initialize the allocator and the partitions.
@@ -132,7 +133,7 @@ void MVScheduler::StartWorking() {
       uint64_t version = compute_version(epoch, txnCounter);
       ScheduleTransaction(curBatch.actionBuf[i], version);
       txnCounter += 1;
-      if (i % 1000 == 0) {
+      if (i % 1024 == 0) {
         Recycle();
       }
     }

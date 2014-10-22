@@ -74,6 +74,9 @@ class PendingActionList {
 
   // Used to iterate through list
   ActionListNode *cursor;
+  
+  uint32_t size;
+  
 
  public:
   PendingActionList(uint32_t freeListSize);
@@ -84,6 +87,7 @@ class PendingActionList {
   void ResetCursor();
   ActionListNode* GetNext();
   bool IsEmpty();
+  uint32_t Size();
 };
 
 class RecordAllocator {
@@ -128,6 +132,8 @@ class Executor : public Runnable {
   virtual void StartWorking();
   virtual void Init();
   void ReturnVersion(MVRecord *record);
+
+  void ExecPending();
 
   void ProcessBatch(const ActionBatch &batch);
   bool ProcessSingle(Action *action);

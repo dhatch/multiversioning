@@ -60,9 +60,7 @@ class MVRecordAllocator {
  public:
 
   void* operator new(std::size_t sz, int cpu) {
-    //return alloc_mem(sz, cpu);
-    //    return alloc_interleaved_all(sz);
-    return malloc(sz);
+    return alloc_mem(sz, cpu);
   };
         
   // Constructor takes a size parameter, which is the total number of bytes 
@@ -75,7 +73,7 @@ class MVRecordAllocator {
   void WriteAllocator();
 
   inline bool Warning() {
-    return count < 100;
+    return count < 128;
   }
 };
 

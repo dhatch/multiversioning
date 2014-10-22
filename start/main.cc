@@ -448,12 +448,12 @@ MVScheduler** SetupSchedulers(int numProcs,
   tblPartitionSizes[0] = partitionChunk;
 
   // Set up queues for leader thread
-  char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 71);            
+  char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 0);            
   SimpleQueue<ActionBatch> *leaderInputQueue = 
     new SimpleQueue<ActionBatch>(inputArray, INPUT_SIZE);
 
   SimpleQueue<ActionBatch> *leaderOutputQueues = 
-    SetupQueuesMany<ActionBatch>(INPUT_SIZE, (uint32_t)numOutputs, 71);
+    SetupQueuesMany<ActionBatch>(INPUT_SIZE, (uint32_t)numOutputs, 0);
   
   MVScheduler **schedArray = 
     (MVScheduler**)alloc_mem(sizeof(MVScheduler*)*numProcs, 79);
@@ -646,7 +646,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
                                             outputQueue,
                                             numExecutors,
                                             schedGCQueues);
-
+    
     schedInputQueue->EnqueueBlocking(inputPlaceholder[0]);
     
     // Run the experiment.
@@ -661,7 +661,8 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     for (int i = 0; i < numEpochs; ++i) {
       schedInputQueue->EnqueueBlocking(inputPlaceholder[i+1]);
     }
-
+    
+    //    outputQueue = &schedOutputQueues[0];
     std::cout << "Running experiment. Epochs: " << numEpochs << "\n";
     timespec start_time, end_time;
 

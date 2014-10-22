@@ -11,12 +11,15 @@ PendingActionList::PendingActionList(uint32_t freeListSize) {
   this->head = NULL;
   this->tail = NULL;
   this->cursor = NULL;
+  this->size = 0;
 }
 
 inline void PendingActionList::EnqueuePending(Action *action) {
   assert(freeList != NULL);
   assert(action != NULL);
+  assert(size >= 0);
 
+  this->size += 1;
   ActionListNode *node = freeList;
   freeList = freeList->next;  
   node->action = action;
@@ -37,7 +40,9 @@ inline void PendingActionList::EnqueuePending(Action *action) {
 
 inline void PendingActionList::DequeuePending(ActionListNode *node) {
   assert(node != cursor);
+  assert(size > 0);
 
+  this->size -= 1;
   if (node->next == NULL && node->prev == NULL) {
     head = NULL;
     tail = NULL;
@@ -75,6 +80,10 @@ inline bool PendingActionList::IsEmpty() {
   return head == NULL;
 }
 
+inline uint32_t PendingActionList::Size() {
+  return this->size;
+}
+
 Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) {
   this->config = cfg;
 }
@@ -87,7 +96,7 @@ void Executor::Init() {
     uint32_t allocSize = config.allocatorSizes[i];
     this->allocators[i] = new RecordAllocator(recSize, allocSize, config.cpu);
   }
-  this->pendingList = new PendingActionList(1000);
+  this->pendingList = new PendingActionList(10000);
   this->garbageBin = new GarbageBin(config.garbageConfig);
 }
 
@@ -160,13 +169,28 @@ void Executor::RecycleData() {
   }
 }
 
+void Executor::ExecPending() {
+  pendingList->ResetCursor();
+  for (ActionListNode *node = pendingList->GetNext(); node != NULL; 
+       node = pendingList->GetNext()) {
+    if (ProcessSingle(node->action)) {
+      pendingList->DequeuePending(node);
+    }
+  }
+}
+
 void Executor::ProcessBatch(const ActionBatch &batch) {
   
   for (uint32_t i = batch.numActions-1-config.threadId; i < batch.numActions;
        i -= config.numExecutors) {
     Action *cur = batch.actionBuf[i];
-    if (!ProcessSingle(cur)) {
-      pendingList->EnqueuePending(cur);
+    if (pendingList->Size() < 10) {
+      if (!ProcessSingle(cur)) {
+        pendingList->EnqueuePending(cur);
+      }
+    }
+    else {
+      
     }
   }
 
@@ -180,13 +204,7 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
   */
 
   while (!pendingList->IsEmpty()) {
-    pendingList->ResetCursor();
-    for (ActionListNode *node = pendingList->GetNext(); node != NULL; 
-         node = pendingList->GetNext()) {
-      if (ProcessSingle(node->action)) {
-        pendingList->DequeuePending(node);
-      }
-    }
+    ExecPending();
   }
 }
 

@@ -10,6 +10,7 @@
 #include <cstring>
 #include <city.h>
 #include <mv_record.h>
+#include <util.h>
 
 class Action;
 
@@ -141,7 +142,12 @@ class Action {
   //  volatile uint64_t __attribute__((aligned(CACHE_LINE))) lock_word;
 
   volatile uint64_t __attribute__((aligned(CACHE_LINE))) state;
-  virtual bool Run() { return true; }
+  virtual bool Run() { 
+    for (int i = 0; i < 1000; ++i) {
+      single_work();
+    }
+    return true; 
+  }
   //  virtual bool IsLinked(Action **cont) { *cont = NULL; return false; }
 };
 
