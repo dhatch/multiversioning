@@ -38,7 +38,7 @@ void*
 lock_malloc(size_t size);
 
 void*
-alloc_interleaved(size_t size, uint32_t threads);
+alloc_interleaved(size_t size, int startCpu, int endCpu);
 
 void*
 alloc_interleaved_all(size_t size);

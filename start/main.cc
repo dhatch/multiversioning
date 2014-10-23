@@ -2,7 +2,7 @@
 #include <preprocessor.h>
 #include <cpuinfo.h>
 #include <config.h>
-#include <lock_thread.h>
+//#include <lock_thread.h>
 #include <executor.h>
 
 #include <gperftools/profiler.h>
@@ -723,6 +723,7 @@ void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs,
   resultFile.close();
 }
 
+/*
 bool SortCmp(LockingCompositeKey key1, LockingCompositeKey key2) {
     uint64_t hash1 = LockingCompositeKey::Hash(&key1) % numLockingRecords;
     uint64_t hash2 = LockingCompositeKey::Hash(&key2) % numLockingRecords;
@@ -806,9 +807,10 @@ LockThread** SetupLockThreads(SimpleQueue<LockActionBatch> **inputQueue,
   }
   return ret;
 }
+*/
 
 void LockingExperiment(LockingConfig config) {
-    
+/*
   SimpleQueue<LockActionBatch> **inputs = 
     (SimpleQueue<LockActionBatch>**)malloc(sizeof(SimpleQueue<LockActionBatch>*)
                                            *config.numThreads);
@@ -865,6 +867,7 @@ void LockingExperiment(LockingConfig config) {
   resultFile << config.numThreads << "\n";
   //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
   resultFile.close();  
+  */
 }
 
 // arg0: number of scheduler threads

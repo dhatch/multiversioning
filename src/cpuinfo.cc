@@ -145,10 +145,10 @@ alloc_mem(size_t size, int cpu) {
   }
 }
 
-void* alloc_interleaved(size_t size, uint32_t threads) {
+void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
   struct bitmask *mask = numa_bitmask_alloc(80);
   numa_set_strict(1);
-  for (uint32_t i = 0; i < threads; ++i) {
+  for (int i = startCpu; i < endCpu; ++i) {
     mask = numa_bitmask_setbit(mask, i);
   }
   void *buf = numa_alloc_interleaved_subset(size, mask);

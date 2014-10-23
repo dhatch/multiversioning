@@ -1,63 +1,57 @@
-#ifndef         LOCK_MANAGER_H_
-#define         LOCK_MANAGER_H_
+#ifndef LOCK_MANAGER_HH_
+#define LOCK_MANAGER_HH_
 
 #include <action.h>
-#include <cpuinfo.h>
-#include <unordered_map>
+#include <deque>
+#include <lock_manager_table.h>
+#include <pthread.h>
 
 using namespace std;
 
-class LockBucket {  
- public:
-    volatile LockBucketEntry *tail;
-   volatile LockBucketEntry *head;
-  volatile uint64_t lockWord;
-  LockBucket();
-  
-  void AppendEntry(LockBucketEntry *entry, uint32_t threadId);
-  void ReleaseLock();
-} __attribute__((__packed__, __aligned__(CACHE_LINE)));
+class LockManager {    
+private:
+  LockManagerTable *table;
 
-class LockManagerTable {
- private:
-  LockBucket *entries;
-  uint64_t numEntries;
+    bool
+    CheckWrite(struct TxnQueue *queue, struct EagerRecordInfo *dep);
 
- public:
-  LockManagerTable(uint64_t numEntries, uint32_t threads);
-  
-  void AcquireLock(LockingCompositeKey *key, uint32_t threadId);
-  
-  void CompleteLockPhase(LockingCompositeKey *key);  
+    bool
+    CheckRead(struct TxnQueue *queue, struct EagerRecordInfo *dep);
+
+    void
+    AddTxn(struct TxnQueue *queue, struct EagerRecordInfo *dep);
+
+    void
+    RemoveTxn(struct TxnQueue *queue, 
+              struct EagerRecordInfo *dep, 
+              struct EagerRecordInfo **prev,
+              struct EagerRecordInfo **next);
+
+    void
+    AdjustRead(struct EagerRecordInfo *dep);
+
+    void
+    AdjustWrite(struct EagerRecordInfo *dep);
+
+    bool
+    QueueContains(TxnQueue *queue, EagerAction *txn);
+
+    void
+    FinishAcquisitions(EagerAction *txn);
+
+    void LockRecord(EagerAction *txn, struct EagerRecordInfo *dep, int cpu);
+
+public:
+    //    LockManager(cc_params::TableInit *params, int num_params);
+    
+    // Acquire and release the mutex protecting a particular hash chain
+    virtual void Unlock(EagerAction *txn, int cpu);
+
+    virtual bool Lock(EagerAction *txn, int cpu);
+    
+    //    virtual void Kill(EagerAction *txn, int cpu);
+
+    //    bool CheckLocks(EagerAction *txn);
 };
 
-class BucketEntryAllocator {
- private:
-  LockBucketEntry *freeList;
-
- public:
-  void* operator new(std::size_t sz, int cpu) {
-    return alloc_mem(sz, cpu);
-  }
-
-  BucketEntryAllocator(uint32_t numEntries, int cpu);
-  
-  bool GetEntry(LockBucketEntry **OUT_ENTRY);
-  
-  void ReturnEntry(LockBucketEntry *entry);
-};
-
-class LockManager {
-  friend class LockManagerTest;
-
- private:
-  LockManagerTable **tables;
-  uint32_t numTables;
-  
- public:
-  LockManager(const unordered_map<uint32_t, uint64_t>& tableInfo, uint32_t numTables, uint32_t threads);
-
-  void AcquireLocks(LockingAction *action, uint32_t threadId);
-};
-
-#endif          // LOCK_MANAGER_H_
+#endif // LOCK_MANAGER_HH_
