@@ -46,8 +46,15 @@ private:
 
 protected:    
   virtual void StartWorking();
+  
+  virtual void Init();
 
 public:
+
+  void* operator new(std::size_t sz, int cpu) {
+    return alloc_mem(sz, cpu);
+  }
+
   EagerWorker(EagerWorkerConfig config);
     
   uint32_t NumProcessed() {

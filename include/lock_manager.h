@@ -42,7 +42,7 @@ private:
     void LockRecord(EagerAction *txn, struct EagerRecordInfo *dep, int cpu);
 
 public:
-    //    LockManager(cc_params::TableInit *params, int num_params);
+    LockManager(LockManagerConfig config);
     
     // Acquire and release the mutex protecting a particular hash chain
     virtual void Unlock(EagerAction *txn, int cpu);

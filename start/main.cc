@@ -2,7 +2,7 @@
 #include <preprocessor.h>
 #include <cpuinfo.h>
 #include <config.h>
-//#include <lock_thread.h>
+#include <eager_worker.h>
 #include <executor.h>
 
 #include <gperftools/profiler.h>
@@ -733,53 +733,49 @@ bool SortCmp(LockingCompositeKey key1, LockingCompositeKey key2) {
     //    uint32_t thread2 = CompositeKey::Hash(&key2) % MVScheduler::NUM_CC_THREADS;
     //    return thread1 > thread2;
 }
+*/
 
-LockingAction** CreateSingleLockingActionBatch(uint32_t numTxns, 
-                                               uint32_t txnSize, 
-                                            uint64_t numRecords) { 
-    std::cout << "Num records: " << numRecords << "\n";
-    std::cout << "Txn size: " << txnSize << "\n";
-    numLockingRecords = numRecords;
-  LockingAction **ret = 
-    (LockingAction**)alloc_mem(numTxns*sizeof(LockingAction*), 71);
+EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize, 
+                                             uint64_t numRecords) { 
+  std::cout << "Num records: " << numRecords << "\n";
+  std::cout << "Txn size: " << txnSize << "\n";
+  numLockingRecords = numRecords;
+  EagerAction **ret = 
+    (EagerAction**)alloc_mem(numTxns*sizeof(EagerAction*), 71);
   assert(ret != NULL);
-  memset(ret, 0x0, numTxns*sizeof(LockingAction*));
+  memset(ret, 0x0, numTxns*sizeof(EagerAction*));
   std::set<uint64_t> seenKeys; 
-  LockingCompositeKey k;
-  k.bucketEntry.isRead = false;
-  k.bucketEntry.next = (volatile LockBucketEntry*)NULL;
-  k.tableId = 0;
+
+  EagerRecordInfo recordInfo;
 
   for (uint32_t i = 0; i < numTxns; ++i) {
     seenKeys.clear();
-    LockingAction *action = new LockingAction();    
+    EagerAction *action = new EagerAction();    
     for (uint32_t j = 0; j < txnSize; ++j) {
       while (true) {
-          k.key = rand() % numRecords;
-          if (seenKeys.find(k.key) == seenKeys.end()) {
-              seenKeys.insert(k.key);
-              //          k.key = key;
-              k.bucketEntry.action = action;
-              action->writeset.push_back(k);
-              break;
+        uint64_t key = rand() % numRecords;
+        if (seenKeys.find(key) == seenKeys.end()) {
+          seenKeys.insert(key);
+          recordInfo.is_write = true;
+          recordInfo.record.key = key;
+          action->writeset.push_back(recordInfo);
+          break;
         }
       }
     }
-    std::sort(action->writeset.begin(), action->writeset.end(), SortCmp);
+    std::sort(action->writeset.begin(), action->writeset.end());
     ret[i] = action;
   }
   return ret;
 }
 
-
-
-LockActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads, 
-                               uint32_t numTxns, uint32_t numRecords) {
-  LockActionBatch *ret = 
-    (LockActionBatch*)malloc(sizeof(LockActionBatch)*numThreads);
+EagerActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads, 
+                                    uint32_t numTxns, uint32_t numRecords) {
+  EagerActionBatch *ret = 
+    (EagerActionBatch*)malloc(sizeof(EagerActionBatch)*numThreads);
   uint32_t txnsPerThread = numTxns/numThreads;
   for (uint32_t i = 0; i < numThreads; ++i) {
-    LockingAction **actions = 
+    EagerAction **actions = 
       CreateSingleLockingActionBatch(txnsPerThread, txnSize, numRecords);
     ret[i] = {
       txnsPerThread,
@@ -789,50 +785,68 @@ LockActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads,
   return ret;
 }
 
-LockThread** SetupLockThreads(SimpleQueue<LockActionBatch> **inputQueue, 
-                              SimpleQueue<LockActionBatch> **outputQueue, 
-                              uint32_t allocatorSize, 
-                              LockManager *mgr, 
-                              int numThreads) {
-  LockThread **ret = (LockThread**)malloc(sizeof(LockThread*)*numThreads);
+EagerWorker** SetupLockThreads(SimpleQueue<EagerActionBatch> **inputQueue, 
+                               SimpleQueue<EagerActionBatch> **outputQueue, 
+                               uint32_t allocatorSize, 
+                               LockManager *mgr, 
+                               int numThreads) {
+  EagerWorker **ret = (EagerWorker**)malloc(sizeof(EagerWorker*)*numThreads);
   assert(ret != NULL);
   for (int i = 0; i < numThreads; ++i) {
-    LockThreadConfig cfg = {
-      allocatorSize,
+    struct EagerWorkerConfig conf = {
+      mgr, 
       inputQueue[i],
       outputQueue[i],
-      mgr,
+      i,
+      100,
     };
-    ret[i] = new (i) LockThread(cfg, i);
+    ret[i] = new (i) EagerWorker(conf);
   }
   return ret;
 }
-*/
+
+
 
 void LockingExperiment(LockingConfig config) {
-/*
-  SimpleQueue<LockActionBatch> **inputs = 
-    (SimpleQueue<LockActionBatch>**)malloc(sizeof(SimpleQueue<LockActionBatch>*)
-                                           *config.numThreads);
+  
+  // Setup input queues
+  SimpleQueue<EagerActionBatch> **inputs = 
+    (SimpleQueue<EagerActionBatch>**)malloc(sizeof(SimpleQueue<EagerActionBatch>*)
+                                            *config.numThreads);
   for (uint32_t i = 0; i < config.numThreads; ++i) {
     char *data = (char*)alloc_mem(CACHE_LINE*1024, 71);
-    inputs[i] = new SimpleQueue<LockActionBatch>(data, 1024);
+    inputs[i] = new SimpleQueue<EagerActionBatch>(data, 1024);
   }
 
-  SimpleQueue<LockActionBatch> **outputs = 
-    (SimpleQueue<LockActionBatch>**)malloc(sizeof(SimpleQueue<LockActionBatch>*)
+  // Setup output queues
+  SimpleQueue<EagerActionBatch> **outputs = 
+    (SimpleQueue<EagerActionBatch>**)malloc(sizeof(SimpleQueue<EagerActionBatch>*)
                                            *config.numThreads);
   for (uint32_t i = 0; i < config.numThreads; ++i) {
     char *data = (char*)alloc_mem(CACHE_LINE*1024, 71);
-    outputs[i] = new SimpleQueue<LockActionBatch>(data, 1024);
+    outputs[i] = new SimpleQueue<EagerActionBatch>(data, 1024);
   }
-  
+
+  // Setup the lock manager
+  uint64_t tableSizes[] = {(uint64_t)(config.numRecords)};
+  uint32_t numTables = 1;
+  LockManagerConfig cfg = {
+    1,
+    tableSizes,
+    0,
+    (int)(config.numThreads-1),
+    (1<<30)/sizeof(TxnQueue),
+  };  
   unordered_map<uint32_t, uint64_t> tblInfo;
   tblInfo[0] = config.numRecords;
-  LockManager *mgr = new LockManager(tblInfo, 1, config.numThreads);
-  LockThread **threads = SetupLockThreads(inputs, outputs, 256, mgr, 
+  LockManager *mgr = new LockManager(cfg);
+
+  // Setup worker threads
+  EagerWorker **threads = SetupLockThreads(inputs, outputs, 256, mgr, 
                                           config.numThreads);
-  LockActionBatch *batches = SetupLockingInput(config.txnSize, 
+
+  // Setup input
+  EagerActionBatch *batches = SetupLockingInput(config.txnSize, 
                                                config.numThreads,
                                                config.numTxns,
                                                config.numRecords);
@@ -867,7 +881,6 @@ void LockingExperiment(LockingConfig config) {
   resultFile << config.numThreads << "\n";
   //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
   resultFile.close();  
-  */
 }
 
 // arg0: number of scheduler threads

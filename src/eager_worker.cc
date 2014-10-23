@@ -9,6 +9,9 @@ EagerWorker::EagerWorker(EagerWorkerConfig config)
     m_num_done = 0;
 }
 
+void EagerWorker::Init() {
+}
+
 void
 EagerWorker::StartWorking() {
     WorkerFunction();

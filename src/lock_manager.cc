@@ -1,10 +1,9 @@
 #include <lock_manager.h>
-/*
-LockManager::LockManager(TableInit *params, int num_params) {
-    m_tables = do_tbl_init<TxnQueue>(params, num_params);
-    assert(m_tables != NULL);
+
+LockManager::LockManager(LockManagerConfig config) {
+  table = new LockManagerTable(config);
 }
-*/
+
 bool
 LockManager::CheckWrite(struct TxnQueue *queue, struct EagerRecordInfo *dep) {
     bool ret = (queue->head == dep);
