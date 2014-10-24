@@ -391,7 +391,12 @@ bool Executor::ProcessTxn(Action *action) {
     }    
   }
 
+  barrier();
+  action->state = SUBSTANTIATED;
+  barrier();
+  
   for (uint32_t i = 0; i < numWrites; ++i) {
+    action->writeset[i].value->writer = NULL;
     MVRecord *previous = action->writeset[i].value->recordLink;
     if (previous != NULL) {
         
@@ -404,8 +409,6 @@ bool Executor::ProcessTxn(Action *action) {
       garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
     }
   }
-  
-  xchgq(&action->state, SUBSTANTIATED);
   return ready;
 }
 
