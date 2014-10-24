@@ -618,7 +618,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     schedThreads = SetupSchedulers(numCCThreads, &schedInputQueue, 
                                    &schedOutputQueues, 
                                    (uint32_t)numExecutors,
-                                   (uint64_t)1<<30, 
+                                   (uint64_t)1<<28, 
                                    numRecords, 
                                    schedGCQueues);
     assert(schedThreads != NULL);
@@ -667,6 +667,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     timespec start_time, end_time;
 
     outputQueue->DequeueBlocking();
+    //    outputQueue = &schedOutputQueues[numExecutors];
     ProfilerStart("/home/jmf/multiversioning/db.prof");
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
 
@@ -763,7 +764,7 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
         }
       }
     }
-    std::sort(action->writeset.begin(), action->writeset.end());
+    //    std::sort(action->writeset.begin(), action->writeset.end());
     ret[i] = action;
   }
   return ret;
@@ -828,7 +829,8 @@ void LockingExperiment(LockingConfig config) {
   }
 
   // Setup the lock manager
-  uint64_t tableSizes[] = {(uint64_t)(config.numRecords)};
+  uint64_t *tableSizes = (uint64_t*)malloc(sizeof(uint64_t));
+  *tableSizes = (uint64_t)config.numRecords;
   uint32_t numTables = 1;
   LockManagerConfig cfg = {
     1,

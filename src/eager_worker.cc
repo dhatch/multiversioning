@@ -133,7 +133,6 @@ EagerWorker::DoExec(EagerAction *txn) {
 
 void
 EagerWorker::WorkerFunction() {
-  EagerAction *txn;
 
   // Each iteration of this loop executes a batch of transactions
   while (true) {
@@ -143,7 +142,7 @@ EagerWorker::WorkerFunction() {
       // Ensure we haven't exceeded threshold of max deferred txns. If we have, 
       // exec pending txns so we get below the threshold.
       if (m_num_elems < config.maxPending) {
-        TryExec(txn);
+        TryExec(batch.batch[i]);
       }
       else {
         while (m_num_elems >= config.maxPending) {

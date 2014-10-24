@@ -143,9 +143,9 @@ class Action {
 
   volatile uint64_t __attribute__((aligned(CACHE_LINE))) state;
   virtual bool Run() { 
-    for (int i = 0; i < 1000; ++i) {
-      single_work();
-    }
+    //    for (int i = 0; i < 10000; ++i) {
+    //      single_work();
+    //    }
     return true; 
   }
   //  virtual bool IsLinked(Action **cont) { *cont = NULL; return false; }
@@ -261,7 +261,13 @@ class EagerAction {
 
     //    virtual bool IsRoot() { return false; }
     //    virtual bool IsLinked(EagerAction **ret) { *ret = NULL; return false; };
-    virtual bool Run() { return true; };
+    virtual bool Run() { 
+      //      for (int i = 0; i < 10000; ++i) {
+      //        single_work();
+      //      }
+      return true; 
+    }
+
     //    virtual void PostExec() { };
 
     EagerAction *next;

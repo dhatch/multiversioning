@@ -122,6 +122,7 @@ class LockManagerTable {
     
     // Couldn't find anything, create a new record
     TxnQueue *toAdd = allocators[cpu]->Get();
+    toAdd->key = key;
     toAdd->next = NULL;
     *iter = toAdd;
     return toAdd;
@@ -144,6 +145,7 @@ class LockManagerTable {
   LockManagerTable(LockManagerConfig config) {
     this->startCpu = config.startCpu;
     this->endCpu = config.endCpu;
+    this->tableSizes = config.tableSizes;
 
     uint64_t totalSz = 0;
     for (uint32_t i = 0; i < config.numTables; ++i) {      

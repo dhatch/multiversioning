@@ -1,4 +1,5 @@
 #include <lock_manager.h>
+#include <algorithm>
 
 LockManager::LockManager(LockManagerConfig config) {
   table = new LockManagerTable(config);
@@ -108,7 +109,6 @@ LockManager::RemoveTxn(struct TxnQueue *queue,
         queue->head = next;
     }
     else {
-        //        assert(false); // XXX: REMOVE ME
         assert(prev->next == dep);
         prev->next = next;
     }
@@ -118,7 +118,6 @@ LockManager::RemoveTxn(struct TxnQueue *queue,
         queue->tail = prev;
     }
     else {
-        //        assert(false); // XXX: REMOVE ME
         assert(next->prev == dep);
         next->prev = prev;
     }
@@ -246,49 +245,49 @@ LockManager::Kill(EagerAction *txn, int cpu) {
 
 void
 LockManager::Unlock(EagerAction *txn, int cpu) {
-    struct EagerRecordInfo *prev;
-    struct EagerRecordInfo *next;
+  struct EagerRecordInfo *prev;
+  struct EagerRecordInfo *next;
     
-    for (size_t i = 0; i < txn->writeset.size(); ++i) {
-      TxnQueue *value = table->GetPtr(txn->writeset[i].record, cpu);
-      assert(value != NULL);
+  for (size_t i = 0; i < txn->writeset.size(); ++i) {
+    TxnQueue *value = table->GetPtr(txn->writeset[i].record, cpu);
+    assert(value != NULL);
 
-        struct EagerRecordInfo *dep = &txn->writeset[i];
+    struct EagerRecordInfo *dep = &txn->writeset[i];
 
-        lock(&value->lock_word);
-        // pthread_mutex_lock(&value->mutex);
-        assert((value->head == NULL && value->tail == NULL) ||
-               (value->head != NULL && value->tail != NULL));
+    lock(&value->lock_word);
+    // pthread_mutex_lock(&value->mutex);
+    assert((value->head == NULL && value->tail == NULL) ||
+           (value->head != NULL && value->tail != NULL));
 
-        assert(dep->is_held);
-        RemoveTxn(value, dep, &prev, &next);
-        assert(prev == NULL);	// A write better be at the front of the queue
-        AdjustWrite(dep);
-        assert((value->head == NULL && value->tail == NULL) ||
-               (value->head != NULL && value->tail != NULL));
-        unlock(&value->lock_word);
-        // pthread_mutex_unlock(&value->mutex);
-    }
-    for (size_t i = 0; i < txn->readset.size(); ++i) {
-      TxnQueue *value = table->GetPtr(txn->readset[i].record, cpu);
-      assert(value != NULL);
+    assert(dep->is_held);
+    RemoveTxn(value, dep, &prev, &next);
+    assert(prev == NULL);	// A write better be at the front of the queue
+    AdjustWrite(dep);
+    assert((value->head == NULL && value->tail == NULL) ||
+           (value->head != NULL && value->tail != NULL));
+    unlock(&value->lock_word);
+    // pthread_mutex_unlock(&value->mutex);
+  }
+  for (size_t i = 0; i < txn->readset.size(); ++i) {
+    TxnQueue *value = table->GetPtr(txn->readset[i].record, cpu);
+    assert(value != NULL);
 
-        struct EagerRecordInfo *dep = &txn->readset[i];
-        lock(&value->lock_word);
-        // pthread_mutex_lock(&value->mutex);
+    struct EagerRecordInfo *dep = &txn->readset[i];
+    lock(&value->lock_word);
+    // pthread_mutex_lock(&value->mutex);
 
-        assert((value->head == NULL && value->tail == NULL) ||
-               (value->head != NULL && value->tail != NULL));
+    assert((value->head == NULL && value->tail == NULL) ||
+           (value->head != NULL && value->tail != NULL));
 
-        assert(dep->is_held);
-        RemoveTxn(value, dep, &prev, &next);
-        AdjustRead(dep);
-        assert((value->head == NULL && value->tail == NULL) ||
-               (value->head != NULL && value->tail != NULL));
-        unlock(&value->lock_word);
-        // pthread_mutex_unlock(&value->mutex);
-    }
-    txn->finished_execution = true;
+    assert(dep->is_held);
+    RemoveTxn(value, dep, &prev, &next);
+    AdjustRead(dep);
+    assert((value->head == NULL && value->tail == NULL) ||
+           (value->head != NULL && value->tail != NULL));
+    unlock(&value->lock_word);
+    // pthread_mutex_unlock(&value->mutex);
+  }
+  txn->finished_execution = true;
 }
 
 void
@@ -377,6 +376,9 @@ LockManager::Lock(EagerAction *txn, int cpu) {
     txn->finished_execution = false;
     size_t read_index = 0;
     size_t write_index = 0;
+
+    std::sort(txn->readset.begin(), txn->readset.end());
+    std::sort(txn->writeset.begin(), txn->writeset.end());
     
     // Acquire locks in sorted order. Both read and write sets are sorted according to 
     // key we need to merge them together.

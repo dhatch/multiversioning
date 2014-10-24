@@ -94,10 +94,12 @@ void Executor::Init() {
   for (uint32_t i = 0; i < config.numTables; ++i) {
     uint32_t recSize = config.recordSizes[i];
     uint32_t allocSize = config.allocatorSizes[i];
-    this->allocators[i] = new RecordAllocator(recSize, allocSize, config.cpu);
+    this->allocators[i] = 
+      new (config.cpu) RecordAllocator(recSize, allocSize, config.cpu);
   }
-  this->pendingList = new PendingActionList(10000);
-  this->garbageBin = new GarbageBin(config.garbageConfig);
+  this->pendingList = new (config.cpu) PendingActionList(1000);
+  this->garbageBin = new (config.cpu) GarbageBin(config.garbageConfig);
+  //  this->pendingGC = new (config.cpu) PendingActionList(10000);
 }
 
 void Executor::StartWorking() {
@@ -107,11 +109,19 @@ void Executor::StartWorking() {
     // Process the new batch of transactions
     ActionBatch batch = config.inputQueue->DequeueBlocking();    
     ProcessBatch(batch);
-    
-    // Tell other threads that this epoch is finished
+
     barrier();
     *config.epochPtr = epoch;
     barrier();
+    
+    /*
+    if (DoPendingGC()) {
+      // Tell other threads that this epoch is finished
+      barrier();
+      *config.epochPtr = epoch;
+      barrier();
+    }
+    */
     
     // If this is the leader thread, try to advance the low-water mark to 
     // trigger garbage collection
@@ -208,6 +218,57 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
   }
 }
 
+bool Executor::DoPendingGC() {
+  return false;
+  /*
+  bool allDone = true;
+  pendingGC->ResetCursor();
+  
+  for (ActionListNode *node = pendingGC->GetNext(); node != NULL; 
+       node = pendingGC->GetNext()) {
+    if ((allDone = ProcessSingleGC(node->action))) {
+      pendingGC->DequeuePending(node);
+    }
+  }
+  
+  pendingGC->ResetCursor();
+  ActionListNode *node = pendingGC->GetNext();
+  if (node->
+  */
+}
+
+bool Executor::ProcessSingleGC(Action *action) {
+  uint32_t numWrites = action->writeset.size();
+  bool ret = true;
+
+  // Garbage collect the previous versions
+  for (uint32_t i = 0; i < numWrites; ++i) {
+    MVRecord *previous = action->writeset[i].value->recordLink;
+    if (previous != NULL) {
+      ret &= (previous->writer == NULL || 
+              previous->writer->state == SUBSTANTIATED);
+    }
+  }
+  
+  if (ret) {
+    for (uint32_t i = 0; i < numWrites; ++i) {
+      MVRecord *previous = action->writeset[i].value->recordLink;
+      if (previous != NULL) {
+        
+        // Since the previous txn has been substantiated, the record's value 
+        // shouldn't be NULL.
+        assert(previous->value != NULL);
+        garbageBin->AddRecord(previous->writingThread, 
+                              action->writeset[i].tableId,
+                              previous->value);
+        garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
+      }
+    }
+  }
+  
+  return ret;
+}
+
 bool Executor::ProcessSingle(Action *action) {
   assert(action != NULL);
   if (action->state != SUBSTANTIATED) {
@@ -273,7 +334,6 @@ bool Executor::ProcessTxn(Action *action) {
   }    
 
   for (size_t i = 0; i < numWrites; ++i) {
-    
     // Keep a reference to the sticky we need to evaluate. 
     if (action->writeset[i].value == NULL) {
       
@@ -331,18 +391,17 @@ bool Executor::ProcessTxn(Action *action) {
     }    
   }
 
-  // Garbage collect the previous versions
   for (uint32_t i = 0; i < numWrites; ++i) {
     MVRecord *previous = action->writeset[i].value->recordLink;
     if (previous != NULL) {
-      assert(previous->writer == NULL || 
-             previous->writer->state == SUBSTANTIATED);
-      if (previous->value != NULL) {
-        garbageBin->AddRecord(previous->writingThread, 
-                              action->writeset[i].tableId,
-                              previous->value);
-      }
-      garbageBin->AddMVRecord(action->writeset[i].threadId, previous);      
+        
+      // Since the previous txn has been substantiated, the record's value 
+      // shouldn't be NULL.
+      assert(previous->value != NULL);
+      garbageBin->AddRecord(previous->writingThread, 
+                            action->writeset[i].tableId,
+                            previous->value);
+      garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
     }
   }
   

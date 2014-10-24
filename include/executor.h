@@ -54,6 +54,10 @@ class GarbageBin {
   void ReturnGarbage();
 
  public:
+  void* operator new(std::size_t sz, int cpu) {
+    return alloc_mem(sz, cpu);
+  }
+  
   GarbageBin(GarbageBinConfig config);
 
   void AddRecord(uint32_t workerThread, uint32_t tableId, Record *rec);
@@ -79,6 +83,10 @@ class PendingActionList {
   
 
  public:
+  void* operator new(std::size_t sz, int cpu) {
+    return alloc_mem(sz, cpu);
+  }
+
   PendingActionList(uint32_t freeListSize);
 
   void EnqueuePending(Action *action);
@@ -95,6 +103,10 @@ class RecordAllocator {
   Record *freeList;
   
  public:
+  void* operator new(std::size_t sz, int cpu) {
+    return alloc_mem(sz, cpu);
+  }
+
   RecordAllocator(size_t recordSize, uint32_t numRecords, int cpu);  
   bool GetRecord(Record **OUT_REC);
   void FreeSingle(Record *rec);
@@ -126,6 +138,8 @@ class Executor : public Runnable {
 
   RecordAllocator **allocators;
 
+  PendingActionList *pendingGC;
+
  protected:
 
   //  Executor(ExecutorConfig config);
@@ -140,6 +154,10 @@ class Executor : public Runnable {
   bool ProcessTxn(Action *action);
 
   void RecycleData();
+
+
+  bool DoPendingGC();
+  bool ProcessSingleGC(Action *action);
 
  public:
   void* operator new(std::size_t sz, int cpu) {
