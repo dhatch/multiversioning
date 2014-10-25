@@ -315,9 +315,7 @@ SimpleQueue<RecordList>* SetupGCQueues(uint32_t cpuNumber,
 ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId, 
                          uint32_t numWorkerThreads, 
                          volatile uint32_t *epoch, 
-                         volatile uint32_t *lowWaterMarkPtr,
-                         volatile uint32_t *gcEpoch,
-                         volatile uint32_t *gcLowWaterMarkPtr,
+                         volatile uint32_t *GClowWaterMarkPtr,
                          uint32_t *recordSizes, 
                          uint32_t *allocSizes,
                          SimpleQueue<ActionBatch> *inputQueue, 
@@ -331,7 +329,7 @@ ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId,
   GarbageBinConfig gcConfig = SetupGCConfig(numCCThreads, numWorkerThreads, 
                                             numTables, 
                                             cpuNumber,
-                                            gcLowWaterMarkPtr);
+                                            GClowWaterMarkPtr);
 
   // GC queues for this particular worker
   SimpleQueue<RecordList> *gcQueues = SetupGCQueues(cpuNumber, queuesPerTable, 
@@ -341,9 +339,7 @@ ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId,
     numWorkerThreads,
     cpuNumber,
     epoch,
-    lowWaterMarkPtr,
-    gcEpoch,
-    gcLowWaterMarkPtr,
+    GClowWaterMarkPtr,
     inputQueue,
     outputQueue,
     1,
@@ -372,10 +368,6 @@ Executor** SetupExecutors(uint32_t cpuStart,
     (volatile uint32_t*)malloc(sizeof(uint32_t)*(numWorkers+1));  
   memset((void*)epochArray, 0x0, sizeof(uint32_t)*(numWorkers+1));
 
-  volatile uint32_t *gcEpochArray = 
-    (volatile uint32_t*)malloc(sizeof(uint32_t)*(numWorkers+1));  
-  memset((void*)gcEpochArray, 0x0, sizeof(uint32_t)*(numWorkers+1));
-
   uint32_t numTables = 1;
 
   uint32_t *sizeData = (uint32_t*)malloc(sizeof(uint32_t)*2);
@@ -392,8 +384,6 @@ Executor** SetupExecutors(uint32_t cpuStart,
     }
     configs[i] = SetupExec(cpuStart+i, i, numWorkers, &epochArray[i], 
                            &epochArray[numWorkers],
-                           &gcEpochArray[i],
-                           &gcEpochArray[numWorkers],
                            &sizeData[0],
                            &sizeData[1],
                            &inputQueue[i],
@@ -551,7 +541,7 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
         ret[j] = new Action();
         assert(ret[j] != NULL);
         ret[j]->combinedHash = 0;
-        ret[j]->version = ((uint64_t)epoch << 32 | j);
+        ret[j]->version = ((uint64_t)epoch << 32 | counter);
         ret[j]->state = STICKY;
         for (int i = 0; i < txnSize; ++i) {        
             /*

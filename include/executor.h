@@ -120,8 +120,6 @@ struct ExecutorConfig {
   int cpu;
   volatile uint32_t *epochPtr;
   volatile uint32_t *lowWaterMarkPtr;
-  volatile uint32_t *gcEpochPtr;
-  volatile uint32_t *gcLowWaterMarkPtr;
   SimpleQueue<ActionBatch> *inputQueue;
   SimpleQueue<ActionBatch> *outputQueue;
   uint32_t numTables;
@@ -153,15 +151,15 @@ class Executor : public Runnable {
 
   void ExecPending();
 
-  uint32_t ProcessBatch(const ActionBatch &batch);
+  void ProcessBatch(const ActionBatch &batch);
   bool ProcessSingle(Action *action);
   bool ProcessTxn(Action *action);
 
   void RecycleData();
 
 
-  void DoPendingGC();
-  void ProcessSingleGC(Action *action, uint32_t epoch);
+  uint32_t DoPendingGC();
+  bool ProcessSingleGC(Action *action);
 
  public:
   void* operator new(std::size_t sz, int cpu) {

@@ -150,8 +150,7 @@ bool MVTablePartition::GetLatestVersion(CompositeKey pkey,
  */
 bool MVTablePartition::WriteNewVersion(CompositeKey &pkey, Action *action, 
                                        uint64_t version) {
-  
-  assert(version == action->version);
+
   // Allocate an MVRecord to hold the new record.
   MVRecord *toAdd;
   bool success = allocator->GetRecord(&toAdd);
@@ -175,7 +174,6 @@ bool MVTablePartition::WriteNewVersion(CompositeKey &pkey, Action *action,
       toAdd->link = cur->link;
       toAdd->recordLink = cur;
       cur->deleteTimestamp = version;
-      assert(cur->createTimestamp < version);
       break;
     }
 

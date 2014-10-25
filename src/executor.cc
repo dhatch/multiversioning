@@ -140,37 +140,38 @@ void Executor::Init() {
 }
 
 void Executor::StartWorking() {
-
+  uint32_t epoch = 1;
   ActionBatch dummy;
-  uint32_t epoch = 0;
-  bool proc = false;
   while (true) {
     // Process the new batch of transactions
-    proc = false;
+    ActionBatch batch = config.inputQueue->DequeueBlocking();    
+    ProcessBatch(batch);
 
-    ActionBatch batch;
-    if (config.inputQueue->Dequeue(&batch)) {
-      epoch = ProcessBatch(batch);
-      barrier();
-      *config.epochPtr = epoch;
-      barrier();
+    uint32_t doneEpoch = DoPendingGC();
+    if (doneEpoch == 0xFFFFFFFF) {
+      doneEpoch = epoch;
     }
     else {
-      for (uint32_t k = 0; k < 100; ++k) {
-        single_work();
-      }
+      doneEpoch = doneEpoch-1;
     }
+    barrier();
+    *config.epochPtr = doneEpoch;
+    barrier();
     
     //    assert(pendingGC->IsEmpty());
     // If this is the leader thread, try to advance the low-water mark to 
     // trigger garbage collection
     if (config.threadId == 0) {
-
+      //      std::cout << "Pending count: " << pendingGC->Size() << "\n";
       volatile uint32_t minEpoch = *config.epochPtr;
+      
+      //      std::cout << "0:" << minEpoch << "\n";
       for (uint32_t i = 1; i < config.numExecutors; ++i) {
         barrier();
         volatile uint32_t temp = config.epochPtr[i];
+        //        std::cout << i << ":" << temp << "\n";
         barrier();
+        
         if (temp < minEpoch) {
           minEpoch = temp;
         }
@@ -185,26 +186,11 @@ void Executor::StartWorking() {
       for (uint32_t i = 0; i < minEpoch - prev; ++i) {
         config.outputQueue->EnqueueBlocking(dummy);
       }
-      
-      volatile uint32_t minGCEpoch = *config.gcEpochPtr;
-      for (uint32_t i = 1; i < config.numExecutors; ++i) {
-        barrier();
-        volatile uint32_t temp = config.gcEpochPtr[i];
-        barrier();
-        if (temp < minGCEpoch) {
-          minGCEpoch = temp;
-        }
-      }
-      
-      barrier();
-      *config.gcLowWaterMarkPtr = minGCEpoch;
-      barrier();
+      // std::cout << "LowWaterMark: " << *config.lowWaterMarkPtr << "\n";
     }
-
-    DoPendingGC();
     
     // Try to return records that are no longer visible to their owners
-    garbageBin->FinishEpoch(*config.gcEpochPtr);
+    garbageBin->FinishEpoch(epoch);
     
     // Check if there's any garbage we can recycle. Insert into our record 
     // allocators.
@@ -241,10 +227,8 @@ void Executor::ExecPending() {
   }
 }
 
-uint32_t Executor::ProcessBatch(const ActionBatch &batch) {
+void Executor::ProcessBatch(const ActionBatch &batch) {
   
-  assert(batch.numActions > 0);
-  uint32_t epoch = batch.actionBuf[0]->version>>32;
   for (uint32_t i = batch.numActions-1-config.threadId; i < batch.numActions;
        i -= config.numExecutors) {
     Action *cur = batch.actionBuf[i];
@@ -265,8 +249,6 @@ uint32_t Executor::ProcessBatch(const ActionBatch &batch) {
   while (!pendingList->IsEmpty()) {
     ExecPending();
   }
-  
-  return epoch;
 }
 
 static uint32_t GetEpoch(Action *action) {
@@ -274,40 +256,60 @@ static uint32_t GetEpoch(Action *action) {
   return ((action->version & mask) >> 32);
 }
 
-// 
-void Executor::DoPendingGC() {
-  volatile uint32_t lowWaterMark = *config.lowWaterMarkPtr;
+// Returns the epoch of the oldest pending record.
+uint32_t Executor::DoPendingGC() {
   static uint64_t mask = 0xFFFFFFFF00000000;
   pendingGC->ResetCursor();
-  for (ActionListNode *node = pendingGC->GetNext(); 
-       node != NULL && ((node->action->version >> 32) <= lowWaterMark);
+  for (ActionListNode *node = pendingGC->GetNext(); node != NULL; 
        node = pendingGC->GetNext()) {
-    ProcessSingleGC(node->action, lowWaterMark);
-    pendingGC->DequeuePending(node);
+    assert(node->action != NULL);
+    if (ProcessSingleGC(node->action)) {      
+      pendingGC->DequeuePending(node);
+    }
   }
-  pendingGC->ResetCursor();
-  *config.gcEpochPtr = lowWaterMark;
+
+  if (pendingGC->IsEmpty()) {
+    return 0xFFFFFFFF;
+  }
+  else {
+    pendingGC->ResetCursor();
+    ActionListNode *node = pendingGC->GetNext();
+    assert(node != NULL && node->action != NULL);
+    return ((node->action->version & mask) >> 32);
+  }
 }
 
-void Executor::ProcessSingleGC(Action *action, uint32_t epoch) {
+bool Executor::ProcessSingleGC(Action *action) {
   assert(action->state == SUBSTANTIATED);
   uint32_t numWrites = action->writeset.size();
+  bool ret = true;
 
+  // Garbage collect the previous versions
   for (uint32_t i = 0; i < numWrites; ++i) {
     MVRecord *previous = action->writeset[i].value->recordLink;
     if (previous != NULL) {
-      //      assert(previous->writer->version >> 32 <= epoch);
-      assert(previous->writer == NULL || 
-             previous->writer->state == SUBSTANTIATED);        
-      // Since the previous txn has been substantiated, the record's value 
-      // shouldn't be NULL.
-      assert(previous->value != NULL);
-      garbageBin->AddRecord(previous->writingThread, 
-                            action->writeset[i].tableId,
-                            previous->value);
-      garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
+      ret &= (previous->writer == NULL || 
+              previous->writer->state == SUBSTANTIATED);
     }
   }
+  
+  if (ret) {
+    for (uint32_t i = 0; i < numWrites; ++i) {
+      MVRecord *previous = action->writeset[i].value->recordLink;
+      if (previous != NULL) {
+        
+        // Since the previous txn has been substantiated, the record's value 
+        // shouldn't be NULL.
+        assert(previous->value != NULL);
+        garbageBin->AddRecord(previous->writingThread, 
+                              action->writeset[i].tableId,
+                              previous->value);
+        garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
+      }
+    }
+  }
+  
+  return ret;
 }
 
 bool Executor::ProcessSingle(Action *action) {
@@ -451,11 +453,9 @@ bool Executor::ProcessTxn(Action *action) {
   }
   counter += 1;
   pendingGC->EnqueuePending(action);
-  /*
   if (counter % 128 == 0) {
     DoPendingGC();
   }
-  */
   //  bool gcSuccess = ProcessSingleGC(action);
   //  assert(gcSuccess);
   /*
@@ -518,6 +518,7 @@ void GarbageBin::AddRecord(uint32_t workerThread, uint32_t tableId,
 
 void GarbageBin::ReturnGarbage() {
   for (uint32_t i = 0; i < config.numCCThreads; ++i) {
+    
     // Try to enqueue garbage. If enqueue fails, we'll just try again during the
     // next call.
     if (snapshotStickies[i].head != NULL) {
@@ -553,14 +554,15 @@ void GarbageBin::ReturnGarbage() {
       curRecords[index].head = NULL;
       curRecords[index].tail = &curRecords[index].head;
       curRecords[index].count = 0;
-    }     
+    }
   }
+  
+  //  std::cout << "Success!\n";
 }
 
 void GarbageBin::FinishEpoch(uint32_t epoch) {
-  
   barrier();
-  volatile uint32_t lowWatermark = *config.lowWaterMarkPtr;
+  uint32_t lowWatermark = *config.lowWaterMarkPtr;
   barrier();
   
   if (lowWatermark >= snapshotEpoch) {
