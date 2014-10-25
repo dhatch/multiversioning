@@ -15,53 +15,88 @@ PendingActionList::PendingActionList(uint32_t freeListSize) {
 }
 
 inline void PendingActionList::EnqueuePending(Action *action) {
+  assert((head != NULL && tail != NULL && size > 0) || 
+         (head == NULL && tail == NULL && size == 0));
+
   assert(freeList != NULL);
   assert(action != NULL);
   assert(size >= 0);
 
-  this->size += 1;
+  assert(this->seen.find(action) == this->seen.end());
+  this->seen.insert(action);
+  assert(this->seen.find(action) != this->seen.end());
+
   ActionListNode *node = freeList;
   freeList = freeList->next;  
   node->action = action;
   node->next = NULL;  
+  node->prev = NULL;
+
   if (tail == NULL) {
-    assert(head == NULL);
+    assert(head == NULL && size == 0);
     node->prev = NULL;
     head = node;  
+    tail = node;
   }
   else {
-    assert(head != NULL);
-    tail->next = NULL;
+    assert(head != NULL && size > 0);
+    tail->next = node;
     node->prev = tail;
   }
-
+  this->size += 1;
   tail = node;
+
+  assert((head != NULL && tail != NULL && size > 0) || 
+         (head == NULL && tail == NULL && size == 0));
 }
 
 inline void PendingActionList::DequeuePending(ActionListNode *node) {
+  assert((head != NULL && tail != NULL && size > 0) || 
+         (head == NULL && tail == NULL && size == 0));
   assert(node != cursor);
   assert(size > 0);
 
-  this->size -= 1;
+  if (node->next == NULL) {
+    tail = node->prev;
+  }
+  else {
+    node->next->prev = node->prev;
+  }
+  
+  if (node->prev == NULL) {
+    head = node->next;
+  }
+  else {
+    node->prev->next = node->next;
+  }
+  
+  /*
   if (node->next == NULL && node->prev == NULL) {
     head = NULL;
     tail = NULL;
   }
   else if (node->next == NULL) {
+    node->prev->next = NULL;
     tail = node->prev;
   }
   else if (node->prev == NULL) {
+    node->next->prev = NULL;
     head = node->next;
   }
   else {
     node->prev->next = node->next;
     node->next->prev = node->prev;
   }
-  
+  */
+
   node->prev = NULL;
   node->action = NULL;
   node->next = freeList;
   freeList = node;
+  this->size -= 1;
+
+  assert((head != NULL && tail != NULL && size > 0) || 
+         (head == NULL && tail == NULL && size == 0));
 }
 
 inline void PendingActionList::ResetCursor() {
@@ -77,6 +112,7 @@ inline ActionListNode* PendingActionList::GetNext() {
 }
 
 inline bool PendingActionList::IsEmpty() {
+  assert((head == NULL && size == 0) || (head != NULL && size > 0));
   return head == NULL;
 }
 
@@ -89,6 +125,7 @@ Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) {
 }
 
 void Executor::Init() {
+  this->counter = 0;
   this->allocators = 
     (RecordAllocator**)malloc(sizeof(RecordAllocator*)*config.numTables);
   for (uint32_t i = 0; i < config.numTables; ++i) {
@@ -99,7 +136,7 @@ void Executor::Init() {
   }
   this->pendingList = new (config.cpu) PendingActionList(1000);
   this->garbageBin = new (config.cpu) GarbageBin(config.garbageConfig);
-  //  this->pendingGC = new (config.cpu) PendingActionList(10000);
+  this->pendingGC = new (config.cpu) PendingActionList(20000);
 }
 
 void Executor::StartWorking() {
@@ -110,23 +147,24 @@ void Executor::StartWorking() {
     ActionBatch batch = config.inputQueue->DequeueBlocking();    
     ProcessBatch(batch);
 
-    barrier();
-    *config.epochPtr = epoch;
-    barrier();
-    
-    /*
-    if (DoPendingGC()) {
-      // Tell other threads that this epoch is finished
-      barrier();
-      *config.epochPtr = epoch;
-      barrier();
+    uint32_t doneEpoch = DoPendingGC();
+    if (doneEpoch == 0xFFFFFFFF) {
+      doneEpoch = epoch;
     }
-    */
+    else {
+      doneEpoch = doneEpoch-1;
+    }
+    barrier();
+    *config.epochPtr = doneEpoch;
+    barrier();
     
+    //    assert(pendingGC->IsEmpty());
     // If this is the leader thread, try to advance the low-water mark to 
     // trigger garbage collection
     if (config.threadId == 0) {
+      //      std::cout << "Pending count: " << pendingGC->Size() << "\n";
       volatile uint32_t minEpoch = *config.epochPtr;
+      
       //      std::cout << "0:" << minEpoch << "\n";
       for (uint32_t i = 1; i < config.numExecutors; ++i) {
         barrier();
@@ -194,13 +232,8 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
   for (uint32_t i = batch.numActions-1-config.threadId; i < batch.numActions;
        i -= config.numExecutors) {
     Action *cur = batch.actionBuf[i];
-    if (pendingList->Size() < 10) {
-      if (!ProcessSingle(cur)) {
-        pendingList->EnqueuePending(cur);
-      }
-    }
-    else {
-      
+    if (!ProcessSingle(cur)) {
+      pendingList->EnqueuePending(cur);
     }
   }
 
@@ -218,26 +251,36 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
   }
 }
 
-bool Executor::DoPendingGC() {
-  return false;
-  /*
-  bool allDone = true;
+static uint32_t GetEpoch(Action *action) {
+  static uint64_t mask = 0xFFFFFFFF00000000;
+  return ((action->version & mask) >> 32);
+}
+
+// Returns the epoch of the oldest pending record.
+uint32_t Executor::DoPendingGC() {
+  static uint64_t mask = 0xFFFFFFFF00000000;
   pendingGC->ResetCursor();
-  
   for (ActionListNode *node = pendingGC->GetNext(); node != NULL; 
        node = pendingGC->GetNext()) {
-    if ((allDone = ProcessSingleGC(node->action))) {
+    assert(node->action != NULL);
+    if (ProcessSingleGC(node->action)) {      
       pendingGC->DequeuePending(node);
     }
   }
-  
-  pendingGC->ResetCursor();
-  ActionListNode *node = pendingGC->GetNext();
-  if (node->
-  */
+
+  if (pendingGC->IsEmpty()) {
+    return 0xFFFFFFFF;
+  }
+  else {
+    pendingGC->ResetCursor();
+    ActionListNode *node = pendingGC->GetNext();
+    assert(node != NULL && node->action != NULL);
+    return ((node->action->version & mask) >> 32);
+  }
 }
 
 bool Executor::ProcessSingleGC(Action *action) {
+  assert(action->state == SUBSTANTIATED);
   uint32_t numWrites = action->writeset.size();
   bool ret = true;
 
@@ -277,7 +320,9 @@ bool Executor::ProcessSingle(Action *action) {
         return true;
       }
       else {
+        barrier();
         action->state = STICKY;
+        barrier();
         return false;
       }
     }
@@ -349,6 +394,7 @@ bool Executor::ProcessTxn(Action *action) {
     }
     
     // Ensure that the previous version of this record has been written
+    /*
     MVRecord *prev = action->writeset[i].value->recordLink;
     if (prev != NULL) {
       // There exists a previous version
@@ -357,6 +403,7 @@ bool Executor::ProcessTxn(Action *action) {
         ready = false;
       }
     }
+    */
   }
   
   // If abort is true at this point, it's because the txn tried to read a 
@@ -392,23 +439,31 @@ bool Executor::ProcessTxn(Action *action) {
   }
 
   barrier();
+  //  xchgq(&action->state, SUBSTANTIATED);
   action->state = SUBSTANTIATED;
   barrier();
-  
   for (uint32_t i = 0; i < numWrites; ++i) {
-    action->writeset[i].value->writer = NULL;
-    MVRecord *previous = action->writeset[i].value->recordLink;
-    if (previous != NULL) {
-        
-      // Since the previous txn has been substantiated, the record's value 
-      // shouldn't be NULL.
-      assert(previous->value != NULL);
-      garbageBin->AddRecord(previous->writingThread, 
-                            action->writeset[i].tableId,
-                            previous->value);
-      garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
+    action->writeset[i].value->writer = NULL;        
+    MVRecord *prev = action->writeset[i].value->recordLink;
+    /*
+    if (prev != NULL) {
+
     }
+    */
   }
+  counter += 1;
+  pendingGC->EnqueuePending(action);
+  if (counter % 128 == 0) {
+    DoPendingGC();
+  }
+  //  bool gcSuccess = ProcessSingleGC(action);
+  //  assert(gcSuccess);
+  /*
+  for (uint32_t i = 0; i < numWrites; ++i) {
+    action->writeset[i].value->writer = NULL;        
+  }
+  */
+  assert(ready);
   return ready;
 }
 

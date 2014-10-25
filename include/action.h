@@ -143,9 +143,11 @@ class Action {
 
   volatile uint64_t __attribute__((aligned(CACHE_LINE))) state;
   virtual bool Run() { 
-    //    for (int i = 0; i < 10000; ++i) {
-    //      single_work();
-    //    }
+    /*
+    for (int i = 0; i < 10000; ++i) {
+      single_work();
+    }
+    */
     return true; 
   }
   //  virtual bool IsLinked(Action **cont) { *cont = NULL; return false; }

@@ -247,8 +247,8 @@ MVSchedulerConfig SetupSubordinateSched(int cpuNumber,
 GarbageBinConfig SetupGCConfig(uint32_t numCCThreads, uint32_t numWorkerThreads,
                                uint32_t numTables,
                                int cpuNumber,
-                               volatile uint32_t *lowWaterMarkPtr) {
-  assert(lowWaterMarkPtr != NULL);
+                               volatile uint32_t *GClowWaterMarkPtr) {
+  assert(GClowWaterMarkPtr != NULL);
 
   // First initialize garbage collection meta data. We need space to keep 
   // references to remote threads's GC queues.
@@ -268,7 +268,7 @@ GarbageBinConfig SetupGCConfig(uint32_t numCCThreads, uint32_t numWorkerThreads,
     numWorkerThreads,
     numTables,
     cpuNumber,
-    lowWaterMarkPtr,
+    GClowWaterMarkPtr,
     ccGCQueues,
     workerGCQueues,
   };
@@ -315,7 +315,7 @@ SimpleQueue<RecordList>* SetupGCQueues(uint32_t cpuNumber,
 ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId, 
                          uint32_t numWorkerThreads, 
                          volatile uint32_t *epoch, 
-                         volatile uint32_t *lowWaterMarkPtr,
+                         volatile uint32_t *GClowWaterMarkPtr,
                          uint32_t *recordSizes, 
                          uint32_t *allocSizes,
                          SimpleQueue<ActionBatch> *inputQueue, 
@@ -329,7 +329,7 @@ ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId,
   GarbageBinConfig gcConfig = SetupGCConfig(numCCThreads, numWorkerThreads, 
                                             numTables, 
                                             cpuNumber,
-                                            lowWaterMarkPtr);
+                                            GClowWaterMarkPtr);
 
   // GC queues for this particular worker
   SimpleQueue<RecordList> *gcQueues = SetupGCQueues(cpuNumber, queuesPerTable, 
@@ -339,7 +339,7 @@ ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId,
     numWorkerThreads,
     cpuNumber,
     epoch,
-    lowWaterMarkPtr,
+    GClowWaterMarkPtr,
     inputQueue,
     outputQueue,
     1,
@@ -580,13 +580,13 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
         epochSize,
     };
     return batch;
-
 }
 
 void SetupInputArray(std::vector<ActionBatch> *input, int numEpochs, int epochSize, 
                      int numRecords, int txnsize) {
   for (int i = 0; i < numEpochs+1; ++i) {
-    ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, (uint32_t)i);
+    ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, 
+                                              (uint32_t)(i+1));
     input->push_back(curBatch);
 
   }

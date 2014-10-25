@@ -4,6 +4,7 @@
 #include <preprocessor.h>
 #include <mv_record.h>
 #include <database.h>
+#include <set>
 
 struct ActionListNode {
   Action *action;
@@ -80,7 +81,7 @@ class PendingActionList {
   ActionListNode *cursor;
   
   uint32_t size;
-  
+  std::set<Action*> seen;
 
  public:
   void* operator new(std::size_t sz, int cpu) {
@@ -139,6 +140,7 @@ class Executor : public Runnable {
   RecordAllocator **allocators;
 
   PendingActionList *pendingGC;
+  uint64_t counter;
 
  protected:
 
@@ -156,7 +158,7 @@ class Executor : public Runnable {
   void RecycleData();
 
 
-  bool DoPendingGC();
+  uint32_t DoPendingGC();
   bool ProcessSingleGC(Action *action);
 
  public:

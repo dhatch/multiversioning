@@ -239,12 +239,12 @@ uint32_t MVScheduler::GetCCThread(CompositeKey key) {
  * is equal to the transaction's timestamp.
  */
 void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
-  /*
+
   while (alloc->Warning()) {
-    std::cout << "Warning...\n";
+    //    std::cout << "Warning...\n";
     Recycle();
   }
-  */
+
     size_t size = action->writeset.size();
     for (uint32_t i = 0; i < size; ++i) {
         if (action->writeset[i].threadId == threadId) {
