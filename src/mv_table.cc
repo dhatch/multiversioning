@@ -19,13 +19,14 @@ MVRecord* MVTable::GetMVRecord(uint32_t partition, const CompositeKey &pkey,
   return tablePartitions[partition]->GetMVRecord(pkey, version);
 }
 
-
+/*
 bool MVTable::GetLatestVersion(uint32_t partition, const CompositeKey &pkey, 
                                uint64_t *version) {
   assert(partition < numPartitions);      // Validate that partition is valid.
   
   return tablePartitions[partition]->GetLatestVersion(pkey, version);
 }
+*/
 
 bool MVTable::WriteNewVersion(uint32_t partition, CompositeKey &pkey, 
                               Action *action, uint64_t version) {
@@ -126,7 +127,8 @@ MVRecordAllocator* MVTablePartition::GetAlloc() {
  * Given a primary key, find the slot associated with the key. Then iterate 
  * through the hash table's bucket list to find the key.
  */
-bool MVTablePartition::GetLatestVersion(CompositeKey pkey, 
+/*
+bool MVTablePartition::GetLatestVersion(const CompositeKey &pkey, 
                                         uint64_t *version) {    
 
   uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
@@ -144,6 +146,7 @@ bool MVTablePartition::GetLatestVersion(CompositeKey pkey,
   *version = 0;
   return false;
 }
+*/
 
 /*
  * Write out a new version for record pkey.

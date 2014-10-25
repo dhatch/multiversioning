@@ -244,14 +244,23 @@ void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
     //    std::cout << "Warning...\n";
     Recycle();
   }
-
-    size_t size = action->writeset.size();
-    for (uint32_t i = 0; i < size; ++i) {
-        if (action->writeset[i].threadId == threadId) {
-            this->partitions[action->writeset[i].tableId]->
-              WriteNewVersion(action->writeset[i], action, action->version);
-        }
+  
+  size_t numReads = action->readset.size();
+  for (uint32_t i = 0; i < numReads; ++i) {
+    if (action->readset[i].threadId == threadId) {
+      MVRecord *ref = this->partitions[action->readset[i].tableId]->
+        GetMVRecord(action->readset[i], action->version);
+      action->readset[i].value = ref;
     }
+  }
+
+  size_t numWrites = action->writeset.size();
+  for (uint32_t i = 0; i < numWrites; ++i) {
+    if (action->writeset[i].threadId == threadId) {
+      this->partitions[action->writeset[i].tableId]->
+        WriteNewVersion(action->writeset[i], action, action->version);
+    }
+  }
 }
 
 

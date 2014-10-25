@@ -531,7 +531,7 @@ void SetupDatabase(int numProcs, uint64_t allocatorSize, uint64_t tableSize) {
 
 
 ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords, 
-                               uint32_t epoch) {
+                               uint32_t epoch, uint32_t experiment) {
   Action **ret = (Action**)alloc_mem(sizeof(Action*)*epochSize, 79);
     assert(ret != NULL);
     std::set<uint64_t> seenKeys;
@@ -565,8 +565,14 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
                     CompositeKey toAdd(0, key);
                     uint32_t threadId = CompositeKey::HashKey(&toAdd) % MVScheduler::NUM_CC_THREADS;
                     toAdd.threadId = threadId;
-                    // ret[j]->readset.push_back(toAdd);
-                    ret[j]->writeset.push_back(toAdd);
+                    
+                    ret[j]->readset.push_back(toAdd);
+                    if (experiment == 0) {
+                      ret[j]->writeset.push_back(toAdd);
+                    }
+                    else if (experiment == 1 && j < 2) {
+                      ret[j]->writeset.push_back(toAdd);
+                    }
                     ret[j]->combinedHash |= (((uint64_t)1)<<threadId);
                     break;
                 }
@@ -583,10 +589,10 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
 }
 
 void SetupInputArray(std::vector<ActionBatch> *input, int numEpochs, int epochSize, 
-                     int numRecords, int txnsize) {
+                     int numRecords, int txnsize, uint32_t experiment) {
   for (int i = 0; i < numEpochs+1; ++i) {
     ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, 
-                                              (uint32_t)(i+1));
+                                              (uint32_t)(i+1), experiment);
     input->push_back(curBatch);
 
   }
@@ -595,7 +601,7 @@ void SetupInputArray(std::vector<ActionBatch> *input, int numEpochs, int epochSi
 void SetupInput(SimpleQueue<ActionBatch> *input, int numEpochs, int epochSize, 
                 int numRecords, int txnsize) {
     for (int i = 0; i < numEpochs+1; ++i) {
-      ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, (uint32_t)i);
+      ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, (uint32_t)i, 0);
       //      input->push_back(curBatch);
       input->EnqueueBlocking(curBatch);        
     }
@@ -606,7 +612,8 @@ void SetupInput(SimpleQueue<ActionBatch> *input, int numEpochs, int epochSize,
 void DoExperiment(int numCCThreads, int numExecutors, int numRecords, 
                   int epochSize,
                   int numEpochs, 
-                  int txnSize) {
+                  int txnSize,
+                  uint32_t experiment) {
     MVScheduler **schedThreads = NULL;
     SimpleQueue<ActionBatch> *schedInputQueue = NULL;
     SimpleQueue<ActionBatch> *schedOutputQueues = NULL;
@@ -634,7 +641,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
 
     // Set up the input.
     std::vector<ActionBatch> inputPlaceholder;
-    SetupInputArray(&inputPlaceholder, numEpochs, epochSize, numRecords, txnSize);
+    SetupInputArray(&inputPlaceholder, numEpochs, epochSize, numRecords, txnSize, experiment);
     std::cout << "Setup input...\n";
     
     // Setup executors
@@ -737,7 +744,8 @@ bool SortCmp(LockingCompositeKey key1, LockingCompositeKey key2) {
 */
 
 EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize, 
-                                             uint64_t numRecords) { 
+                                             uint64_t numRecords, 
+                                             uint32_t experiment) { 
   std::cout << "Num records: " << numRecords << "\n";
   std::cout << "Txn size: " << txnSize << "\n";
   numLockingRecords = numRecords;
@@ -759,7 +767,18 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
           seenKeys.insert(key);
           recordInfo.is_write = true;
           recordInfo.record.key = key;
-          action->writeset.push_back(recordInfo);
+
+          if (experiment == 0) {
+            action->writeset.push_back(recordInfo);
+          }
+          else if (experiment == 1) {
+            if (j < 2) {
+              action->writeset.push_back(recordInfo);
+            }
+            else {
+              action->readset.push_back(recordInfo);
+            }          
+          }
           break;
         }
       }
@@ -771,13 +790,14 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
 }
 
 EagerActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads, 
-                                    uint32_t numTxns, uint32_t numRecords) {
+                                    uint32_t numTxns, uint32_t numRecords, 
+                                    uint32_t experiment) {
   EagerActionBatch *ret = 
     (EagerActionBatch*)malloc(sizeof(EagerActionBatch)*numThreads);
   uint32_t txnsPerThread = numTxns/numThreads;
   for (uint32_t i = 0; i < numThreads; ++i) {
     EagerAction **actions = 
-      CreateSingleLockingActionBatch(txnsPerThread, txnSize, numRecords);
+      CreateSingleLockingActionBatch(txnsPerThread, txnSize, numRecords, experiment);
     ret[i] = {
       txnsPerThread,
       actions,
@@ -849,9 +869,10 @@ void LockingExperiment(LockingConfig config) {
 
   // Setup input
   EagerActionBatch *batches = SetupLockingInput(config.txnSize, 
-                                               config.numThreads,
-                                               config.numTxns,
-                                               config.numRecords);
+                                                config.numThreads,
+                                                config.numTxns,
+                                                config.numRecords,
+                                                config.experiment);
   int success = pin_thread(79);
   assert(success == 0);
   
@@ -918,7 +939,8 @@ int main(int argc, char **argv) {
                  cfg.mvConfig.numRecords, 
                  cfg.mvConfig.epochSize, 
                  cfg.mvConfig.numTxns/cfg.mvConfig.epochSize, 
-                 cfg.mvConfig.txnSize);
+                 cfg.mvConfig.txnSize,
+                 cfg.mvConfig.experiment);
     exit(0);
   }
   else {

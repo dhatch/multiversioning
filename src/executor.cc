@@ -345,6 +345,7 @@ bool Executor::ProcessTxn(Action *action) {
   // First ensure that all transactions on which the current one depends on have
   // been processed.
   for (size_t i = 0; i < numReads; ++i) {
+    /*
     if (action->readset[i].value == NULL) {
       CompositeKey curKey = action->readset[i];
       MVRecord *record = 
@@ -366,15 +367,18 @@ bool Executor::ProcessTxn(Action *action) {
       // Keep a reference to the record
       action->readset[i].value = record;
     }
-    
-    // Check that the txn which is supposed to have produced the value of the 
-    // record has been executed.    
-    Action *dependAction = action->readset[i].value->writer;
-    if (dependAction != NULL && !ProcessSingle(dependAction)) {
-      ready = false;
-    }
-    else if (action->readset[i].value->value == NULL) {
-      abort = true;
+    */
+
+    if (action->readset[i].value != NULL) {
+      // Check that the txn which is supposed to have produced the value of the 
+      // record has been executed.    
+      Action *dependAction = action->readset[i].value->writer;
+      if (dependAction != NULL && !ProcessSingle(dependAction)) {
+        ready = false;
+      }
+      else if (action->readset[i].value->value == NULL) {
+        abort = true;
+      }
     }
   }    
 

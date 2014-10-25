@@ -31,7 +31,7 @@ class MVTablePartition {
   // 
   // return value: true if the lookup finds a live instance of the record. 
   //                               Otherwise, false.
-  bool GetLatestVersion(CompositeKey pkey, uint64_t *version);
+  //  bool GetLatestVersion(CompositeKey pkey, uint64_t *version);
 
   // Insert a new version for the given record.
   //
@@ -87,8 +87,10 @@ class MVTable {
   // 
   // return value: true if we're able to find a live version. otherwise, 
   //                               false.
+  /*
   bool GetLatestVersion(uint32_t partition, const CompositeKey& pkey, 
                         uint64_t *version);
+  */
 
   // Scheduler threads call this function in order to create a new version for
   // a particular record.
