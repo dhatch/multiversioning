@@ -58,10 +58,12 @@ class Table {
       ((TableRecord*)(data + i*recordSz))->next = (TableRecord*)(data + (i+1)*recordSz);
     }    
     ((TableRecord*)(data + (conf.freeListSz-1)*recordSz))->next = NULL;    
+    freeList = (TableRecord*)data;
   }
 
   virtual void Put(uint64_t key, void *value) {
-    uint64_t index = Hash128to64(std::make_pair(conf.tableId, key));
+    uint64_t index = 
+      Hash128to64(std::make_pair(conf.tableId, key)) % conf.numBuckets;
     TableRecord *rec = GetRecord();
     rec->next = buckets[index];
     rec->key = key;
@@ -70,7 +72,8 @@ class Table {
   }
   
   virtual void* Get(uint64_t key) {
-    uint64_t index = Hash128to64(std::make_pair(conf.tableId, key));
+    uint64_t index = 
+      Hash128to64(std::make_pair(conf.tableId, key)) % conf.numBuckets;
     TableRecord *rec = buckets[index];
     while (rec != NULL && rec->key != key) {
       rec = rec->next;
