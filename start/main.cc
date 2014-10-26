@@ -538,10 +538,10 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
     uint64_t counter = 0;
     for (uint32_t j = 0; j < epochSize; ++j) {
         seenKeys.clear();
-        ret[j] = new Action();
+        ret[j] = new RMWAction();
         assert(ret[j] != NULL);
         ret[j]->combinedHash = 0;
-        ret[j]->version = ((uint64_t)epoch << 32 | counter);
+        ret[j]->version = (((uint64_t)epoch<<32) | counter);
         ret[j]->state = STICKY;
         for (int i = 0; i < txnSize; ++i) {        
             /*
@@ -590,12 +590,45 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
 
 void SetupInputArray(std::vector<ActionBatch> *input, int numEpochs, int epochSize, 
                      int numRecords, int txnsize, uint32_t experiment) {
-  for (int i = 0; i < numEpochs+1; ++i) {
+  for (int i = 0; i < numEpochs; ++i) {
     ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, 
-                                              (uint32_t)(i+1), experiment);
+                                              (uint32_t)(i+2), experiment);
     input->push_back(curBatch);
-
   }
+}
+
+ActionBatch LoadDatabaseTxns(int numRecords, int txnSize) {
+  int numTxns = numRecords/txnSize + (numRecords%txnSize > 0? 1 : 0);
+  Action **txns = (Action**)malloc(sizeof(InsertAction*)*numTxns);
+  uint64_t counter = 0;
+  for (int i = 0; i < numTxns; ++i) {    
+    // Create a new txn
+    InsertAction *curAction = new InsertAction();
+    assert(curAction != NULL);
+    curAction->state = STICKY;
+    curAction->combinedHash = 0;
+    curAction->version = (((uint64_t)1<<32) | counter);
+
+    // Generate the txn's write set
+    for (uint64_t j = 0;
+         (j<(uint64_t)txnSize) && (counter<(uint64_t)numRecords);
+         ++j, ++counter) {
+      
+      CompositeKey toAdd(0, counter);
+      uint32_t threadId = 
+        CompositeKey::HashKey(&toAdd) % MVScheduler::NUM_CC_THREADS;
+      toAdd.threadId = threadId;
+      curAction->writeset.push_back(toAdd);
+      curAction->combinedHash |= (((uint64_t)1)<<threadId);
+    }
+    txns[i] = curAction;
+  }
+  
+  ActionBatch ret = {
+    txns,
+    (uint32_t)numTxns,
+  };
+  return ret;
 }
 
 void SetupInput(SimpleQueue<ActionBatch> *input, int numEpochs, int epochSize, 
@@ -640,6 +673,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     }
 
     // Set up the input.
+    ActionBatch loadInput = LoadDatabaseTxns(numRecords, 100);
     std::vector<ActionBatch> inputPlaceholder;
     SetupInputArray(&inputPlaceholder, numEpochs, epochSize, numRecords, txnSize, experiment);
     std::cout << "Setup input...\n";
@@ -654,7 +688,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
                                             numExecutors,
                                             schedGCQueues);
     
-    schedInputQueue->EnqueueBlocking(inputPlaceholder[0]);
+    schedInputQueue->EnqueueBlocking(loadInput);
     
     // Run the experiment.
     for (int i = 0; i < numCCThreads; ++i) {
@@ -664,18 +698,17 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     for (int i = 0; i < numExecutors; ++i) {
       execThreads[i]->Run();
     }
-    
+
     for (int i = 0; i < numEpochs; ++i) {
-      schedInputQueue->EnqueueBlocking(inputPlaceholder[i+1]);
+      schedInputQueue->EnqueueBlocking(inputPlaceholder[i]);
     }
-    
-    //    outputQueue = &schedOutputQueues[0];
+
+    outputQueue->DequeueBlocking();
+
     std::cout << "Running experiment. Epochs: " << numEpochs << "\n";
     timespec start_time, end_time;
 
-    outputQueue->DequeueBlocking();
-    //    outputQueue = &schedOutputQueues[numExecutors];
-    ProfilerStart("/home/jmf/multiversioning/db.prof");
+    //ProfilerStart("/home/jmf/multiversioning/db.prof");
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
 
     for (int i = 0; i < numEpochs-10; ++i) {
@@ -683,7 +716,8 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
         //        std::cout << "Iteration " << i << "\n";
     }
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
-    ProfilerStop();
+    //    ProfilerStop();
+
     timespec elapsed_time = diff_time(end_time, start_time);
     double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
     std::cout << elapsedMilli << '\n';

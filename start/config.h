@@ -134,7 +134,7 @@ class ExperimentConfig {
       lockConfig.numContendedRecords = 
         (uint32_t)atoi(argMap[NUM_CONTENDED]);
       lockConfig.txnSize = (uint32_t)atoi(argMap[TXN_SIZE]);
-      mvConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
+      lockConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
       this->ccType = LOCKING;
     }
   }

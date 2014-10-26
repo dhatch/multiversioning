@@ -231,6 +231,10 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
   
   for (uint32_t i = batch.numActions-1-config.threadId; i < batch.numActions;
        i -= config.numExecutors) {
+    while (pendingList->Size() > 10) {
+      ExecPending();
+    }
+
     Action *cur = batch.actionBuf[i];
     if (!ProcessSingle(cur)) {
       pendingList->EnqueuePending(cur);
@@ -578,14 +582,16 @@ void GarbageBin::FinishEpoch(uint32_t epoch) {
 
 RecordAllocator::RecordAllocator(size_t recordSize, uint32_t numRecords, 
                                  int cpu) {
-  Record *data = 
-    (Record*)alloc_mem(numRecords*(sizeof(Record)+recordSize), cpu);
+  char *data = 
+    (char*)alloc_mem(numRecords*(sizeof(Record)+recordSize), cpu);
   memset(data, 0x00, numRecords*(sizeof(Record)+recordSize));
   for (uint32_t i = 0; i < numRecords; ++i) {
-    data[i].next = &data[i+1];
+    ((Record*)(data + i*(sizeof(Record)+recordSize)))->next = 
+      (Record*)(data + (i+1)*(sizeof(Record)+recordSize));
   }
-  data[numRecords-1].next = NULL;
-  freeList = data;
+  ((Record*)(data + (numRecords-1)*(sizeof(Record)+recordSize)))->next = NULL;
+  //  data[numRecords-1].next = NULL;
+  freeList = (Record*)data;
 }
 
 bool RecordAllocator::GetRecord(Record **OUT_REC) {

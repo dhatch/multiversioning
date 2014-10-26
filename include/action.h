@@ -105,14 +105,14 @@ class Action {
  protected:
 
   void* Read(uint32_t index) {
-    return readset[index].value->value;
+    return (void*)(&readset[index].value->value->value);
   }
 
   void* GetWriteRef(uint32_t index) {
     
     // Memory for the write should always be initialized.
     assert(writeset[index].value->value != NULL);
-    return writeset[index].value->value;
+    return (void*)(&writeset[index].value->value->value);
   }
 
  public:  
@@ -151,6 +151,41 @@ class Action {
     return true; 
   }
   //  virtual bool IsLinked(Action **cont) { *cont = NULL; return false; }
+};
+
+// Use this action to populate the database
+class InsertAction : public Action {
+ public:
+  virtual bool Run() {
+    uint32_t numWrites = writeset.size();
+    for (uint32_t i = 0; i < numWrites; ++i) {
+      uint64_t key = writeset[i].key;
+      uint64_t *ref = (uint64_t*)GetWriteRef(i);
+      *ref = key;
+    }
+  }
+};
+
+// Use this action to evaluate RMW workload on integers
+class RMWAction : public Action {
+ public:
+  virtual bool Run() {
+    // Accumulate all read values into counter
+    uint64_t counter = 0;
+    uint32_t numReads = readset.size();
+    for (uint32_t i = 0; i < numReads; ++i) {
+      uint64_t *readRef = (uint64_t*)Read(i);
+      counter += *readRef;
+    }
+    
+    // Add counter to each record in write set
+    uint32_t numWrites = writeset.size();
+    for (uint32_t i = 0; i < numWrites; ++i) {
+      uint64_t *writeRef = (uint64_t*)GetWriteRef(i);
+      *writeRef += counter;
+    }
+    return true;
+  }
 };
 
 class EagerCompositeKey {
