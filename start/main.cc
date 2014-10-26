@@ -844,7 +844,8 @@ EagerWorker** SetupLockThreads(SimpleQueue<EagerActionBatch> **inputQueue,
                                SimpleQueue<EagerActionBatch> **outputQueue, 
                                uint32_t allocatorSize, 
                                LockManager *mgr, 
-                               int numThreads) {
+                               int numThreads,
+                               Table **tables) {
   EagerWorker **ret = (EagerWorker**)malloc(sizeof(EagerWorker*)*numThreads);
   assert(ret != NULL);
   for (int i = 0; i < numThreads; ++i) {
@@ -854,6 +855,7 @@ EagerWorker** SetupLockThreads(SimpleQueue<EagerActionBatch> **inputQueue,
       outputQueue[i],
       i,
       100,
+      tables,
     };
     ret[i] = new (i) EagerWorker(conf);
   }
@@ -897,9 +899,25 @@ void LockingExperiment(LockingConfig config) {
   tblInfo[0] = config.numRecords;
   LockManager *mgr = new LockManager(cfg);
 
+  // Setup tables
+  TableConfig tblConfig = {
+    0,
+    (uint64_t)config.numRecords,
+    0,
+    (int)(config.numThreads-1),
+    2*(uint64_t)(config.numRecords),
+    sizeof(uint64_t),
+  };
+  Table **tables = (Table**)malloc(sizeof(Table*));
+  tables[0] = new (0) Table(tblConfig);
+  for (uint64_t i = 0; i < config.numRecords; ++i) {
+    tables[0]->Put(i, &i);
+  }
+
   // Setup worker threads
   EagerWorker **threads = SetupLockThreads(inputs, outputs, 256, mgr, 
-                                          config.numThreads);
+                                           config.numThreads,
+                                           tables);
 
   // Setup input
   EagerActionBatch *batches = SetupLockingInput(config.txnSize, 

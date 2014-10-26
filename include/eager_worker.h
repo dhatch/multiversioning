@@ -1,6 +1,7 @@
 #ifndef                 EAGER_WORKER_HH_
 #define                 EAGER_WORKER_HH_
 
+#include <table.h>
 #include <lock_manager.h>
 #include <concurrent_queue.h>
 #include <pthread.h>
@@ -18,6 +19,7 @@ struct EagerWorkerConfig {
   SimpleQueue<EagerActionBatch> *outputQueue;  
   int cpu;
   uint32_t maxPending;
+  Table **tables;
 };
 
 class EagerWorker : public Runnable {

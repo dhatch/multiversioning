@@ -1,8 +1,12 @@
-#ifndef         TABLE_H_
-#define         TABLE_H_
+#ifndef         LOCK_MANAGER_TABLE_H_
+#define         LOCK_MANAGER_TABLE_H_
 
-#include <lock_manager.h>
 #include <cpuinfo.h>
+#include <util.h>
+#include <action.h>
+#include <machine.h>
+#include <lock_manager.h>
+
 
 struct TxnQueue {
   EagerRecordInfo *head;
@@ -231,4 +235,4 @@ class LockManagerTable {
   */
 };
 
-#endif          // TABLE_H_
+#endif          // LOCK_MANAGER_TABLE_H_

@@ -243,6 +243,7 @@ struct EagerRecordInfo {
   volatile uint64_t *latch;
   struct EagerRecordInfo *next;
   struct EagerRecordInfo *prev;
+  void *value;
     
   EagerRecordInfo() {
     record.tableId = 0;
@@ -312,6 +313,29 @@ class EagerAction {
     bool        finished_execution;
 };
 
+class RMWEagerAction : public EagerAction {
+ public:
+  virtual bool Run() {
+    uint64_t counter = 0;
+    uint32_t numReads = readset.size();
+    for (uint32_t i = 0; i < numReads; ++i) {
+      uint64_t *record = (uint64_t*)readset[i].value;
+      counter += *record;
+    }
+
+    uint32_t numWrites = writeset.size();
+    for (uint32_t i = 0; i < numWrites; ++i) {
+      uint64_t *record = (uint64_t*)writeset[i].value;
+      counter += *record;
+    }
+
+    for (uint32_t i = 0; i < numWrites; ++i) {
+      uint64_t *record = (uint64_t*)writeset[i].value;
+      *record += counter;
+    }
+    return true;
+  }
+};
 
 
 #endif // ACTION_H

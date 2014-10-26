@@ -1,9 +1,9 @@
 #ifndef LOCK_MANAGER_HH_
 #define LOCK_MANAGER_HH_
 
+#include <lock_manager_table.h>
 #include <action.h>
 #include <deque>
-#include <lock_manager_table.h>
 #include <pthread.h>
 
 using namespace std;
