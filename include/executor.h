@@ -123,8 +123,8 @@ struct ExecutorConfig {
   SimpleQueue<ActionBatch> *inputQueue;
   SimpleQueue<ActionBatch> *outputQueue;
   uint32_t numTables;
-  uint32_t *recordSizes;
-  uint32_t *allocatorSizes;
+  uint64_t *recordSizes;
+  uint64_t *allocatorSizes;
   uint32_t numQueuesPerTable;
   SimpleQueue<RecordList> *recycleQueues;
   GarbageBinConfig garbageConfig;

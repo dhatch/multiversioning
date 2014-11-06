@@ -88,6 +88,21 @@ void
 EagerWorker::TryExec(EagerAction *txn) {
   if (config.mgr->Lock(txn, config.cpu)) {
         assert(txn->num_dependencies == 0);
+
+        uint32_t numReads = txn->readset.size();
+        for (uint32_t i = 0; i < numReads; ++i) {
+          uint32_t tbl = txn->readset[i].record.tableId;
+          uint32_t key = txn->readset[i].record.key;
+          txn->readset[i].value = config.tables[tbl]->Get(key);
+        }
+
+        uint32_t numWrites = txn->writeset.size();
+        for (uint32_t i = 0; i < numWrites; ++i) {
+          uint32_t tbl = txn->writeset[i].record.tableId;
+          uint32_t key = txn->writeset[i].record.key;
+          txn->writeset[i].value = config.tables[tbl]->Get(key);
+        }
+
         txn->Run();
         config.mgr->Unlock(txn, config.cpu);
 

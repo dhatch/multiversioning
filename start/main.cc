@@ -19,8 +19,11 @@
 
 Database DB(1);
 
+// uint64_t dbSize = ((uint64_t)1<<36);
+
 int NumProcs;
 uint32_t numLockingRecords;
+uint64_t recordSize;
 
 timespec diff_time(timespec end, timespec start) {
     timespec temp;
@@ -316,8 +319,8 @@ ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId,
                          uint32_t numWorkerThreads, 
                          volatile uint32_t *epoch, 
                          volatile uint32_t *GClowWaterMarkPtr,
-                         uint32_t *recordSizes, 
-                         uint32_t *allocSizes,
+                         uint64_t *recordSizes, 
+                         uint64_t *allocSizes,
                          SimpleQueue<ActionBatch> *inputQueue, 
                          SimpleQueue<ActionBatch> *outputQueue,
                          uint32_t numCCThreads,
@@ -363,6 +366,7 @@ Executor** SetupExecutors(uint32_t cpuStart,
   assert(queuesPerCCThread == numWorkers);
   assert(queuesPerTable == numWorkers);
 
+  uint64_t threadDbSz = (1<<30); //dbSize / numWorkers;
   Executor **execs = (Executor**)malloc(sizeof(Executor*)*numWorkers);
   volatile uint32_t *epochArray = 
     (volatile uint32_t*)malloc(sizeof(uint32_t)*(numWorkers+1));  
@@ -370,9 +374,9 @@ Executor** SetupExecutors(uint32_t cpuStart,
 
   uint32_t numTables = 1;
 
-  uint32_t *sizeData = (uint32_t*)malloc(sizeof(uint32_t)*2);
-  sizeData[0] = sizeof(uint64_t);
-  sizeData[1] = (1<<29)/sizeData[0];
+  uint64_t *sizeData = (uint64_t*)malloc(sizeof(uint32_t)*2);
+  sizeData[0] = recordSize;
+  sizeData[1] = threadDbSz/recordSize;
 
   // First pass, create configs. Each config contains a reference to each 
   // worker's local GC queue.
@@ -538,7 +542,7 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
     uint64_t counter = 0;
     for (uint32_t j = 0; j < epochSize; ++j) {
         seenKeys.clear();
-        ret[j] = new RMWAction();
+        ret[j] = new Action();// new RMWAction();
         assert(ret[j] != NULL);
         ret[j]->combinedHash = 0;
         ret[j]->version = (((uint64_t)epoch<<32) | counter);
@@ -711,7 +715,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     //ProfilerStart("/home/jmf/multiversioning/db.prof");
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
 
-    for (int i = 0; i < numEpochs-10; ++i) {
+    for (int i = 0; i < numEpochs-50; ++i) {
         outputQueue->DequeueBlocking();
         //        std::cout << "Iteration " << i << "\n";
     }
@@ -723,7 +727,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     std::cout << elapsedMilli << '\n';
     std::ofstream resultFile;
     resultFile.open("results.txt", std::ios::app | std::ios::out);
-    resultFile << elapsedMilli << " " << numEpochs*epochSize << " " << numCCThreads << "\n";
+    resultFile << elapsedMilli << " " << (numEpochs-50)*epochSize << " " << numExecutors << "\n";
     //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
     resultFile.close();
 }
@@ -793,7 +797,7 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
 
   for (uint32_t i = 0; i < numTxns; ++i) {
     seenKeys.clear();
-    EagerAction *action = new EagerAction();    
+    EagerAction *action = new RMWEagerAction();    
     for (uint32_t j = 0; j < txnSize; ++j) {
       while (true) {
         uint64_t key = rand() % numRecords;
@@ -900,19 +904,39 @@ void LockingExperiment(LockingConfig config) {
   LockManager *mgr = new LockManager(cfg);
 
   // Setup tables
+  char bigval[1000];
   TableConfig tblConfig = {
     0,
     (uint64_t)config.numRecords,
     0,
     (int)(config.numThreads-1),
     2*(uint64_t)(config.numRecords),
-    sizeof(uint64_t),
+    recordSize,
   };
   Table **tables = (Table**)malloc(sizeof(Table*));
   tables[0] = new (0) Table(tblConfig);
   for (uint64_t i = 0; i < config.numRecords; ++i) {
-    tables[0]->Put(i, &i);
+    if (recordSize == 1000) {
+      uint64_t *bigInt = (uint64_t*)bigval;
+      for (uint32_t j = 0; j < 125; ++j) {
+        bigInt[j] = (uint64_t)rand();
+      }
+      tables[0]->Put(i, bigval);
+    }
+    else if (recordSize == 8) {
+      tables[0]->Put(i, &i);
+    }
   }
+  tables[0]->SetInit();
+
+  uint64_t counter = 0;
+  if (recordSize == 8) {
+    for (uint64_t i = 0; i < config.numRecords; ++i) {
+      counter += *(uint64_t*)(tables[0]->Get(i));
+    }
+  }
+  
+  std::cout << "Finished table init. Counter: " << counter << "\n";
 
   // Setup worker threads
   EagerWorker **threads = SetupLockThreads(inputs, outputs, 256, mgr, 
@@ -987,6 +1011,8 @@ int main(int argc, char **argv) {
   std::cout << cfg.ccType << "\n";
   if (cfg.ccType == MULTIVERSION) {
     MVScheduler::NUM_CC_THREADS = (uint32_t)cfg.mvConfig.numCCThreads;
+    recordSize = cfg.mvConfig.recordSize;
+    assert(recordSize == 8 || recordSize == 1000);
     DoExperiment(cfg.mvConfig.numCCThreads, cfg.mvConfig.numWorkerThreads, 
                  cfg.mvConfig.numRecords, 
                  cfg.mvConfig.epochSize, 
@@ -996,6 +1022,8 @@ int main(int argc, char **argv) {
     exit(0);
   }
   else {
+    recordSize = cfg.lockConfig.recordSize;
+    assert(recordSize == 8 || recordSize == 1000);
     LockingExperiment(cfg.lockConfig);
     exit(0);
   }

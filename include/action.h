@@ -14,6 +14,8 @@
 
 class Action;
 
+extern uint64_t recordSize;
+
 enum ActionState {
   STICKY,
   PROCESSING,
@@ -157,12 +159,27 @@ class Action {
 class InsertAction : public Action {
  public:
   virtual bool Run() {
-    uint32_t numWrites = writeset.size();
-    for (uint32_t i = 0; i < numWrites; ++i) {
-      uint64_t key = writeset[i].key;
-      uint64_t *ref = (uint64_t*)GetWriteRef(i);
-      *ref = key;
+    if (recordSize == 8) {
+      uint32_t numWrites = writeset.size();
+      for (uint32_t i = 0; i < numWrites; ++i) {
+        uint64_t key = writeset[i].key;
+        uint64_t *ref = (uint64_t*)GetWriteRef(i);
+        *ref = key;
+      }
     }
+    else if (recordSize == 1000) {
+      uint32_t numWrites = writeset.size();
+      for (uint32_t i = 0; i < numWrites; ++i) {
+        uint64_t *ref = (uint64_t*)GetWriteRef(i);
+        for (uint32_t j = 0; j < 125; ++j) {
+          ref[j] = (uint64_t)rand();
+        }
+      }
+    }
+    else {
+      assert(false);
+    }
+    return true;
   }
 };
 
@@ -170,19 +187,48 @@ class InsertAction : public Action {
 class RMWAction : public Action {
  public:
   virtual bool Run() {
-    // Accumulate all read values into counter
-    uint64_t counter = 0;
-    uint32_t numReads = readset.size();
-    for (uint32_t i = 0; i < numReads; ++i) {
-      uint64_t *readRef = (uint64_t*)Read(i);
-      counter += *readRef;
-    }
+    if (recordSize == 8) {
+      // Accumulate all read values into counter
+      uint64_t counter = 0;
+      uint32_t numReads = readset.size();
+      for (uint32_t i = 0; i < numReads; ++i) {
+        uint64_t *readRef = (uint64_t*)Read(i);
+        counter += *readRef;
+      }
     
-    // Add counter to each record in write set
-    uint32_t numWrites = writeset.size();
-    for (uint32_t i = 0; i < numWrites; ++i) {
-      uint64_t *writeRef = (uint64_t*)GetWriteRef(i);
-      *writeRef += counter;
+      // Add counter to each record in write set
+      uint32_t numWrites = writeset.size();
+      for (uint32_t i = 0; i < numWrites; ++i) {
+        uint64_t *writeRef = (uint64_t*)GetWriteRef(i);
+        *writeRef += counter;
+      }
+    }
+    else if (recordSize == 1000) {
+      // Accumulate all read values into counter
+      uint64_t counter = 0;
+      uint32_t numReads = readset.size();
+      for (uint32_t i = 0; i < numReads; ++i) {
+        uint64_t *readRef = (uint64_t*)Read(i);
+        for (uint32_t j = 0; j < 125; ++j) {
+          counter += readRef[j];
+        }
+      }
+    
+      // Add counter to each record in write set
+      uint32_t numWrites = writeset.size();
+      for (uint32_t i = 0; i < numWrites; ++i) {
+        uint64_t *writeRef = (uint64_t*)GetWriteRef(i);
+        for (uint32_t j = 0; j < 125; ++j) {
+          if (j % 8 == 0) {
+            counter *= 2;
+          }
+          writeRef[j] = counter;
+        }
+      }
+    }
+
+    else {
+      assert(false);
     }
     return true;
   }
@@ -316,23 +362,57 @@ class EagerAction {
 class RMWEagerAction : public EagerAction {
  public:
   virtual bool Run() {
-    uint64_t counter = 0;
-    uint32_t numReads = readset.size();
-    for (uint32_t i = 0; i < numReads; ++i) {
-      uint64_t *record = (uint64_t*)readset[i].value;
-      counter += *record;
+    if (recordSize == 8) {      // longs
+      uint64_t counter = 0;
+      uint32_t numReads = readset.size();
+      for (uint32_t i = 0; i < numReads; ++i) {
+        uint64_t *record = (uint64_t*)readset[i].value;
+        counter += *record;
+      }
+
+      uint32_t numWrites = writeset.size();
+      for (uint32_t i = 0; i < numWrites; ++i) {
+        uint64_t *record = (uint64_t*)writeset[i].value;
+        counter += *record;
+      }
+
+      for (uint32_t i = 0; i < numWrites; ++i) {
+        uint64_t *record = (uint64_t*)writeset[i].value;
+        *record += counter;
+      }
+    }
+    else if (recordSize == 1000) {      //YCSB
+      uint32_t numReads = readset.size();
+      uint32_t numWrites = writeset.size();
+      
+      uint64_t counter = 0;
+        
+      // Read the ith field
+      for (uint32_t j = 0; j < numReads; ++j) {
+        uint64_t *record = (uint64_t*)readset[j].value;
+        for (uint32_t i = 0; i < 125; ++i) {
+          counter += record[i];
+        }
+      }
+      for (uint32_t j = 0; j < numWrites; ++j) {
+        uint64_t *record = (uint64_t*)writeset[j].value;
+        for (uint32_t i = 0; i < 125; ++i) {
+          counter += record[i];
+        }
+      }
+        
+      // Write the ith field
+      for (uint32_t j = 0; j < numWrites; ++j) {
+        uint64_t *record = (uint64_t*)writeset[j].value;
+        for (uint32_t i = 0; i < 125; ++i) {
+          if (i % 8 == 0) {
+            counter = counter*2;
+          }
+          record[i] = counter;
+        }
+      }
     }
 
-    uint32_t numWrites = writeset.size();
-    for (uint32_t i = 0; i < numWrites; ++i) {
-      uint64_t *record = (uint64_t*)writeset[i].value;
-      counter += *record;
-    }
-
-    for (uint32_t i = 0; i < numWrites; ++i) {
-      uint64_t *record = (uint64_t*)writeset[i].value;
-      *record += counter;
-    }
     return true;
   }
 };

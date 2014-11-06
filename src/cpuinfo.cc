@@ -126,14 +126,18 @@ alloc_mem(size_t size, int cpu) {
     return malloc(size);
   }
   else {
-    int numa_node = numa_node_of_cpu(cpu);
+    //    return malloc(size);
+
+    //    int numa_node = numa_node_of_cpu(cpu);
+    //    numa_set_strict(1);
+    //    void *buf = numa_alloc_onnode(size, numa_node);
+    void *buf = numa_alloc_interleaved(size);
+    return buf;
     
-    numa_set_strict(1);
-    void *buf = numa_alloc_onnode(size, numa_node);
     if (buf == NULL) {
         return buf;
     }
-
+    
     if (mlock(buf, size) != 0) {
       numa_free(buf, size);
       std::cout << "mlock couldn't pin memory to RAM!\n";
@@ -146,12 +150,15 @@ alloc_mem(size_t size, int cpu) {
 }
 
 void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
+  return alloc_mem(size, startCpu);
+
   struct bitmask *mask = numa_bitmask_alloc(80);
   numa_set_strict(1);
   for (int i = startCpu; i < endCpu; ++i) {
     mask = numa_bitmask_setbit(mask, i);
   }
-  void *buf = numa_alloc_interleaved_subset(size, mask);
+  void *buf = numa_alloc_interleaved(size);
+
   if (buf != NULL) {
     if (mlock(buf, size) != 0) {
       numa_free(buf, size);

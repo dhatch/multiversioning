@@ -15,8 +15,9 @@ static struct option long_options[] = {
   {"num_contended", required_argument, NULL, 6},
   {"txn_size", required_argument, NULL, 7},
   {"cc_type", required_argument, NULL, 8},
-  {"experiment", required_argument, NULL, 8},
-  {NULL, no_argument, NULL, 10},
+  {"experiment", required_argument, NULL, 9},
+  {"record_size", required_argument, NULL, 10},
+  {NULL, no_argument, NULL, 11},
 };
 
 
@@ -32,6 +33,7 @@ struct LockingConfig {
   uint32_t numContendedRecords;
   uint32_t txnSize;
   uint32_t experiment;
+  uint64_t recordSize;
 };
 
 struct MVConfig {
@@ -42,6 +44,7 @@ struct MVConfig {
   uint32_t numWorkerThreads;
   uint32_t txnSize;
   uint32_t experiment;
+  uint64_t recordSize;
 };
 
 class ExperimentConfig {
@@ -57,6 +60,7 @@ class ExperimentConfig {
     TXN_SIZE,
     CC_TYPE,
     EXPERIMENT,
+    RECORD_SIZE,
   };
   unordered_map<int, char*> argMap;
 
@@ -87,7 +91,8 @@ class ExperimentConfig {
           argMap.count(NUM_RECORDS) == 0 ||
           argMap.count(NUM_WORKER_THREADS) == 0 ||
           argMap.count(TXN_SIZE) == 0 || 
-          argMap.count(EXPERIMENT) == 0) {
+          argMap.count(EXPERIMENT) == 0 ||
+          argMap.count(RECORD_SIZE) == 0) {
         std::cerr << "Missing one or more multiversion concurrency control params\n";
         std::cerr << "--" << long_options[NUM_CC_THREADS].name << "\n";
         std::cerr << "--" << long_options[NUM_TXNS].name << "\n";
@@ -96,6 +101,7 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[NUM_WORKER_THREADS].name << "\n";
         std::cerr << "--" << long_options[TXN_SIZE].name << "\n";
         std::cerr << "--" << long_options[EXPERIMENT].name << "\n";
+        std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
         exit(-1);        
       }
 
@@ -106,6 +112,7 @@ class ExperimentConfig {
       mvConfig.numWorkerThreads = (uint32_t)atoi(argMap[NUM_WORKER_THREADS]);
       mvConfig.txnSize = (uint32_t)atoi(argMap[TXN_SIZE]);
       mvConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
+      mvConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
       this->ccType = MULTIVERSION;
     }
     else {  // ccType == LOCKING
@@ -115,7 +122,8 @@ class ExperimentConfig {
           argMap.count(NUM_RECORDS) == 0 ||
           argMap.count(NUM_CONTENDED) == 0 ||
           argMap.count(TXN_SIZE) == 0 || 
-          argMap.count(EXPERIMENT) == 0) {
+          argMap.count(EXPERIMENT) == 0 ||
+          argMap.count(RECORD_SIZE) == 0) {
         
         std::cerr << "Missing one or more locking concurrency control params\n";
         std::cerr << "--" << long_options[NUM_LOCK_THREADS].name << "\n";
@@ -124,6 +132,7 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[NUM_CONTENDED].name << "\n";
         std::cerr << "--" << long_options[TXN_SIZE].name << "\n";
         std::cerr << "--" << long_options[EXPERIMENT].name << "\n";
+        std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
         exit(-1);
       }
 
@@ -135,6 +144,7 @@ class ExperimentConfig {
         (uint32_t)atoi(argMap[NUM_CONTENDED]);
       lockConfig.txnSize = (uint32_t)atoi(argMap[TXN_SIZE]);
       lockConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
+      lockConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
       this->ccType = LOCKING;
     }
   }

@@ -14,8 +14,8 @@ TESTOBJECTS=$(patsubst test/%.cc,test/%.o,$(TESTSOURCES))
 DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
-all:CFLAGS+=-DTESTING=0# -L${JEMALLOC_PATH}/lib -Wl,-rpath,${JEMALLOC_PATH}/lib -ljemalloc
-all:LIBS+=-ltcmalloc_minimal
+all:CFLAGS+=-DTESTING=0 -L${JEMALLOC_PATH}/lib -Wl,-rpath,${JEMALLOC_PATH}/lib -ljemalloc
+#all:LIBS+=-ltcmalloc_minimal
 all:env build/db
 
 test:CFLAGS+=-DTESTING=1

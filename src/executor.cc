@@ -136,7 +136,7 @@ void Executor::Init() {
   }
   this->pendingList = new (config.cpu) PendingActionList(1000);
   this->garbageBin = new (config.cpu) GarbageBin(config.garbageConfig);
-  this->pendingGC = new (config.cpu) PendingActionList(20000);
+  //  this->pendingGC = new (config.cpu) PendingActionList(20000);
 }
 
 void Executor::StartWorking() {
@@ -147,24 +147,23 @@ void Executor::StartWorking() {
     ActionBatch batch = config.inputQueue->DequeueBlocking();    
     ProcessBatch(batch);
 
-    uint32_t doneEpoch = DoPendingGC();
-    if (doneEpoch == 0xFFFFFFFF) {
-      doneEpoch = epoch;
-    }
-    else {
-      doneEpoch = doneEpoch-1;
-    }
     barrier();
-    *config.epochPtr = doneEpoch;
+    *config.epochPtr = epoch;
     barrier();
     
-    //    assert(pendingGC->IsEmpty());
+    /*
+    if (DoPendingGC()) {
+      // Tell other threads that this epoch is finished
+      barrier();
+      *config.epochPtr = epoch;
+      barrier();
+    }
+    */
+    
     // If this is the leader thread, try to advance the low-water mark to 
     // trigger garbage collection
     if (config.threadId == 0) {
-      //      std::cout << "Pending count: " << pendingGC->Size() << "\n";
       volatile uint32_t minEpoch = *config.epochPtr;
-      
       //      std::cout << "0:" << minEpoch << "\n";
       for (uint32_t i = 1; i < config.numExecutors; ++i) {
         barrier();
@@ -452,17 +451,17 @@ bool Executor::ProcessTxn(Action *action) {
   barrier();
   for (uint32_t i = 0; i < numWrites; ++i) {
     action->writeset[i].value->writer = NULL;        
-    MVRecord *prev = action->writeset[i].value->recordLink;
-    /*
-    if (prev != NULL) {
-
+    MVRecord *previous = action->writeset[i].value->recordLink;
+    if (previous != NULL) {
+        
+      // Since the previous txn has been substantiated, the record's value 
+      // shouldn't be NULL.
+      assert(previous->value != NULL);
+      garbageBin->AddRecord(previous->writingThread, 
+                            action->writeset[i].tableId,
+                            previous->value);
+      garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
     }
-    */
-  }
-  counter += 1;
-  pendingGC->EnqueuePending(action);
-  if (counter % 128 == 0) {
-    DoPendingGC();
   }
   //  bool gcSuccess = ProcessSingleGC(action);
   //  assert(gcSuccess);

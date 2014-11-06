@@ -25,6 +25,7 @@ class Table {
   TableRecord **buckets;
   TableRecord *freeList;
   TableConfig  conf;
+  bool init;
 
   inline TableRecord* GetRecord() {
     assert(freeList != NULL);
@@ -39,7 +40,12 @@ class Table {
     return alloc_mem(sz, cpu);
   }
 
+  void SetInit() {
+    this->init = true;
+  }
+
   Table(TableConfig conf) {
+    this->init = false;
     this->conf = conf;    
     
     // Initialize hash buckets
