@@ -6,6 +6,8 @@
 #include <numa.h>
 #include <mv_table.h>
 
+extern uint64_t recordSize;
+
 class CompositeKey;
 class Action;
 class MVRecordAllocator;

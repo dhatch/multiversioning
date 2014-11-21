@@ -132,7 +132,6 @@ alloc_mem(size_t size, int cpu) {
     //    numa_set_strict(1);
     //    void *buf = numa_alloc_onnode(size, numa_node);
     void *buf = numa_alloc_interleaved(size);
-    //    return buf;
     
     if (buf == NULL) {
         return buf;

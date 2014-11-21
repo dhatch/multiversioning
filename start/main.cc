@@ -724,9 +724,6 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
       execThreads[i]->Run();
     }
 
-    for (int i = 0; i < numEpochs; ++i) {
-      schedInputQueue->EnqueueBlocking(inputPlaceholder[i]);
-    }
 
     outputQueue->DequeueBlocking();
 
@@ -735,6 +732,11 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
 
     //ProfilerStart("/home/jmf/multiversioning/db.prof");
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
+
+    for (int i = 0; i < numEpochs; ++i) {
+      schedInputQueue->EnqueueBlocking(inputPlaceholder[i]);
+    }
+
 
     for (int i = 0; i < numEpochs-50; ++i) {
         outputQueue->DequeueBlocking();
@@ -1008,12 +1010,12 @@ void LockingExperiment(LockingConfig config) {
   barrier();
 
   timespec start_time, end_time, elapsed_time;
-  for (uint32_t i = 0; i < config.numThreads; ++i) {
-    inputs[i]->EnqueueBlocking(batches[i]);
-
-  }
   //  ProfilerStart("/home/jmf/multiversioning/locking.prof");
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);  
+  for (uint32_t i = 0; i < config.numThreads; ++i) {
+    inputs[i]->EnqueueBlocking(batches[i]);
+  }
+
   for (uint32_t i = 0; i < config.numThreads; ++i) {
     outputs[i]->DequeueBlocking();
   }

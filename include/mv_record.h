@@ -9,6 +9,8 @@
 class Action;
 class Record;
 
+extern uint64_t recordSize;
+
 typedef struct _MVRecord_ MVRecord;
 
 

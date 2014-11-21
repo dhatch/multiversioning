@@ -107,14 +107,14 @@ class Action {
  protected:
 
   void* Read(uint32_t index) {
-    return (void*)(&readset[index].value->value->value);
+    return (void*)(readset[index].value->value);
   }
 
   void* GetWriteRef(uint32_t index) {
     
     // Memory for the write should always be initialized.
     assert(writeset[index].value->value != NULL);
-    return (void*)(&writeset[index].value->value->value);
+    return (void*)(writeset[index].value->value);
   }
 
  public:  
@@ -230,6 +230,8 @@ class RMWAction : public Action {
     else {
       assert(false);
     }
+    
+    //    assert(false);
     return true;
   }
 };

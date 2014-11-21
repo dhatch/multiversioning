@@ -126,7 +126,9 @@ Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) {
 
 void Executor::Init() {
   this->counter = 0;
+  /*
   this->allocators = 
+
     (RecordAllocator**)malloc(sizeof(RecordAllocator*)*config.numTables);
   for (uint32_t i = 0; i < config.numTables; ++i) {
     uint32_t recSize = config.recordSizes[i];
@@ -134,6 +136,7 @@ void Executor::Init() {
     this->allocators[i] = 
       new (config.cpu) RecordAllocator(recSize, allocSize, config.cpu);
   }
+    */
   this->pendingList = new (config.cpu) PendingActionList(1000);
   this->garbageBin = new (config.cpu) GarbageBin(config.garbageConfig);
   //  this->pendingGC = new (config.cpu) PendingActionList(20000);
@@ -144,8 +147,42 @@ void Executor::StartWorking() {
   ActionBatch dummy;
   while (true) {
     // Process the new batch of transactions
-    ActionBatch batch = config.inputQueue->DequeueBlocking();    
-    ProcessBatch(batch);
+    
+    if (config.threadId == 0) {
+      ActionBatch batch;
+      while (!config.inputQueue->Dequeue(&batch)) {
+        volatile uint32_t minEpoch = *config.epochPtr;
+        //        std::cout << "0:" << minEpoch << "\n";
+        for (uint32_t i = 1; i < config.numExecutors; ++i) {
+          barrier();
+          volatile uint32_t temp = config.epochPtr[i];
+          //          std::cout << i << ":" << temp << "\n";
+          barrier();
+        
+          if (temp < minEpoch) {
+            minEpoch = temp;
+          }
+        }
+      
+        uint32_t prev;
+        barrier();
+        prev = *config.lowWaterMarkPtr;
+        if (minEpoch > prev) {
+          *config.lowWaterMarkPtr = minEpoch;
+          //          std::cout << "LowWaterMark: " << minEpoch << "\n";
+        }
+        barrier();
+      
+        for (uint32_t i = 0; i < minEpoch - prev; ++i) {
+          config.outputQueue->EnqueueBlocking(dummy);
+        }
+      }
+      ProcessBatch(batch);
+    }
+    else {
+      ActionBatch batch = config.inputQueue->DequeueBlocking();    
+      ProcessBatch(batch);    
+    }
 
     barrier();
     *config.epochPtr = epoch;
@@ -162,6 +199,7 @@ void Executor::StartWorking() {
     
     // If this is the leader thread, try to advance the low-water mark to 
     // trigger garbage collection
+    /*
     if (config.threadId == 0) {
       volatile uint32_t minEpoch = *config.epochPtr;
       //      std::cout << "0:" << minEpoch << "\n";
@@ -185,15 +223,16 @@ void Executor::StartWorking() {
       for (uint32_t i = 0; i < minEpoch - prev; ++i) {
         config.outputQueue->EnqueueBlocking(dummy);
       }
-      // std::cout << "LowWaterMark: " << *config.lowWaterMarkPtr << "\n";
+      std::cout << "LowWaterMark: " << *config.lowWaterMarkPtr << "\n";
     }
-    
+    */
+
     // Try to return records that are no longer visible to their owners
     garbageBin->FinishEpoch(epoch);
     
     // Check if there's any garbage we can recycle. Insert into our record 
     // allocators.
-    RecycleData();
+    //    RecycleData();
 
     epoch += 1;
   }
@@ -307,7 +346,7 @@ bool Executor::ProcessSingleGC(Action *action) {
         garbageBin->AddRecord(previous->writingThread, 
                               action->writeset[i].tableId,
                               previous->value);
-        garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
+        //        garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
       }
     }
   }
@@ -419,6 +458,7 @@ bool Executor::ProcessTxn(Action *action) {
     return false;
   }
 
+  /*
   for (uint32_t i = 0; i < numWrites; ++i) {
     uint32_t tbl = action->writeset[i].tableId;
     Record **valuePtr = &action->writeset[i].value->value;
@@ -426,6 +466,7 @@ bool Executor::ProcessTxn(Action *action) {
     bool success = allocators[tbl]->GetRecord(valuePtr);
     assert(success);
   }
+  */
   
   // Transaction aborted
   if (abort || !action->Run()) {
@@ -457,9 +498,11 @@ bool Executor::ProcessTxn(Action *action) {
       // Since the previous txn has been substantiated, the record's value 
       // shouldn't be NULL.
       assert(previous->value != NULL);
+      /*
       garbageBin->AddRecord(previous->writingThread, 
                             action->writeset[i].tableId,
                             previous->value);
+      */
       garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
     }
   }
@@ -543,7 +586,7 @@ void GarbageBin::ReturnGarbage() {
     curStickies[i].tail = &curStickies[i].head;
     curStickies[i].count = 0;
   }
-  
+  /*
   uint32_t tblCount = config.numTables;
   for (uint32_t i = 0; i < config.numWorkers; ++i) {
     for (uint32_t j = 0; j < tblCount; ++j) {      
@@ -563,7 +606,7 @@ void GarbageBin::ReturnGarbage() {
       curRecords[index].count = 0;
     }
   }
-  
+  */
   //  std::cout << "Success!\n";
 }
 

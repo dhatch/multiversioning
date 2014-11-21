@@ -14,9 +14,17 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu) {
   this->size = size;
   this->count = 0;
   uint64_t numRecords = size/sizeof(MVRecord);
+  
+  uint64_t recordDataSize = recordSize*numRecords;
+  std::cout << "Record size: " << recordSize << "\nRecord data size: " << recordDataSize << "\n";
+  char *recordData = (char*)alloc_mem(recordDataSize, cpu);
+  assert(recordData != NULL);
+  memset(recordData, 0xA3, recordDataSize);
+
   uint64_t endIndex = numRecords-1;
   for (uint64_t i = 0; i < numRecords; ++i) {
     data[i].allocLink = &data[i+1];
+    data[i].value = (Record*)(&recordData[i*recordSize]);
     this->count += 1;
   }
   data[numRecords-1].allocLink = NULL;
