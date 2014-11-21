@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <unordered_map>
 
+using namespace std;
+
 static struct option long_options[] = {
   {"epoch_size", required_argument, NULL, 0},
   {"num_txns", required_argument, NULL, 1},
@@ -17,7 +19,9 @@ static struct option long_options[] = {
   {"cc_type", required_argument, NULL, 8},
   {"experiment", required_argument, NULL, 9},
   {"record_size", required_argument, NULL, 10},
-  {NULL, no_argument, NULL, 11},
+  {"distribution", required_argument, NULL, 11},
+  {"theta", required_argument, NULL, 12},
+  {NULL, no_argument, NULL, 13},
 };
 
 
@@ -34,6 +38,8 @@ struct LockingConfig {
   uint32_t txnSize;
   uint32_t experiment;
   uint64_t recordSize;
+  uint32_t distribution;
+  double theta;
 };
 
 struct MVConfig {
@@ -45,6 +51,8 @@ struct MVConfig {
   uint32_t txnSize;
   uint32_t experiment;
   uint64_t recordSize;
+  uint32_t distribution;
+  double theta;
 };
 
 class ExperimentConfig {
@@ -61,6 +69,8 @@ class ExperimentConfig {
     CC_TYPE,
     EXPERIMENT,
     RECORD_SIZE,
+    DISTRIBUTION,
+    THETA,
   };
   unordered_map<int, char*> argMap;
 
@@ -83,7 +93,7 @@ class ExperimentConfig {
       std::cerr << "Undefined concurrency control type\n";
       exit(-1);
     }
-
+    
     if (ccType == MULTIVERSION) {
       if (argMap.count(NUM_CC_THREADS) == 0 ||
           argMap.count(NUM_TXNS) == 0 ||
@@ -92,7 +102,8 @@ class ExperimentConfig {
           argMap.count(NUM_WORKER_THREADS) == 0 ||
           argMap.count(TXN_SIZE) == 0 || 
           argMap.count(EXPERIMENT) == 0 ||
-          argMap.count(RECORD_SIZE) == 0) {
+          argMap.count(RECORD_SIZE) == 0 || 
+          argMap.count(DISTRIBUTION) == 0) {
         std::cerr << "Missing one or more multiversion concurrency control params\n";
         std::cerr << "--" << long_options[NUM_CC_THREADS].name << "\n";
         std::cerr << "--" << long_options[NUM_TXNS].name << "\n";
@@ -102,9 +113,15 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[TXN_SIZE].name << "\n";
         std::cerr << "--" << long_options[EXPERIMENT].name << "\n";
         std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
+        std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
         exit(-1);        
       }
-
+      
+      if (atoi(argMap[DISTRIBUTION]) == 1 && argMap.count(THETA) == 0) {
+        std::cerr << "Zipfian config parameter, theta, missing!\n";
+        exit(-1);
+      }
+      
       mvConfig.numCCThreads = (uint32_t)atoi(argMap[NUM_CC_THREADS]);
       mvConfig.numTxns = (uint32_t)atoi(argMap[NUM_TXNS]);
       mvConfig.epochSize = (uint32_t)atoi(argMap[EPOCH_SIZE]);
@@ -113,6 +130,10 @@ class ExperimentConfig {
       mvConfig.txnSize = (uint32_t)atoi(argMap[TXN_SIZE]);
       mvConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
       mvConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
+      mvConfig.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
+      if (argMap.count(THETA) > 0) {
+        mvConfig.theta = (double)atof(argMap[THETA]);
+      }
       this->ccType = MULTIVERSION;
     }
     else {  // ccType == LOCKING
@@ -123,7 +144,8 @@ class ExperimentConfig {
           argMap.count(NUM_CONTENDED) == 0 ||
           argMap.count(TXN_SIZE) == 0 || 
           argMap.count(EXPERIMENT) == 0 ||
-          argMap.count(RECORD_SIZE) == 0) {
+          argMap.count(RECORD_SIZE) == 0 || 
+          argMap.count(DISTRIBUTION) == 0) {
         
         std::cerr << "Missing one or more locking concurrency control params\n";
         std::cerr << "--" << long_options[NUM_LOCK_THREADS].name << "\n";
@@ -133,9 +155,14 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[TXN_SIZE].name << "\n";
         std::cerr << "--" << long_options[EXPERIMENT].name << "\n";
         std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
+        std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
         exit(-1);
       }
 
+      if (atoi(argMap[DISTRIBUTION]) == 1 && argMap.count(THETA) == 0) {
+        std::cerr << "Zipfian config parameter, theta, missing!\n";
+        exit(-1);
+      }
       
       lockConfig.numThreads = (uint32_t)atoi(argMap[NUM_LOCK_THREADS]);
       lockConfig.numTxns = (uint32_t)atoi(argMap[NUM_TXNS]);
@@ -145,6 +172,11 @@ class ExperimentConfig {
       lockConfig.txnSize = (uint32_t)atoi(argMap[TXN_SIZE]);
       lockConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
       lockConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
+      lockConfig.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
+      if (argMap.count(THETA) > 0) {
+        lockConfig.theta = (double)atof(argMap[THETA]);
+      }
+
       this->ccType = LOCKING;
     }
   }

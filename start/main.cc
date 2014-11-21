@@ -4,7 +4,9 @@
 #include <config.h>
 #include <eager_worker.h>
 #include <executor.h>
-
+#include <record_generator.h>
+#include <uniform_generator.h>
+#include <zipf_generator.h>
 #include <gperftools/profiler.h>
 
 #include <algorithm>
@@ -19,7 +21,7 @@
 
 Database DB(1);
 
-// uint64_t dbSize = ((uint64_t)1<<36);
+uint64_t dbSize = ((uint64_t)1<<36);
 
 int NumProcs;
 uint32_t numLockingRecords;
@@ -366,7 +368,8 @@ Executor** SetupExecutors(uint32_t cpuStart,
   assert(queuesPerCCThread == numWorkers);
   assert(queuesPerTable == numWorkers);
 
-  uint64_t threadDbSz = (1<<30); //dbSize / numWorkers;
+  //  uint64_t threadDbSz = (1<<30);
+  uint64_t threadDbSz = dbSize / numWorkers;
   Executor **execs = (Executor**)malloc(sizeof(Executor*)*numWorkers);
   volatile uint32_t *epochArray = 
     (volatile uint32_t*)malloc(sizeof(uint32_t)*(numWorkers+1));  
@@ -535,14 +538,16 @@ void SetupDatabase(int numProcs, uint64_t allocatorSize, uint64_t tableSize) {
 
 
 ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords, 
-                               uint32_t epoch, uint32_t experiment) {
+                               uint32_t epoch, 
+                               uint32_t experiment, 
+                               RecordGenerator *generator) {
   Action **ret = (Action**)alloc_mem(sizeof(Action*)*epochSize, 79);
     assert(ret != NULL);
     std::set<uint64_t> seenKeys;
     uint64_t counter = 0;
     for (uint32_t j = 0; j < epochSize; ++j) {
         seenKeys.clear();
-        ret[j] = new Action();// new RMWAction();
+        ret[j] = new RMWAction();
         assert(ret[j] != NULL);
         ret[j]->combinedHash = 0;
         ret[j]->version = (((uint64_t)epoch<<32) | counter);
@@ -558,7 +563,7 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
             counter += 1;
             */
             while (true) {
-                uint64_t key = (uint64_t)(rand() % numRecords);
+              uint64_t key = generator->GenNext();
                 //                uint64_t counterMod = counter % MVScheduler::NUM_CC_THREADS;
                 //                uint64_t keyMod = key % MVScheduler::NUM_CC_THREADS;
 
@@ -593,10 +598,20 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
 }
 
 void SetupInputArray(std::vector<ActionBatch> *input, int numEpochs, int epochSize, 
-                     int numRecords, int txnsize, uint32_t experiment) {
+                     int numRecords, int txnsize, uint32_t experiment, 
+                     uint32_t distribution, double theta) {
+  RecordGenerator *gen = NULL;
+  if (distribution == 0) {
+    gen = new UniformGenerator((uint32_t)numRecords);
+  }
+  else if (distribution == 1) {
+    gen = new ZipfGenerator(1, (uint64_t)numRecords, theta);
+  }
   for (int i = 0; i < numEpochs; ++i) {
     ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, 
-                                              (uint32_t)(i+2), experiment);
+                                              (uint32_t)(i+2), 
+                                              experiment,
+                                              gen);
     input->push_back(curBatch);
   }
 }
@@ -638,7 +653,7 @@ ActionBatch LoadDatabaseTxns(int numRecords, int txnSize) {
 void SetupInput(SimpleQueue<ActionBatch> *input, int numEpochs, int epochSize, 
                 int numRecords, int txnsize) {
     for (int i = 0; i < numEpochs+1; ++i) {
-      ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, (uint32_t)i, 0);
+      ActionBatch curBatch = CreateRandomAction(txnsize, epochSize, numRecords, (uint32_t)i, 0, NULL);
       //      input->push_back(curBatch);
       input->EnqueueBlocking(curBatch);        
     }
@@ -650,7 +665,9 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
                   int epochSize,
                   int numEpochs, 
                   int txnSize,
-                  uint32_t experiment) {
+                  uint32_t experiment,
+                  uint32_t distribution,
+                  double theta) {
     MVScheduler **schedThreads = NULL;
     SimpleQueue<ActionBatch> *schedInputQueue = NULL;
     SimpleQueue<ActionBatch> *schedOutputQueues = NULL;
@@ -679,7 +696,11 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     // Set up the input.
     ActionBatch loadInput = LoadDatabaseTxns(numRecords, 100);
     std::vector<ActionBatch> inputPlaceholder;
-    SetupInputArray(&inputPlaceholder, numEpochs, epochSize, numRecords, txnSize, experiment);
+    SetupInputArray(&inputPlaceholder, numEpochs, epochSize, numRecords, 
+                    txnSize, 
+                    experiment,
+                    distribution,
+                    theta);
     std::cout << "Setup input...\n";
     
     // Setup executors
@@ -727,8 +748,22 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     std::cout << elapsedMilli << '\n';
     std::ofstream resultFile;
     resultFile.open("results.txt", std::ios::app | std::ios::out);
-    resultFile << elapsedMilli << " " << (numEpochs-50)*epochSize << " " << numExecutors << "\n";
-    //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
+
+    resultFile << "time:" << elapsedMilli << " txns:" << (numEpochs-50)*epochSize << " ";
+    resultFile << "ccthreads:" << numCCThreads << " workerthreads:" << numExecutors << " mv ";
+    if (experiment == 0) {
+      resultFile << "10rmw" << " ";
+    }
+    else if (experiment == 1) {
+      resultFile << "8r2rmw" << " ";
+    }
+    else if (experiment == 2) {
+      resultFile << "small_bank" << " ";
+    }
+  
+    resultFile << "uniform" << "\n";
+
+
     resultFile.close();
 }
 
@@ -783,7 +818,8 @@ bool SortCmp(LockingCompositeKey key1, LockingCompositeKey key2) {
 
 EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize, 
                                              uint64_t numRecords, 
-                                             uint32_t experiment) { 
+                                             uint32_t experiment,
+                                             RecordGenerator *gen) { 
   std::cout << "Num records: " << numRecords << "\n";
   std::cout << "Txn size: " << txnSize << "\n";
   numLockingRecords = numRecords;
@@ -800,7 +836,7 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
     EagerAction *action = new RMWEagerAction();    
     for (uint32_t j = 0; j < txnSize; ++j) {
       while (true) {
-        uint64_t key = rand() % numRecords;
+        uint64_t key = gen->GenNext();
         if (seenKeys.find(key) == seenKeys.end()) {
           seenKeys.insert(key);
           recordInfo.is_write = true;
@@ -829,13 +865,24 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
 
 EagerActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads, 
                                     uint32_t numTxns, uint32_t numRecords, 
-                                    uint32_t experiment) {
+                                    uint32_t experiment,
+                                    uint32_t distribution,
+                                    double theta) {
+  RecordGenerator *gen = NULL;
+  if (distribution == 0) {
+    gen = new UniformGenerator(numRecords);
+  }
+  else if (distribution == 1) {
+    gen = new ZipfGenerator(0, numRecords, theta);
+  }
   EagerActionBatch *ret = 
     (EagerActionBatch*)malloc(sizeof(EagerActionBatch)*numThreads);
   uint32_t txnsPerThread = numTxns/numThreads;
   for (uint32_t i = 0; i < numThreads; ++i) {
     EagerAction **actions = 
-      CreateSingleLockingActionBatch(txnsPerThread, txnSize, numRecords, experiment);
+      CreateSingleLockingActionBatch(txnsPerThread, txnSize, numRecords, 
+                                     experiment,
+                                     gen);
     ret[i] = {
       txnsPerThread,
       actions,
@@ -948,7 +995,9 @@ void LockingExperiment(LockingConfig config) {
                                                 config.numThreads,
                                                 config.numTxns,
                                                 config.numRecords,
-                                                config.experiment);
+                                                config.experiment,
+                                                config.distribution,
+                                                config.theta);
   int success = pin_thread(79);
   assert(success == 0);
   
@@ -976,8 +1025,21 @@ void LockingExperiment(LockingConfig config) {
   std::cout << elapsedMilli << '\n';
   std::ofstream resultFile;
   resultFile.open("locking.txt", std::ios::app | std::ios::out);
-  resultFile << elapsedMilli << " " << config.numTxns << " ";
-  resultFile << config.numThreads << "\n";
+
+  resultFile << "time:" << elapsedMilli << " txns:" << config.numTxns << " ";
+  resultFile << "threads:" << config.numThreads << " locking ";
+  if (config.experiment == 0) {
+    resultFile << "10rmw" << " ";
+  }
+  else if (config.experiment == 1) {
+    resultFile << "8r2rmw" << " ";
+  }
+  else if (config.experiment == 2) {
+    resultFile << "small_bank" << " ";
+  }
+  
+  resultFile << "uniform" << "\n";
+
   //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
   resultFile.close();  
 }
@@ -1012,17 +1074,21 @@ int main(int argc, char **argv) {
   if (cfg.ccType == MULTIVERSION) {
     MVScheduler::NUM_CC_THREADS = (uint32_t)cfg.mvConfig.numCCThreads;
     recordSize = cfg.mvConfig.recordSize;
+    assert(cfg.mvConfig.distribution < 2);
     assert(recordSize == 8 || recordSize == 1000);
     DoExperiment(cfg.mvConfig.numCCThreads, cfg.mvConfig.numWorkerThreads, 
                  cfg.mvConfig.numRecords, 
                  cfg.mvConfig.epochSize, 
                  cfg.mvConfig.numTxns/cfg.mvConfig.epochSize, 
                  cfg.mvConfig.txnSize,
-                 cfg.mvConfig.experiment);
+                 cfg.mvConfig.experiment,
+                 cfg.mvConfig.distribution,
+                 cfg.mvConfig.theta);
     exit(0);
   }
   else {
     recordSize = cfg.lockConfig.recordSize;
+    assert(cfg.lockConfig.distribution < 2);
     assert(recordSize == 8 || recordSize == 1000);
     LockingExperiment(cfg.lockConfig);
     exit(0);

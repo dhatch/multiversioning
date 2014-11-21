@@ -176,7 +176,7 @@ bool MVTablePartition::WriteNewVersion(CompositeKey &pkey, Action *action,
     if (cur->key == pkey.key) {
       toAdd->link = cur->link;
       toAdd->recordLink = cur;
-      cur->deleteTimestamp = version;
+      //      cur->deleteTimestamp = version;
       break;
     }
 
