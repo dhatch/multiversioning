@@ -122,10 +122,10 @@ def small_bank_uncontended(mv, locking):
 def uncontended_1000():
     result_dir = "results/rec_1000/uncontended"
     for i in range(0, 5):
-        mv_expt(result_dir, "mv_10rmw.txt", 10, 5000000, 1000000, 2, 30, 0, 0, 0.9)
-        locking_expt(result_dir, "locking_10rmw.txt", 12, 40, 5000000, 1000000, 0, 0, 0.9)
-        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 5000000, 1000000, 2, 30, 1, 0, 0.9)
-        locking_expt(result_dir, "locking_8r2rmw.txt", 12, 40, 5000000, 1000000, 1, 0, 0.9)
+        mv_expt(result_dir, "mv_10rmw.txt", 10, 3000000, 1000000, 2, 30, 0, 0, 0.9)
+        locking_expt(result_dir, "locking_10rmw.txt", 12, 40, 3000000, 1000000, 0, 0, 0.9)
+        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 3000000, 1000000, 2, 30, 1, 0, 0.9)
+        locking_expt(result_dir, "locking_8r2rmw.txt", 12, 40, 3000000, 1000000, 1, 0, 0.9)
 
     os.system("touch " + os.path.join(outdir, "." + "mv_10rmw.txt"))
     os.system("touch " + os.path.join(outdir, "." + "mv_8r2rmw.txt"))
