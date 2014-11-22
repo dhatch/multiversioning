@@ -7,6 +7,12 @@
 #include <machine.h>
 #include <lock_manager.h>
 
+struct LockBucket {
+  EagerRecordInfo *head;
+  EagerRecordInfo *tail;
+  volatile uint64_t latch;
+} __attribute__((__packed__, __aligned__(CACHE_LINE)));
+
 
 struct TxnQueue {
   EagerRecordInfo *head;
@@ -76,40 +82,36 @@ class LockManagerTable {
 
   static const uint64_t BUCKET_SIZE = CACHE_LINE;
 
-  // Try to insert "toPut" into the bucket. If there already exists another 
-  // record of the same key, return a reference to it.
-  /*
-  bool TryInsert(EagerRecordInfo **iter, EagerRecordInfo *toPut, 
-                 EagerRecordInfo **OUT) {
-    while (*iter != NULL) {
-      if ((*iter)->record == toPut->record) {
-        // There already exists a record
-        *OUT = *iter;
-        return false;
-      }
-      else {
-        iter = &((*iter)->next);
-      }
-    }    
+  void WakeupReaders(EagerRecordInfo *iter, const EagerCompositeKey &key) {
+
+    assert(iter != NULL);
+    assert(iter->record == key);
+    assert(!iter->is_write);
     
-    if (*iter == NULL) {
-      // Obtain a reference to the record containing iter
-      uint32_t offset = offsetof(EagerRecordInfo, next);
-      EagerRecordInfo *iterHead = (EagerRecordInfo*)(((char*)(iter)) - offset);
-      assert(&iterHead->next == iter);
-
-      // Insert
-      *iter = toPut;
-      toPut->prev = iterHead;
-      toPut->next = NULL;
-      
-      *OUT = toPut;
-      return true;
+    while (iter != NULL && iter->record == key && !iter->is_write) {
+      fetch_and_decrement(&iter->dependency->num_dependencies);
+      iter = iter->next;
     }
-    assert(false);
   }
-  */
 
+  void ReleaseLock(EagerRecordInfo *iter, const EagerCompositeKey &key) {
+    while (iter != NULL && iter->record != key) {
+      if (iter->record == key) {
+        if (iter->is_write) {         
+          fetch_and_decrement(&iter->dependency->num_dependencies);
+        }
+        else {
+          WakeupReaders(iter, key);
+        }
+        return;
+      }
+    }
+  }
+
+  bool Conflicting(EagerRecordInfo *info1, EagerRecordInfo *info2) {
+    return ((info1->record == info2->record) && 
+            (info1->is_write || info2->is_write));
+  }
 
   // Find the record in the appropriate hash bucket. Assumes that the latch is 
   // set.
@@ -132,8 +134,7 @@ class LockManagerTable {
     return toAdd;
   }
 
-  void GetBucketRef(const EagerCompositeKey &key, TxnQueue ***OUT_DATA, 
-                    char **OUT_LATCH) {
+  LockBucket* GetBucketRef(const EagerCompositeKey &key) {
     // Get the table
     char *tbl = tables[key.tableId];
     uint64_t tblSz = tableSizes[key.tableId];
@@ -141,8 +142,107 @@ class LockManagerTable {
     // Get the bucket in the table
     uint64_t index = key.Hash() % tblSz;
     char *bucketPtr = &tbl[CACHE_LINE*index];
-    *OUT_LATCH = bucketPtr;
-    *OUT_DATA = (TxnQueue**)(bucketPtr+sizeof(uint64_t));
+    return (LockBucket*)bucketPtr;
+  }
+
+
+  bool GetNext(EagerRecordInfo *info, EagerRecordInfo **next) {
+    EagerRecordInfo *cur = info->next;
+    while (cur != NULL) {
+      if (cur->record == info->record) {
+        *next = cur;
+        return true;
+      }
+      cur = cur->next;
+    }
+    *next = NULL;
+    return false;
+  }
+
+  void AdjustWrite(EagerRecordInfo *info) {
+    assert(info->is_write);
+    EagerRecordInfo *descendant;
+    
+    if (GetNext(info, &descendant)) {
+      if (descendant->is_write) {
+        descendant->is_held = true;
+        fetch_and_decrement(&descendant->dependency->num_dependencies);
+      }
+      else {
+        EagerRecordInfo *temp = descendant;
+        do {
+          descendant = temp;
+          descendant->is_held = true;
+          fetch_and_decrement(&descendant->dependency->num_dependencies);        
+        } while (GetNext(descendant, &temp) && !temp->is_write);
+      }
+    }  
+  }
+
+  void AdjustRead(EagerRecordInfo *info, LockBucket *bucket) {
+
+    assert(!info->is_write);
+    EagerRecordInfo *descendant;
+    
+    EagerRecordInfo *prev = bucket->head;    
+    assert(prev != NULL);
+    while (prev->record != info->record) {
+      prev = prev->next;
+      assert(prev != NULL);
+    }
+
+    if ((prev == info) && GetNext(info, &descendant)) {
+      if (descendant->is_write) {
+        descendant->is_held = true;
+        fetch_and_decrement(&descendant->dependency->num_dependencies);        
+      }
+    }
+  }
+
+  void AppendInfo(EagerRecordInfo *info, LockBucket *bucket) {
+    assert((bucket->head == NULL && bucket->tail == NULL) || 
+           (bucket->head != NULL && bucket->tail != NULL));
+
+    info->next = NULL;
+    info->prev = NULL;
+
+    if (bucket->tail == NULL) {
+      assert(bucket->head == NULL);
+      info->prev = NULL;
+      bucket->head = info;
+      bucket->tail = info;
+    }
+    else {
+      assert(bucket->head != NULL);
+      bucket->tail->next = info;
+      info->prev = bucket->tail;
+    }
+
+    bucket->tail = info;
+    assert(bucket->head != NULL && bucket->tail != NULL);
+  }
+  
+  void RemoveInfo(EagerRecordInfo *info, LockBucket *bucket) {
+    assert((bucket->head != NULL && bucket->tail != NULL));
+
+    if (info->next == NULL) {
+      bucket->tail = info->prev;
+    }
+    else {
+      info->next->prev = info->prev;
+    }
+  
+    if (info->prev == NULL) {
+      bucket->head = info->next;
+    }
+    else {
+      info->prev->next = info->next;
+    }
+    info->prev = NULL;
+    info->next = NULL;
+
+    assert((bucket->head == NULL && bucket->tail == NULL) || 
+           (bucket->head != NULL && bucket->tail != NULL));
   }
 
  public:
@@ -182,7 +282,56 @@ class LockManagerTable {
     }
   }
   
+
+  bool Lock(EagerRecordInfo *info, uint32_t cpu) {
+    assert(cpu > 0);
+    bool conflict = false;
+    LockBucket *bucket = GetBucketRef(info->record);
+        
+    reentrant_lock(&bucket->latch, cpu);
+    assert(bucket->latch>>32 == cpu);
+    info->latch = &bucket->latch;    
+
+    EagerRecordInfo *cur = bucket->head;
+    while (cur != NULL) {
+      if ((conflict = Conflicting(cur, info)) == true) {
+        fetch_and_increment(&info->dependency->num_dependencies);
+        break;
+      }
+      cur = cur->next;
+    }
+
+    AppendInfo(info, bucket);
+    info->is_held = !conflict;
+    return !conflict;
+  }
+  
+  void FinishLock(EagerRecordInfo *info) {
+    reentrant_unlock(info->latch);
+  }
+
+  void Unlock(EagerRecordInfo *info, uint32_t cpu) {
+
+    assert(info->is_held);
+
+    LockBucket *bucket = GetBucketRef(info->record);    
+    reentrant_lock(&bucket->latch, cpu);
+    assert(bucket->latch>>32 == cpu);
+
+    if (info->is_write) {
+      AdjustWrite(info);
+    }
+    else {
+      AdjustRead(info, bucket);
+    }
+
+    RemoveInfo(info, bucket);
+
+    reentrant_unlock(&bucket->latch);
+  }
+
   // Get a pointer to the head of linked list of records.
+  /*
   TxnQueue* GetPtr(const EagerCompositeKey &key, int cpu) {
     assert(cpu >= startCpu && cpu <= endCpu);
     char *latch;
@@ -199,6 +348,7 @@ class LockManagerTable {
     assert(ret != NULL);
     return ret;
   }
+  */
 
   /*
   bool GetPtr(const EagerCompositeKey &key, EagerRecordInfo **OUT) {
@@ -233,6 +383,10 @@ class LockManagerTable {
     unlock(latch);
   }
   */
+  
+  uint64_t TableSize(uint32_t tableId) {
+    uint64_t tblSz = tableSizes[tableId];
+  }
 };
 
 #endif          // LOCK_MANAGER_TABLE_H_

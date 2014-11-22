@@ -241,14 +241,18 @@ class EagerCompositeKey {
   uint32_t tableId;
   uint64_t key;
 
-  EagerCompositeKey(uint32_t table, uint64_t key) {
+  uint64_t hash;
+
+  EagerCompositeKey(uint32_t table, uint64_t key, uint64_t hash) {
     this->tableId = table;
     this->key = key;
+    this->hash = hash;
   }
   
   EagerCompositeKey() {
     this->tableId = 0;
     this->key = 0;
+    this->hash = 0;
   }
 
   bool operator==(const EagerCompositeKey &other) const {
@@ -339,6 +343,10 @@ class EagerAction {
     std::vector<struct EagerRecordInfo> writeset;
     std::vector<struct EagerRecordInfo> readset;
 
+    std::vector<struct EagerRecordInfo> shadowWriteset;
+    std::vector<struct EagerRecordInfo> shadowReadset;
+    
+
     //    timespec start_time;
     //    timespec end_time;
 
@@ -366,38 +374,38 @@ class RMWEagerAction : public EagerAction {
   virtual bool Run() {
     if (recordSize == 8) {      // longs
       uint64_t counter = 0;
-      uint32_t numReads = readset.size();
+      uint32_t numReads = shadowReadset.size();
       for (uint32_t i = 0; i < numReads; ++i) {
-        uint64_t *record = (uint64_t*)readset[i].value;
+        uint64_t *record = (uint64_t*)shadowReadset[i].value;
         counter += *record;
       }
 
-      uint32_t numWrites = writeset.size();
+      uint32_t numWrites = shadowWriteset.size();
       for (uint32_t i = 0; i < numWrites; ++i) {
-        uint64_t *record = (uint64_t*)writeset[i].value;
+        uint64_t *record = (uint64_t*)shadowWriteset[i].value;
         counter += *record;
       }
 
       for (uint32_t i = 0; i < numWrites; ++i) {
-        uint64_t *record = (uint64_t*)writeset[i].value;
+        uint64_t *record = (uint64_t*)shadowWriteset[i].value;
         *record += counter;
       }
     }
     else if (recordSize == 1000) {      //YCSB
-      uint32_t numReads = readset.size();
-      uint32_t numWrites = writeset.size();
+      uint32_t numReads = shadowReadset.size();
+      uint32_t numWrites = shadowWriteset.size();
       
       uint64_t counter = 0;
         
       // Read the ith field
       for (uint32_t j = 0; j < numReads; ++j) {
-        uint64_t *record = (uint64_t*)readset[j].value;
+        uint64_t *record = (uint64_t*)shadowReadset[j].value;
         for (uint32_t i = 0; i < 125; ++i) {
           counter += record[i];
         }
       }
       for (uint32_t j = 0; j < numWrites; ++j) {
-        uint64_t *record = (uint64_t*)writeset[j].value;
+        uint64_t *record = (uint64_t*)shadowWriteset[j].value;
         for (uint32_t i = 0; i < 125; ++i) {
           counter += record[i];
         }
@@ -405,7 +413,7 @@ class RMWEagerAction : public EagerAction {
         
       // Write the ith field
       for (uint32_t j = 0; j < numWrites; ++j) {
-        uint64_t *record = (uint64_t*)writeset[j].value;
+        uint64_t *record = (uint64_t*)shadowWriteset[j].value;
         for (uint32_t i = 0; i < 125; ++i) {
           if (i % 8 == 0) {
             counter = counter*2;

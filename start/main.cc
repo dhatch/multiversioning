@@ -843,23 +843,27 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
           seenKeys.insert(key);
           recordInfo.is_write = true;
           recordInfo.record.key = key;
-
+          recordInfo.record.hash = recordInfo.record.Hash() % numRecords;
           if (experiment == 0) {
+
             action->writeset.push_back(recordInfo);
+            action->shadowWriteset.push_back(recordInfo);
           }
           else if (experiment == 1) {
             if (j < 2) {
               action->writeset.push_back(recordInfo);
+              action->shadowWriteset.push_back(recordInfo);
             }
             else {
               action->readset.push_back(recordInfo);
+              action->shadowReadset.push_back(recordInfo);
             }          
           }
           break;
         }
       }
     }
-    //    std::sort(action->writeset.begin(), action->writeset.end());
+    //    std::sort(action->writeset.begin(), action->writeset.end(), LockManager::SortCmp);
     ret[i] = action;
   }
   return ret;

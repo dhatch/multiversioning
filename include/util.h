@@ -44,7 +44,7 @@ static inline void
 reentrant_lock(volatile uint64_t *word, uint32_t threadId) {
   static uint64_t mask = 0xFFFFFFFF00000000;
   barrier();
-  if (((*word & mask) >> 32) == threadId) {
+  if (((*word & mask) >> 32) != threadId) {
     barrier();
     while (true) {
       if ((*word == 0) && cmp_and_swap(word, 0, ((uint64_t)threadId<<32) | 1)) {

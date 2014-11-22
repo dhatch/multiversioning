@@ -13,10 +13,10 @@ fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_si
 def main():
 #    small_bank_contended()
 #    small_bank_uncontended()
-#    uncontended_1000(True, True)
+    uncontended_1000()
 #    small_bank_contended(False, True)
 #    small_bank_uncontended(False, True)
-    contended_1000()
+#    contended_1000()
 #    ccontrol()
 
 
@@ -119,20 +119,19 @@ def small_bank_uncontended(mv, locking):
         os.system("mv results.txt mv_small_bank_10000.txt")
 
 
-def uncontended_1000(mv, locking):
+def uncontended_1000():
     result_dir = "results/rec_1000/uncontended"
-    saved_dir = os.getcwd()
-    os.chdir(result_dir)
-    os.system("gnuplot plot.plt")
-    os.chdir(saved_dir)
-    if mv:
-        mv_expt(result_dir, "mv_10rmw.txt", 10, 3000000, 1000000, 2, 30, 0, 0, 0.0)
-    if locking:
-        locking_expt(result_dir, "locking_10rmw.txt", 12, 40, 3000000, 1000000, 0, 0, 0.0)
-    if mv:
-        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 3000000, 1000000, 2, 30, 1, 0, 0.0)
-    if locking:
-        locking_expt(result_dir, "locking_8r2rmw.txt", 12, 40, 3000000, 1000000, 1, 0, 0.0)
+    for i in range(0, 5):
+        mv_expt(result_dir, "mv_10rmw.txt", 10, 5000000, 1000000, 2, 30, 0, 0, 0.9)
+        locking_expt(result_dir, "locking_10rmw.txt", 12, 40, 5000000, 1000000, 0, 0, 0.9)
+        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 5000000, 1000000, 2, 30, 1, 0, 0.9)
+        locking_expt(result_dir, "locking_8r2rmw.txt", 12, 40, 5000000, 1000000, 1, 0, 0.9)
+
+    os.system("touch " + os.path.join(outdir, "." + "mv_10rmw.txt"))
+    os.system("touch " + os.path.join(outdir, "." + "mv_8r2rmw.txt"))
+    os.system("touch " + os.path.join(outdir, "." + "locking_10rmw.txt"))
+    os.system("touch " + os.path.join(outdir, "." + "locking_8r2rmw.txt"))
+
 
 def contended_1000():
 
@@ -142,7 +141,6 @@ def contended_1000():
         locking_expt(result_dir, "locking_10rmw.txt", 12, 40, 3000000, 1000000, 0, 1, 0.9)
         mv_expt(result_dir, "mv_8r2rmw.txt", 10, 3000000, 1000000, 2, 30, 1, 1, 0.9)
         locking_expt(result_dir, "locking_8r2rmw.txt", 12, 40, 3000000, 1000000, 1, 1, 0.9)
-
 
     os.system("touch " + os.path.join(outdir, "." + "mv_10rmw.txt"))
     os.system("touch " + os.path.join(outdir, "." + "mv_8r2rmw.txt"))

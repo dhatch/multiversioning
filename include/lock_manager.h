@@ -9,6 +9,9 @@
 using namespace std;
 
 class LockManager {    
+ public:
+  static uint64_t *tableSizes;
+
 private:
   LockManagerTable *table;
 
@@ -39,16 +42,19 @@ private:
     void
     FinishAcquisitions(EagerAction *txn);
 
-    void LockRecord(EagerAction *txn, struct EagerRecordInfo *dep, int cpu);
+    bool LockRecord(EagerAction *txn, struct EagerRecordInfo *dep, uint32_t cpu);
 
 public:
     LockManager(LockManagerConfig config);
     
     // Acquire and release the mutex protecting a particular hash chain
-    virtual void Unlock(EagerAction *txn, int cpu);
+    virtual void Unlock(EagerAction *txn, uint32_t cpu);
 
-    virtual bool Lock(EagerAction *txn, int cpu);
-    
+
+    virtual bool Lock(EagerAction *txn, uint32_t cpu);
+
+
+    static bool SortCmp(const EagerRecordInfo &key1, const EagerRecordInfo &key2);    
     //    virtual void Kill(EagerAction *txn, int cpu);
 
     //    bool CheckLocks(EagerAction *txn);

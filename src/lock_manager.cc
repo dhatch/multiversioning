@@ -1,6 +1,8 @@
 #include <lock_manager.h>
 #include <algorithm>
 
+uint64_t* LockManager::tableSizes = NULL;
+
 LockManager::LockManager(LockManagerConfig config) {
   table = new LockManagerTable(config);
 }
@@ -244,11 +246,14 @@ LockManager::Kill(EagerAction *txn, int cpu) {
 */
 
 void
-LockManager::Unlock(EagerAction *txn, int cpu) {
+LockManager::Unlock(EagerAction *txn, uint32_t cpu) {
+
   struct EagerRecordInfo *prev;
   struct EagerRecordInfo *next;
     
   for (size_t i = 0; i < txn->writeset.size(); ++i) {
+    table->Unlock(&txn->writeset[i], cpu);
+    /*
     TxnQueue *value = table->GetPtr(txn->writeset[i].record, cpu);
     assert(value != NULL);
 
@@ -266,9 +271,12 @@ LockManager::Unlock(EagerAction *txn, int cpu) {
     assert((value->head == NULL && value->tail == NULL) ||
            (value->head != NULL && value->tail != NULL));
     unlock(&value->lock_word);
+    */
     // pthread_mutex_unlock(&value->mutex);
   }
   for (size_t i = 0; i < txn->readset.size(); ++i) {
+    table->Unlock(&txn->readset[i], cpu);
+    /*
     TxnQueue *value = table->GetPtr(txn->readset[i].record, cpu);
     assert(value != NULL);
 
@@ -286,30 +294,36 @@ LockManager::Unlock(EagerAction *txn, int cpu) {
            (value->head != NULL && value->tail != NULL));
     unlock(&value->lock_word);
     // pthread_mutex_unlock(&value->mutex);
+    */
   }
+  //  FinishAcquisitions(txn);
   txn->finished_execution = true;
 }
 
 void
 LockManager::FinishAcquisitions(EagerAction *txn) {
     for (size_t i = 0; i < txn->writeset.size(); ++i) {
-        unlock(txn->writeset[i].latch);
+      table->FinishLock(&txn->writeset[i]);
+      //        unlock(txn->writeset[i].latch);
         //        pthread_mutex_unlock(txn->writeset[i].latch);
     }
     for (size_t i = 0; i < txn->readset.size(); ++i) {
-        unlock(txn->readset[i].latch);
+      table->FinishLock(&txn->readset[i]);
+      //unlock(txn->readset[i].latch);
         // pthread_mutex_unlock(txn->readset[i].latch);
     }
 }
 
-void
+bool
 LockManager::LockRecord(EagerAction *txn, struct EagerRecordInfo *dep, 
-                        int cpu) {
+                        uint32_t cpu) {
     dep->dependency = txn;
     dep->next = NULL;
     dep->prev = NULL;
     dep->is_held = false;
     
+    return table->Lock(dep, cpu);
+    /*
     TxnQueue *value = table->GetPtr(dep->record, cpu);
     assert(value != NULL);
     // dep->latch = &value->mutex;
@@ -339,6 +353,7 @@ LockManager::LockRecord(EagerAction *txn, struct EagerRecordInfo *dep,
     }
     assert((value->head == NULL && value->tail == NULL) ||
            (value->head != NULL && value->tail != NULL));    
+    */
 }
 
 /*
@@ -370,28 +385,44 @@ LockManager::AcquireRead(EagerAction *txn, struct EagerRecordInfo *dep) {
 }
 */
 
+
+
+
+bool LockManager::SortCmp(const EagerRecordInfo &key1, 
+                          const EagerRecordInfo &key2) {
+  if (key1.record.tableId != key2.record.tableId) {
+    return key1.record.tableId > key2.record.tableId;
+  }
+  else {
+    return key1.record.hash > key2.record.hash;
+  }
+}
+
 bool
-LockManager::Lock(EagerAction *txn, int cpu) {
+LockManager::Lock(EagerAction *txn, uint32_t cpu) {
+  bool success = true;
+  barrier();
     txn->num_dependencies = 0;
+    barrier();
     txn->finished_execution = false;
     size_t read_index = 0;
     size_t write_index = 0;
 
-    std::sort(txn->readset.begin(), txn->readset.end());
-    std::sort(txn->writeset.begin(), txn->writeset.end());
+    std::sort(txn->readset.begin(), txn->readset.end(), SortCmp);
+    std::sort(txn->writeset.begin(), txn->writeset.end(), SortCmp);
     
     // Acquire locks in sorted order. Both read and write sets are sorted according to 
     // key we need to merge them together.
     while (read_index < txn->readset.size() && write_index < txn->writeset.size()) {
         assert(txn->readset[read_index] != txn->writeset[write_index]);
-        if (txn->readset[read_index] < txn->writeset[write_index]) {
+        if (SortCmp(txn->readset[read_index], txn->writeset[write_index])) {
             txn->readset[read_index].is_write = false;
-            LockRecord(txn, &txn->readset[read_index], cpu);
+            success &= LockRecord(txn, &txn->readset[read_index], cpu);
             read_index += 1;
         }
         else {
             txn->writeset[write_index].is_write = true;
-            LockRecord(txn, &txn->writeset[write_index], cpu);
+            success &= LockRecord(txn, &txn->writeset[write_index], cpu);
             write_index += 1;
         }
     }
@@ -400,13 +431,13 @@ LockManager::Lock(EagerAction *txn, int cpu) {
     while (write_index < txn->writeset.size()) {
         assert(read_index == txn->readset.size());
         txn->writeset[write_index].is_write = true;
-        LockRecord(txn, &txn->writeset[write_index], cpu);
+        success &= LockRecord(txn, &txn->writeset[write_index], cpu);
         write_index += 1;
     }
     while (read_index < txn->readset.size()) {        
         assert(write_index == txn->writeset.size());
         txn->readset[read_index].is_write = false;
-        LockRecord(txn, &txn->readset[read_index], cpu);
+        success &= LockRecord(txn, &txn->readset[read_index], cpu);
         read_index += 1;
     }
     
@@ -414,5 +445,5 @@ LockManager::Lock(EagerAction *txn, int cpu) {
            read_index == txn->readset.size());
 
     FinishAcquisitions(txn);
-    return (txn->num_dependencies == 0);
+    return success;
 }

@@ -86,25 +86,28 @@ EagerWorker::CheckReady() {
 
 void
 EagerWorker::TryExec(EagerAction *txn) {
-  if (config.mgr->Lock(txn, config.cpu)) {
+  if (config.mgr->Lock(txn, (uint32_t)this->m_thread)) {
         assert(txn->num_dependencies == 0);
+        assert(txn->shadowReadset.size() == txn->readset.size());
+        assert(txn->shadowWriteset.size() == txn->writeset.size());
+        
 
-        uint32_t numReads = txn->readset.size();
+        uint32_t numReads = txn->shadowReadset.size();
         for (uint32_t i = 0; i < numReads; ++i) {
-          uint32_t tbl = txn->readset[i].record.tableId;
-          uint32_t key = txn->readset[i].record.key;
-          txn->readset[i].value = config.tables[tbl]->Get(key);
+          uint32_t tbl = txn->shadowReadset[i].record.tableId;
+          uint32_t key = txn->shadowReadset[i].record.key;
+          txn->shadowReadset[i].value = config.tables[tbl]->Get(key);
         }
 
-        uint32_t numWrites = txn->writeset.size();
+        uint32_t numWrites = txn->shadowWriteset.size();
         for (uint32_t i = 0; i < numWrites; ++i) {
-          uint32_t tbl = txn->writeset[i].record.tableId;
-          uint32_t key = txn->writeset[i].record.key;
-          txn->writeset[i].value = config.tables[tbl]->Get(key);
+          uint32_t tbl = txn->shadowWriteset[i].record.tableId;
+          uint32_t key = txn->shadowWriteset[i].record.key;
+          txn->shadowWriteset[i].value = config.tables[tbl]->Get(key);
         }
 
         txn->Run();
-        config.mgr->Unlock(txn, config.cpu);
+        config.mgr->Unlock(txn, (uint32_t)this->m_thread);
 
         assert(txn->finished_execution);
         /*
@@ -132,20 +135,20 @@ EagerWorker::DoExec(EagerAction *txn) {
   
   uint32_t numReads = txn->readset.size();
   for (uint32_t i = 0; i < numReads; ++i) {
-    uint32_t tbl = txn->readset[i].record.tableId;
-    uint32_t key = txn->readset[i].record.key;
-    txn->readset[i].value = config.tables[tbl]->Get(key);
+    uint32_t tbl = txn->shadowReadset[i].record.tableId;
+    uint32_t key = txn->shadowReadset[i].record.key;
+    txn->shadowReadset[i].value = config.tables[tbl]->Get(key);
   }
 
   uint32_t numWrites = txn->writeset.size();
   for (uint32_t i = 0; i < numWrites; ++i) {
-    uint32_t tbl = txn->writeset[i].record.tableId;
-    uint32_t key = txn->writeset[i].record.key;
-    txn->writeset[i].value = config.tables[tbl]->Get(key);
+    uint32_t tbl = txn->shadowWriteset[i].record.tableId;
+    uint32_t key = txn->shadowWriteset[i].record.key;
+    txn->shadowWriteset[i].value = config.tables[tbl]->Get(key);
   }
 
   txn->Run();
-  config.mgr->Unlock(txn, config.cpu);
+  config.mgr->Unlock(txn, (uint32_t)this->m_thread);
     //    txn->PostExec();
     /*
     EagerAction *link;
