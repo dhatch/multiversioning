@@ -144,6 +144,8 @@ class Executor : public Runnable {
 
  protected:
 
+  virtual void LeaderFunction();
+
   //  Executor(ExecutorConfig config);
   virtual void StartWorking();
   virtual void Init();

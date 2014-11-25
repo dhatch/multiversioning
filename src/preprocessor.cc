@@ -133,11 +133,14 @@ void MVScheduler::StartWorking() {
       uint64_t version = compute_version(epoch, txnCounter);
       ScheduleTransaction(curBatch.actionBuf[i], version);
       txnCounter += 1;
+      /*
       if (i % 1024 == 0) {
         Recycle();
       }
+      */
     }
-    
+
+
     // Wait for subordinates
     for (uint32_t i = 0; i < config.numSubords; ++i) {
       config.subQueues[i]->DequeueBlocking();
@@ -244,7 +247,7 @@ void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
     //    std::cout << "Warning...\n";
     Recycle();
   }
-  
+
   size_t numReads = action->readset.size();
   for (uint32_t i = 0; i < numReads; ++i) {
     if (action->readset[i].threadId == threadId) {

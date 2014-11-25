@@ -6,8 +6,24 @@
 uint64_t _MVRecord_::INFINITY = 0xFFFFFFFFFFFFFFFF;
 
 MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu) {
-    std::cout << "NUMA node: " << numa_node_of_cpu(cpu) << "\n";
-    MVRecord *data = (MVRecord*)alloc_mem(size, cpu);
+  std::cout << "NUMA node: " << numa_node_of_cpu(cpu) << "\n";
+
+  MVRecord *data;// = (MVRecord*)alloc_mem(size, cpu);
+  int numa_node = numa_node_of_cpu(cpu);
+  numa_set_strict(1);
+  void *buf = numa_alloc_onnode(size, numa_node);
+  if (buf == NULL) {
+    assert(false);
+  }
+  if (mlock(buf, size) != 0) {
+    numa_free(buf, size);
+    std::cout << "mlock couldn't pin memory to RAM!\n";
+    assert(false);
+  } 
+  else {
+    data = (MVRecord*)buf;
+  }
+
   assert(data != NULL);
   memset(data, 0xA3, size);
         

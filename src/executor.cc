@@ -142,6 +142,36 @@ void Executor::Init() {
   //  this->pendingGC = new (config.cpu) PendingActionList(20000);
 }
 
+void Executor::LeaderFunction() {
+  assert(config.threadId == 0);
+  ActionBatch dummy;
+  volatile uint32_t minEpoch = *config.epochPtr;
+  //        std::cout << "0:" << minEpoch << "\n";
+  for (uint32_t i = 1; i < config.numExecutors; ++i) {
+    barrier();
+    volatile uint32_t temp = config.epochPtr[i];
+    //          std::cout << i << ":" << temp << "\n";
+    barrier();
+        
+    if (temp < minEpoch) {
+      minEpoch = temp;
+    }
+  }
+      
+  uint32_t prev;
+  barrier();
+  prev = *config.lowWaterMarkPtr;
+  if (minEpoch > prev) {
+    *config.lowWaterMarkPtr = minEpoch;
+    //          std::cout << "LowWaterMark: " << minEpoch << "\n";
+  }
+  barrier();
+      
+  for (uint32_t i = 0; i < minEpoch - prev; ++i) {
+    config.outputQueue->EnqueueBlocking(dummy);
+  }
+}
+
 void Executor::StartWorking() {
   uint32_t epoch = 1;
   ActionBatch dummy;
@@ -151,31 +181,7 @@ void Executor::StartWorking() {
     if (config.threadId == 0) {
       ActionBatch batch;
       while (!config.inputQueue->Dequeue(&batch)) {
-        volatile uint32_t minEpoch = *config.epochPtr;
-        //        std::cout << "0:" << minEpoch << "\n";
-        for (uint32_t i = 1; i < config.numExecutors; ++i) {
-          barrier();
-          volatile uint32_t temp = config.epochPtr[i];
-          //          std::cout << i << ":" << temp << "\n";
-          barrier();
-        
-          if (temp < minEpoch) {
-            minEpoch = temp;
-          }
-        }
-      
-        uint32_t prev;
-        barrier();
-        prev = *config.lowWaterMarkPtr;
-        if (minEpoch > prev) {
-          *config.lowWaterMarkPtr = minEpoch;
-          //          std::cout << "LowWaterMark: " << minEpoch << "\n";
-        }
-        barrier();
-      
-        for (uint32_t i = 0; i < minEpoch - prev; ++i) {
-          config.outputQueue->EnqueueBlocking(dummy);
-        }
+        LeaderFunction();
       }
       ProcessBatch(batch);
     }
@@ -199,33 +205,10 @@ void Executor::StartWorking() {
     
     // If this is the leader thread, try to advance the low-water mark to 
     // trigger garbage collection
-    /*
     if (config.threadId == 0) {
-      volatile uint32_t minEpoch = *config.epochPtr;
-      //      std::cout << "0:" << minEpoch << "\n";
-      for (uint32_t i = 1; i < config.numExecutors; ++i) {
-        barrier();
-        volatile uint32_t temp = config.epochPtr[i];
-        //        std::cout << i << ":" << temp << "\n";
-        barrier();
-        
-        if (temp < minEpoch) {
-          minEpoch = temp;
-        }
-      }
-      
-      uint32_t prev;
-      barrier();
-      prev = *config.lowWaterMarkPtr;
-      *config.lowWaterMarkPtr = minEpoch;
-      barrier();
-      
-      for (uint32_t i = 0; i < minEpoch - prev; ++i) {
-        config.outputQueue->EnqueueBlocking(dummy);
-      }
-      std::cout << "LowWaterMark: " << *config.lowWaterMarkPtr << "\n";
+      LeaderFunction();
     }
-    */
+
 
     // Try to return records that are no longer visible to their owners
     garbageBin->FinishEpoch(epoch);
@@ -552,6 +535,7 @@ GarbageBin::GarbageBin(GarbageBinConfig config) {
 
 void GarbageBin::AddMVRecord(uint32_t ccThread, MVRecord *rec) {
   rec->allocLink = NULL;
+  // rec->allocLink = NULL;
   *(curStickies[ccThread].tail) = rec;
   curStickies[ccThread].tail = &rec->allocLink;
   curStickies[ccThread].count += 1;
@@ -560,7 +544,7 @@ void GarbageBin::AddMVRecord(uint32_t ccThread, MVRecord *rec) {
 
 void GarbageBin::AddRecord(uint32_t workerThread, uint32_t tableId, 
                            Record *rec) {
-  rec->next = NULL;
+  //  rec->next = NULL;
   *(curRecords[workerThread*config.numTables+tableId].tail) = rec;
   curRecords[workerThread*config.numTables+tableId].tail = &rec->next;  
   curRecords[workerThread*config.numTables+tableId].count += 1;
@@ -568,7 +552,8 @@ void GarbageBin::AddRecord(uint32_t workerThread, uint32_t tableId,
 
 void GarbageBin::ReturnGarbage() {
   for (uint32_t i = 0; i < config.numCCThreads; ++i) {
-    
+    // *curStickies[i].tail = NULL;
+
     // Try to enqueue garbage. If enqueue fails, we'll just try again during the
     // next call.
     if (snapshotStickies[i].head != NULL) {

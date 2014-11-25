@@ -762,11 +762,15 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     else if (experiment == 2) {
       resultFile << "small_bank" << " ";
     }
-  
+
+
+  if (distribution == 0) {
     resultFile << "uniform" << "\n";
-
-
-    resultFile.close();
+  }
+  else if (distribution == 1) {
+    resultFile << "zipf theta:" << theta << "\n";
+  }
+  resultFile.close();
 }
 
 void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs, 
@@ -1043,8 +1047,13 @@ void LockingExperiment(LockingConfig config) {
   else if (config.experiment == 2) {
     resultFile << "small_bank" << " ";
   }
-  
-  resultFile << "uniform" << "\n";
+ 
+  if (config.distribution == 0) {
+    resultFile << "uniform" << "\n";
+  }
+  else if (config.distribution == 1) {
+    resultFile << "zipf theta:" << config.theta << "\n";
+  }
 
   //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
   resultFile.close();  
