@@ -88,7 +88,7 @@ void MVScheduler::Init() {
     this->partitions[i] = new MVTablePartition(config.tblPartitionSizes[i],
                                                m_cpu_number, alloc);
     assert(this->partitions[i] != NULL);
-    DB.PutPartition(i, config.threadId, this->partitions[i]);
+    //    DB.PutPartition(i, config.threadId, this->partitions[i]);
   }
   this->threadId = config.threadId;
 }

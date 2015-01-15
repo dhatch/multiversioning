@@ -11,9 +11,10 @@ fmt_locking = "build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num
 fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size 10 --experiment {4} --record_size {7} --distribution {5} --theta {6}"
 
 def main():
-#    small_bank_contended()
 #    small_bank_uncontended()
-    uncontended_1000()
+#    small_bank_contended()
+    small_bank_reads()
+#    uncontended_1000()
 #    small_bank_contended(False, True)
 #    small_bank_uncontended(False, True)
 #    contended_1000()
@@ -52,7 +53,50 @@ def mv_expt_theta(outdir, filename, ccThreads, txns, records, threads, expt, dis
             os.system("gnuplot plot1.plt")
         os.chdir(saved_dir)
 
-def locking_expt_theta(outdir, filename, threads, txns, records, expt, distribution, theta, rec_size):
+def mv_expt_theta(outdir, filename, ccThreads, txns, records, threads, expt, distribution, theta, rec_size):
+    outfile = os.path.join(outdir, filename)
+    outdep = os.path.join(outdir, "." + filename)
+
+    temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
+
+    os.system("mkdir -p outdir")
+    if not os.path.exists(outdep):
+        os.system("rm results.txt")
+
+        cmd = fmt_multi.format(str(ccThreads), str(txns), str(records), str(threads), str(expt), str(distribution), str(theta), str(rec_size))
+        os.system(cmd)
+        os.system("cat results.txt >>" + outfile)
+        clean.theta_fn("mv", outfile, temp)
+        saved_dir = os.getcwd()
+        os.chdir(outdir)
+        if expt == 0:
+            os.system("gnuplot plot.plt")
+        else:
+            os.system("gnuplot plot1.plt")
+        os.chdir(saved_dir)
+
+
+def mv_expt_records(outdir, filename, ccThreads, txns, records, threads, expt, distribution, theta, rec_size):
+    outfile = os.path.join(outdir, filename)
+    outdep = os.path.join(outdir, "." + filename)
+
+    temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
+
+    os.system("mkdir -p outdir")
+    if not os.path.exists(outdep):
+        os.system("rm results.txt")
+
+        cmd = fmt_multi.format(str(ccThreads), str(txns), str(records), str(threads), str(expt), str(distribution), str(theta), str(rec_size))
+        os.system(cmd)
+        os.system("cat results.txt >>" + outfile)
+        clean.records_fn(outfile, temp)
+        saved_dir = os.getcwd()
+        os.chdir(outdir)
+        os.system("gnuplot plot.plt")
+        os.chdir(saved_dir)
+
+
+def locking_expt_records(outdir, filename, threads, txns, records, expt, distribution, theta, rec_size):
     outfile = os.path.join(outdir, filename)
 
     temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
@@ -65,14 +109,10 @@ def locking_expt_theta(outdir, filename, threads, txns, records, expt, distribut
         cmd = fmt_locking.format(str(threads), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size))
         os.system(cmd)
         os.system("cat locking.txt >>" + outfile)
-        clean.theta_fn("locking", outfile, temp)
+        clean.records_fn(outfile, temp)
         saved_dir = os.getcwd()
         os.chdir(outdir)
-        if expt == 0:
-            os.system("gnuplot plot.plt")
-        else:
-            os.system("gnuplot plot1.plt")
-
+        os.system("gnuplot plot.plt")
         os.chdir(saved_dir)
 
 
@@ -85,10 +125,11 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
 
     os.system("mkdir -p outdir")
     if not os.path.exists(outdep):
-        os.system("rm results.txt")
+
         val_range = gen_range(lowThreads, highThreads, 2)
 
         for i in val_range:
+            os.system("rm results.txt")
             cmd = fmt_multi.format(str(ccThreads), str(txns), str(records), str(i), str(expt), str(distribution), str(theta), str(rec_size))
             os.system(cmd)
             os.system("cat results.txt >>" + outfile)
@@ -99,7 +140,7 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
             os.chdir(saved_dir)
 
 
-def locking_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta):
+def locking_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size):
     outfile = os.path.join(outdir, filename)
     
     temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
@@ -107,10 +148,11 @@ def locking_expt(outdir, filename, lowThreads, highThreads, txns, records, expt,
     os.system("mkdir -p outdir")
     outdep = os.path.join(outdir, "." + filename)
     if not os.path.exists(outdep):
-        os.system("rm locking.txt")
+
         val_range = gen_range(lowThreads, highThreads, 2)
         for i in val_range:
-            cmd = fmt_locking.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta))
+            os.system("rm locking.txt")
+            cmd = fmt_locking.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size))
             os.system(cmd)
             os.system("cat locking.txt >>" + outfile)
             clean.clean_fn("locking", outfile, temp)
@@ -133,40 +175,37 @@ def ccontrol():
     os.system("touch " + os.path.join(outdir, "." + "mv_15.txt"))
     os.system("touch " + os.path.join(outdir, "." + "mv_20.txt"))
 
-def small_bank_contended(mv, locking):
-    if locking:
-        os.system("rm locking.txt")
-        for i in [10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40]:
-            for j in range(0, 5):
-                cmd = fmt_locking.format(str(i), str(2), str(0.0), str(5000000), str(100))
-                os.system(cmd)
-        os.system("mv locking.txt locking_small_bank_100.txt")
 
-    if mv:
-        os.system("rm results.txt")
-        for i in [2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]:#22,24,26,28,30]:
-            for j in range(0, 5):
-                cmd = fmt_multi.format(str(10), str(i), str(2), str(5500000), str(0.0), str(100))
-                os.system(cmd)
-        os.system("mv results.txt mv_small_bank_100.txt")
 
-def small_bank_uncontended(mv, locking): 
+def small_bank_reads():
+    result_dir = "results/small_bank/contended/varying/reads"
+    for j in range(0, 5):
+        for i in [10,50,100,500,1000,5000,10000,50000,100000]:
+            mv_expt_records(result_dir, "mv.txt", 10, 10000000, i, 30, 2, 0, 0.9, 8)
+            locking_expt_records(result_dir, "locking.txt", 40, 10000000, i, 2, 0, 0.9, 8)
+
+    os.system("touch " + os.path.join(result_dir, "." + "mv.txt"))
+    os.system("touch " + os.path.join(result_dir, "." + "locking.txt"))
     
-    if locking:
-        os.system("rm locking.txt")
-        for i in [10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40]:
-            for j in range(0, 5):
-                cmd = fmt_locking.format(str(i), str(2), str(0.0), str(5000000), str(10000))
-                os.system(cmd)
-        os.system("mv locking.txt locking_small_bank_10000.txt")
-    
-    if mv:
-        os.system("rm results.txt")
-        for i in [2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]:#22,24,26,28,30]:
-            for j in range(0, 5):
-                cmd = fmt_multi.format(str(10), str(i), str(2), str(5500000), str(0.0), str(10000))
-                os.system(cmd)
-        os.system("mv results.txt mv_small_bank_10000.txt")
+
+def small_bank_uncontended(): 
+    result_dir = "results/small_bank/uncontended/"
+    for i in range(0, 5):
+        mv_expt(result_dir, "mv_uncontended.txt", 10, 10000000, 100000, 2, 30, 2, 0, 0.9, 1000)
+        locking_expt(result_dir, "locking_uncontended.txt", 2, 40, 10000000, 100000, 2, 0, 0.9, 1000)
+    os.system("touch " + os.path.join(result_dir, "." + "mv_uncontended.txt"))
+    os.system("touch " + os.path.join(result_dir, "." + "locking_uncontended.txt"))
+
+
+def small_bank_contended(): 
+    result_dir = "results/small_bank/contended/"
+    for i in range(0, 5):
+        mv_expt(result_dir, "mv_contended.txt", 10, 10000000, 100, 2, 30, 2, 0, 0.9, 1000)
+        locking_expt(result_dir, "locking_contended.txt", 2, 40, 10000000, 100, 2, 0, 0.9, 1000)
+    os.system("touch " + os.path.join(result_dir, "." + "mv_contended.txt"))
+    os.system("touch " + os.path.join(result_dir, "." + "locking_contended.txt"))
+
+
 
 def vary_contention():
     result_dir = "results/vary_contention"
@@ -196,10 +235,10 @@ def contended_1000():
 
     result_dir = "results/rec_1000/contended"
     for i in range(0, 5):
-        mv_expt(result_dir, "mv_10rmw.txt", 14, 3000000, 1000000, 2, 26, 0, 1, 0.9, 1000)
-        locking_expt(result_dir, "locking_10rmw.txt", 12, 40, 3000000, 1000000, 0, 1, 0.9)
-        mv_expt(result_dir, "mv_8r2rmw.txt", 14, 3000000, 1000000, 2, 26, 1, 1, 0.9, 1000)
-        locking_expt(result_dir, "locking_8r2rmw.txt", 12, 40, 3000000, 1000000, 1, 1, 0.9)
+#        mv_expt(result_dir, "mv_10rmw.txt", 14, 3000000, 1000000, 2, 26, 0, 1, 0.9, 1000)
+        locking_expt(result_dir, "locking_10rmw.txt", 2, 10, 3000000, 1000000, 0, 1, 0.9, 1000)
+#        mv_expt(result_dir, "mv_8r2rmw.txt", 14, 3000000, 1000000, 2, 26, 1, 1, 0.9, 1000)
+        locking_expt(result_dir, "locking_8r2rmw.txt", 2, 10, 3000000, 1000000, 1, 1, 0.9, 1000)
 
     os.system("touch " + os.path.join(outdir, "." + "mv_10rmw.txt"))
     os.system("touch " + os.path.join(outdir, "." + "mv_8r2rmw.txt"))

@@ -4,7 +4,7 @@
 uint64_t* LockManager::tableSizes = NULL;
 
 LockManager::LockManager(LockManagerConfig config) {
-  table = new LockManagerTable(config);
+  table = new LockManagerTable(config);  
 }
 
 bool

@@ -37,6 +37,9 @@ bool MVTable::WriteNewVersion(uint32_t partition, CompositeKey &pkey,
 MVTablePartition::MVTablePartition(uint64_t size, 
                                    int cpu,
                                    MVRecordAllocator *alloc) {
+  if (size < 1) {
+    size = 1;
+  }
   this->numSlots = size;
   this->allocator = alloc;
         
@@ -185,5 +188,6 @@ bool MVTablePartition::WriteNewVersion(CompositeKey &pkey, Action *action,
   }
   *prev = toAdd;
   pkey.value = toAdd;
+  
   return true;
 }

@@ -292,16 +292,20 @@ class LockManagerTable {
     assert(bucket->latch>>32 == cpu);
     info->latch = &bucket->latch;    
 
-    EagerRecordInfo *cur = bucket->head;
+    AppendInfo(info, bucket);
+
+    EagerRecordInfo *cur = info->prev;
     while (cur != NULL) {
       if ((conflict = Conflicting(cur, info)) == true) {
         fetch_and_increment(&info->dependency->num_dependencies);
         break;
       }
-      cur = cur->next;
+      else if (cur->record == info->record && cur->is_held) {
+        break;
+      }
+      cur = cur->prev;
     }
 
-    AppendInfo(info, bucket);
     info->is_held = !conflict;
     return !conflict;
   }

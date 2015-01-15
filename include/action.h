@@ -12,6 +12,7 @@
 #include <mv_record.h>
 #include <util.h>
 
+extern uint32_t NUM_CC_THREADS;
 class Action;
 
 extern uint64_t recordSize;
@@ -86,7 +87,7 @@ class CompositeKey {
       return Hash128to64(std::make_pair((uint64_t)key->tableId, key->key));
   }
 
-} __attribute__((__packed__));
+} __attribute__((__packed__, __aligned(64)));
 
 struct Range {
     int start;
@@ -105,6 +106,15 @@ class VersionBuffer;
 class Action {
 
  protected:
+  CompositeKey GenerateKey(uint32_t tableId, uint64_t key) {
+    CompositeKey toAdd(tableId, key);
+    uint32_t threadId =
+      CompositeKey::HashKey(&toAdd) % NUM_CC_THREADS;
+    toAdd.threadId = threadId;
+    this->combinedHash |= ((uint64_t)1) << threadId;
+    return toAdd;
+  }
+
 
   void* Read(uint32_t index) {
     return (void*)(readset[index].value->value);
@@ -152,7 +162,16 @@ class Action {
     */
     return true; 
   }
-  //  virtual bool IsLinked(Action **cont) { *cont = NULL; return false; }
+
+  virtual void AddReadKey(uint32_t tableId, uint64_t key) {
+    CompositeKey toAdd = GenerateKey(tableId, key);
+    this->readset.push_back(toAdd);
+  }
+
+  virtual void AddWriteKey(uint32_t tableId, uint64_t key) {
+    CompositeKey toAdd = GenerateKey(tableId, key);
+    this->writeset.push_back(toAdd);
+  }
 };
 
 // Use this action to populate the database
@@ -367,6 +386,38 @@ class EagerAction {
     EagerAction *next;
     EagerAction *prev;
     bool        finished_execution;
+
+    virtual void AddReadKey(uint32_t tableId, uint64_t key, 
+                            uint64_t numRecords) {
+      EagerCompositeKey compKey;//(tableId, key);
+      compKey.tableId = tableId;
+      compKey.key = key;
+      compKey.hash = compKey.Hash() % numRecords;
+      EagerRecordInfo toAdd;
+      toAdd.record = compKey;
+      this->readset.push_back(toAdd);
+      this->shadowReadset.push_back(toAdd);
+    }
+
+    virtual void AddWriteKey(uint32_t tableId, uint64_t key, 
+                             uint64_t numRecords) {
+      EagerCompositeKey compKey;//(tableId, key);
+      compKey.tableId = tableId;
+      compKey.key = key;
+      compKey.hash = compKey.Hash() % numRecords;
+      EagerRecordInfo toAdd;
+      toAdd.record = compKey;
+      this->writeset.push_back(toAdd);
+      this->shadowWriteset.push_back(toAdd);
+    }
+
+    virtual void* ReadRef(uint32_t index) {
+      return shadowReadset[index].value;
+    }
+    
+    virtual void* WriteRef(uint32_t index) {
+      return shadowWriteset[index].value;
+    }
 };
 
 class RMWEagerAction : public EagerAction {

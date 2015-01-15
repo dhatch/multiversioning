@@ -9,6 +9,8 @@
 #include <zipf_generator.h>
 #include <gperftools/profiler.h>
 
+#include <small_bank.h>
+
 #include <algorithm>
 #include <fstream>
 #include <set>
@@ -19,9 +21,11 @@
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 
-Database DB(1);
+Database DB(2);
 
 uint64_t dbSize = ((uint64_t)1<<36);
+
+uint32_t NUM_CC_THREADS;
 
 int NumProcs;
 uint32_t numLockingRecords;
@@ -87,10 +91,19 @@ void CreateQueues(int cpuNumber, uint32_t subCount,
   *OUT_SUB_QUEUES = subQueues;
 }
 
+void GenRandomSmallBank(char *rec) {
+  int len = 248/4;
+  int *temp = (int*)rec;
+  for (int i = 0; i < len; ++i) {
+    temp[i] = rand();
+  }
+}
+
 MVSchedulerConfig SetupSched(int cpuNumber, 
                              int threadId, 
                              int numThreads, 
                              size_t alloc, 
+                             uint32_t numTables,
                              size_t *partSizes, 
                              uint32_t numRecycles,
                              SimpleQueue<ActionBatch> *inputQueue,
@@ -153,7 +166,7 @@ MVSchedulerConfig SetupSched(int cpuNumber,
     cpuNumber,
     threadId,
     alloc,
-    1,
+    numTables,
     partSizes,
     numOutputs,
     subCount,
@@ -448,11 +461,15 @@ MVScheduler** SetupSchedulers(int numProcs,
                               SimpleQueue<ActionBatch> **outputQueueRefs_OUT, 
                               uint32_t numOutputs,
                               size_t allocatorSize, 
+                              uint32_t numTables,
                               size_t tableSize, 
                               SimpleQueue<MVRecordList> ***gcRefs_OUT) {  
+
   size_t partitionChunk = tableSize/numProcs;
-  size_t *tblPartitionSizes = (size_t*)malloc(sizeof(size_t));
-  tblPartitionSizes[0] = partitionChunk;
+  size_t *tblPartitionSizes = (size_t*)malloc(numTables*sizeof(size_t));
+  for (uint32_t i = 0; i < numTables; ++i) {
+    tblPartitionSizes[i] = partitionChunk;
+  }
 
   // Set up queues for leader thread
   char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 0);            
@@ -467,6 +484,7 @@ MVScheduler** SetupSchedulers(int numProcs,
   
   MVSchedulerConfig globalLeaderConfig = SetupSched(0, 0, numProcs, 
                                                     allocatorSize,
+                                                    numTables,
                                                     tblPartitionSizes, 
                                                     numOutputs,
                                                     leaderInputQueue,
@@ -485,6 +503,7 @@ MVScheduler** SetupSchedulers(int numProcs,
       auto inputQueue = globalLeaderConfig.pubQueues[9+leaderNum-1];
       auto outputQueue = globalLeaderConfig.subQueues[9+leaderNum-1];
       MVSchedulerConfig config = SetupSched(i, i, numProcs, allocatorSize, 
+                                            numTables,
                                             tblPartitionSizes, 
                                             numOutputs,
                                             inputQueue, 
@@ -499,6 +518,7 @@ MVScheduler** SetupSchedulers(int numProcs,
       auto inputQueue = localLeaderConfig.pubQueues[index-1];
       auto outputQueue = localLeaderConfig.subQueues[index-1];
       MVSchedulerConfig subConfig = SetupSched(i, i, numProcs, allocatorSize, 
+                                               numTables,
                                                tblPartitionSizes, 
                                                numOutputs,
                                                inputQueue, 
@@ -545,8 +565,54 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
     assert(ret != NULL);
     std::set<uint64_t> seenKeys;
     uint64_t counter = 0;
+    char temp_buf[248];
     for (uint32_t j = 0; j < epochSize; ++j) {
-        seenKeys.clear();
+      seenKeys.clear();
+      
+      if (experiment == 2) {
+        int temp = rand() % 1;
+        if (temp == 0) {
+          uint64_t customer = (uint64_t)(rand() % numRecords);
+          ret[j] = new MVSmallBank::Balance(customer, temp_buf);
+        }
+        else {
+          int txnType = rand() % 4;
+          GenRandomSmallBank(temp_buf);
+          if (txnType == 0) {             // Balance
+            uint64_t customer = (uint64_t)(rand() % numRecords);
+            long amount = (long)(rand() % 25);
+            ret[j] = new MVSmallBank::DepositChecking(customer, amount, 
+                                                      temp_buf);
+          }
+          else if (txnType == 1) {        // DepositChecking
+            uint64_t customer = (uint64_t)(rand() % numRecords);
+            long amount = (long)(rand() % 25);
+            ret[j] = new MVSmallBank::TransactSaving(customer, amount, 
+                                                     temp_buf);
+          }
+          else if (txnType == 2) {        // TransactSaving
+            uint64_t fromCustomer = (uint64_t)(rand() % numRecords);
+            uint64_t toCustomer;
+            do {
+              toCustomer = (uint64_t)(rand() % numRecords);
+            } while (toCustomer == fromCustomer);
+            ret[j] = new MVSmallBank::Amalgamate(fromCustomer, toCustomer, 
+                                                 temp_buf);
+          }
+          else if (txnType == 3) {        // Amalgamate
+            uint64_t customer = (uint64_t)(rand() % numRecords);
+            long amount = (long)(rand() % 25);
+            if (rand() % 2 == 0) {
+              amount *= -1;
+            }
+            ret[j] = new MVSmallBank::WriteCheck(customer, amount, temp_buf);
+          }
+        }
+        ret[j]->version = (((uint64_t)epoch<<32) | counter);
+        ret[j]->state = STICKY;
+      }
+
+      else if (experiment < 2) {
         ret[j] = new RMWAction();
         assert(ret[j] != NULL);
         ret[j]->combinedHash = 0;
@@ -586,9 +652,11 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
                     break;
                 }
             }            
-            counter += 1;
         }
+      }
+      counter += 1;
     }
+
     
     ActionBatch batch = {
         ret,
@@ -614,6 +682,34 @@ void SetupInputArray(std::vector<ActionBatch> *input, int numEpochs, int epochSi
                                               gen);
     input->push_back(curBatch);
   }
+}
+
+ActionBatch MVLoadSmallBank(int numCustomers, int txnSize) {
+  int numTxns = numCustomers/txnSize + (numCustomers%txnSize > 0? 1 : 0);
+  Action **txns = (Action**)malloc(sizeof(InsertAction*)*numTxns);
+  uint64_t start = 0;
+  for (int i = 0; i < numTxns; ++i) {
+    Action *curAction = NULL;
+    if (i == numTxns - 1) {
+      curAction = new MVSmallBank::LoadCustomerRange(start,
+                                                     (uint64_t)numCustomers-1);
+    }
+    else {
+      curAction = new MVSmallBank::LoadCustomerRange(start,
+                                                     (uint64_t)start+txnSize-1);
+      start += txnSize;
+    }
+
+    curAction->version = (((uint64_t)1<<32) | (uint32_t)i);
+    curAction->state = STICKY;
+    txns[i] = curAction;
+  }
+
+  ActionBatch batch = {
+    txns,
+    (uint32_t)numTxns,
+  };
+  return batch;
 }
 
 ActionBatch LoadDatabaseTxns(int numRecords, int txnSize) {
@@ -650,6 +746,8 @@ ActionBatch LoadDatabaseTxns(int numRecords, int txnSize) {
   return ret;
 }
 
+
+
 void SetupInput(SimpleQueue<ActionBatch> *input, int numEpochs, int epochSize, 
                 int numRecords, int txnsize) {
     for (int i = 0; i < numEpochs+1; ++i) {
@@ -676,12 +774,27 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     SimpleQueue<ActionBatch> *outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE, 1, 71);
 
     // Set up the scheduler threads.
-    schedThreads = SetupSchedulers(numCCThreads, &schedInputQueue, 
-                                   &schedOutputQueues, 
-                                   (uint32_t)numExecutors,
-                                   (uint64_t)1<<28, 
-                                   numRecords, 
-                                   schedGCQueues);
+    if (experiment < 2) {
+      schedThreads = SetupSchedulers(numCCThreads, &schedInputQueue, 
+                                     &schedOutputQueues, 
+                                     (uint32_t)numExecutors,                                   
+                                     (uint64_t)1<<30, 
+                                     1,
+                                     numRecords, 
+                                     schedGCQueues);
+    }
+    else if (experiment == 2) {
+      schedThreads = SetupSchedulers(numCCThreads, &schedInputQueue, 
+                                     &schedOutputQueues, 
+                                     (uint32_t)numExecutors,                                   
+                                     (uint64_t)1<<28, 
+                                     2,
+                                     numRecords, 
+                                     schedGCQueues);
+    }
+    else {
+      assert(false);
+    }
     assert(schedThreads != NULL);
     assert(schedInputQueue != NULL);
     assert(schedOutputQueues != NULL);
@@ -694,13 +807,31 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     }
 
     // Set up the input.
-    ActionBatch loadInput = LoadDatabaseTxns(numRecords, 100);
+    ActionBatch loadInput;
+    if (experiment < 2) {
+      loadInput = LoadDatabaseTxns(numRecords, 100);
+    }
+    else if (experiment == 2) {
+      uint32_t loadTxnSize;
+      if (numRecords > numExecutors) {
+        loadTxnSize = numRecords/numExecutors;
+      }
+      else {
+        loadTxnSize = numRecords;
+      }
+      loadInput = MVLoadSmallBank(numRecords, loadTxnSize);
+    }
+    else {
+      assert(false);
+    }
+
     std::vector<ActionBatch> inputPlaceholder;
     SetupInputArray(&inputPlaceholder, numEpochs, epochSize, numRecords, 
                     txnSize, 
                     experiment,
                     distribution,
                     theta);
+
     std::cout << "Setup input...\n";
     
     // Setup executors
@@ -730,7 +861,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     std::cout << "Running experiment. Epochs: " << numEpochs << "\n";
     timespec start_time, end_time;
 
-    //ProfilerStart("/home/jmf/multiversioning/db.prof");
+    //    ProfilerStart("/home/jmf/multiversioning/db.prof");
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
 
     for (int i = 0; i < numEpochs; ++i) {
@@ -753,6 +884,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
 
     resultFile << "time:" << elapsedMilli << " txns:" << (numEpochs-50)*epochSize << " ";
     resultFile << "ccthreads:" << numCCThreads << " workerthreads:" << numExecutors << " mv ";
+    resultFile << "records:" << numRecords << " ";
     if (experiment == 0) {
       resultFile << "10rmw" << " ";
     }
@@ -763,14 +895,13 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
       resultFile << "small_bank" << " ";
     }
 
-
-  if (distribution == 0) {
-    resultFile << "uniform" << "\n";
-  }
-  else if (distribution == 1) {
-    resultFile << "zipf theta:" << theta << "\n";
-  }
-  resultFile.close();
+    if (distribution == 0) {
+      resultFile << "uniform" << "\n";
+    }
+    else if (distribution == 1) {
+      resultFile << "zipf theta:" << theta << "\n";
+    }
+    resultFile.close();
 }
 
 void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs, 
@@ -836,39 +967,100 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
   std::set<uint64_t> seenKeys; 
 
   EagerRecordInfo recordInfo;
+  char temp_buf[248];
 
   for (uint32_t i = 0; i < numTxns; ++i) {
     seenKeys.clear();
-    EagerAction *action = new RMWEagerAction();    
-    for (uint32_t j = 0; j < txnSize; ++j) {
-      while (true) {
-        uint64_t key = gen->GenNext();
-        if (seenKeys.find(key) == seenKeys.end()) {
-          seenKeys.insert(key);
-          recordInfo.is_write = true;
-          recordInfo.record.key = key;
-          recordInfo.record.hash = recordInfo.record.Hash() % numRecords;
-          if (experiment == 0) {
+    if (experiment == 2) {
+      GenRandomSmallBank(temp_buf);
+        int txnType = rand() % 1;
+        if (txnType == 0) {             // Balance
+          uint64_t customer = (uint64_t)(rand() % numRecords);
 
-            action->writeset.push_back(recordInfo);
-            action->shadowWriteset.push_back(recordInfo);
+          ret[i] = new LockingSmallBank::Balance(customer, numRecords, 
+                                                 temp_buf);
+        }
+        else if (txnType == 1) {        // DepositChecking
+          uint64_t customer = (uint64_t)(rand() % numRecords);
+          long amount = (long)(rand() % 25);
+          ret[i] = new LockingSmallBank::DepositChecking(customer, amount, 
+                                                         numRecords,
+                                                         temp_buf);
+
+        }
+        else if (txnType == 2) {        // TransactSaving
+          uint64_t customer = (uint64_t)(rand() % numRecords);
+          long amount = (long)(rand() % 25);
+          ret[i] = new LockingSmallBank::TransactSaving(customer, amount, 
+                                                        numRecords,
+                                                        temp_buf);
+        }
+        else if (txnType == 3) {        // Amalgamate
+          uint64_t fromCustomer = (uint64_t)(rand() % numRecords);
+          uint64_t toCustomer;
+          do {
+            toCustomer = (uint64_t)(rand() % numRecords);
+          } while (toCustomer == fromCustomer);
+          ret[i] = new LockingSmallBank::Amalgamate(fromCustomer, toCustomer, 
+                                                    numRecords,
+                                                    temp_buf);
+        }
+        else if (txnType == 4) {        // WriteCheck
+          uint64_t customer = (uint64_t)(rand() % numRecords);
+          long amount = (long)(rand() % 25);
+          if (rand() % 2 == 0) {
+            amount *= -1;
           }
-          else if (experiment == 1) {
-            if (j < 2) {
+          ret[i] = new LockingSmallBank::WriteCheck(customer, amount, 
+                                                    numRecords,
+                                                    temp_buf);
+        }      
+    }
+    else if (experiment < 2) {
+
+      EagerAction *action = new RMWEagerAction();    
+      for (uint32_t j = 0; j < txnSize; ++j) {
+        while (true) {
+          uint64_t key = gen->GenNext();
+          if (seenKeys.find(key) == seenKeys.end()) {
+            seenKeys.insert(key);
+            recordInfo.is_write = true;
+            recordInfo.record.key = key;
+            recordInfo.record.hash = recordInfo.record.Hash() % numRecords;
+            if (experiment == 0) {
+
               action->writeset.push_back(recordInfo);
               action->shadowWriteset.push_back(recordInfo);
             }
-            else {
-              action->readset.push_back(recordInfo);
-              action->shadowReadset.push_back(recordInfo);
-            }          
+            else if (experiment == 1) {
+              if (j < 2) {
+                action->writeset.push_back(recordInfo);
+                action->shadowWriteset.push_back(recordInfo);
+              }
+              else {
+                action->readset.push_back(recordInfo);
+                action->shadowReadset.push_back(recordInfo);
+              }          
+            }
+            break;
           }
-          break;
         }
       }
+      //    std::sort(action->writeset.begin(), action->writeset.end(), LockManager::SortCmp);
+      ret[i] = action;
     }
-    //    std::sort(action->writeset.begin(), action->writeset.end(), LockManager::SortCmp);
-    ret[i] = action;
+    
+    for (uint32_t k = 0; k < ret[i]->writeset.size(); ++k) {
+      uint32_t tableId = ret[i]->writeset[k].record.tableId;
+      ret[i]->writeset[k].record.hash = 
+        ret[i]->writeset[k].record.Hash() % LockManager::tableSizes[tableId];
+        
+    }
+    for (uint32_t k = 0; k < ret[i]->readset.size(); ++k) {
+      uint32_t tableId = ret[i]->readset[k].record.tableId;
+      ret[i]->readset[k].record.hash = 
+        ret[i]->readset[k].record.Hash() % LockManager::tableSizes[tableId];
+    }
   }
   return ret;
 }
@@ -907,6 +1099,7 @@ EagerWorker** SetupLockThreads(SimpleQueue<EagerActionBatch> **inputQueue,
                                LockManager *mgr, 
                                int numThreads,
                                Table **tables) {
+  assert(mgr != NULL);
   EagerWorker **ret = (EagerWorker**)malloc(sizeof(EagerWorker*)*numThreads);
   assert(ret != NULL);
   for (int i = 0; i < numThreads; ++i) {
@@ -946,54 +1139,112 @@ void LockingExperiment(LockingConfig config) {
   }
 
   // Setup the lock manager
-  uint64_t *tableSizes = (uint64_t*)malloc(sizeof(uint64_t));
-  *tableSizes = (uint64_t)config.numRecords;
-  uint32_t numTables = 1;
-  LockManagerConfig cfg = {
-    1,
-    tableSizes,
-    0,
-    (int)(config.numThreads-1),
-    (1<<30)/sizeof(TxnQueue),
-  };  
-  unordered_map<uint32_t, uint64_t> tblInfo;
-  tblInfo[0] = config.numRecords;
-  LockManager *mgr = new LockManager(cfg);
+  LockManagerConfig cfg;
+  LockManager *mgr = NULL;
+  Table **tables = NULL;
+  if (config.experiment < 2) {
+    uint64_t *tableSizes = (uint64_t*)malloc(sizeof(uint64_t));
+    *tableSizes = (uint64_t)config.numRecords;
+    uint32_t numTables = 1;
+    LockManagerConfig cfg = {
+      1,
+      tableSizes,
+      0,
+      (int)(config.numThreads-1),
+      (1<<30)/sizeof(TxnQueue),
+    };  
+    LockManager::tableSizes = tableSizes;
+    mgr = new LockManager(cfg);
 
-  // Setup tables
-  char bigval[1000];
-  TableConfig tblConfig = {
-    0,
-    (uint64_t)config.numRecords,
-    0,
-    (int)(config.numThreads-1),
-    2*(uint64_t)(config.numRecords),
-    recordSize,
-  };
-  Table **tables = (Table**)malloc(sizeof(Table*));
-  tables[0] = new (0) Table(tblConfig);
-  for (uint64_t i = 0; i < config.numRecords; ++i) {
-    if (recordSize == 1000) {
-      uint64_t *bigInt = (uint64_t*)bigval;
-      for (uint32_t j = 0; j < 125; ++j) {
-        bigInt[j] = (uint64_t)rand();
-      }
-      tables[0]->Put(i, bigval);
-    }
-    else if (recordSize == 8) {
-      tables[0]->Put(i, &i);
-    }
-  }
-  tables[0]->SetInit();
+    // Setup tables
+    char bigval[1000];
+    TableConfig tblConfig = {
+      0,
+      (uint64_t)config.numRecords,
+      0,
+      (int)(config.numThreads-1),
+      2*(uint64_t)(config.numRecords),
+      recordSize,
+    };
 
-  uint64_t counter = 0;
-  if (recordSize == 8) {
+    tables = (Table**)malloc(sizeof(Table*));
+    tables[0] = new (0) Table(tblConfig);
     for (uint64_t i = 0; i < config.numRecords; ++i) {
-      counter += *(uint64_t*)(tables[0]->Get(i));
+      if (recordSize == 1000) {
+        uint64_t *bigInt = (uint64_t*)bigval;
+        for (uint32_t j = 0; j < 125; ++j) {
+          bigInt[j] = (uint64_t)rand();
+        }
+        tables[0]->Put(i, bigval);
+      }
+      else if (recordSize == 8) {
+        tables[0]->Put(i, &i);
+      }
+    }
+    tables[0]->SetInit();
+
+    uint64_t counter = 0;
+    if (recordSize == 8) {
+      for (uint64_t i = 0; i < config.numRecords; ++i) {
+        counter += *(uint64_t*)(tables[0]->Get(i));
+      }
     }
   }
-  
-  std::cout << "Finished table init. Counter: " << counter << "\n";
+  else if (config.experiment == 2) {
+
+    uint64_t *tableSizes = (uint64_t*)malloc(2*sizeof(uint64_t));
+    tableSizes[0] = (uint64_t)config.numRecords;
+    tableSizes[1] = (uint64_t)config.numRecords;
+
+    uint32_t numTables = 2;
+    LockManagerConfig cfg = {
+      numTables,
+      tableSizes,
+      0,
+      (int)(config.numThreads-1),
+      (1<<30)/sizeof(TxnQueue),
+    };  
+    mgr = new LockManager(cfg);
+    LockManager::tableSizes = tableSizes;
+
+    // Savings table config
+    TableConfig savingsCfg = {
+      SAVINGS,
+      (uint64_t)config.numRecords,
+      0,
+      (int)(config.numThreads-1),
+      (uint64_t)(config.numRecords),
+      sizeof(SmallBankRecord),
+    };
+
+    // Checking table config
+    TableConfig checkingCfg = {
+      CHECKING,
+      (uint64_t)config.numRecords,
+      0,
+      (int)(config.numThreads-1),
+      (uint64_t)(config.numRecords),
+      sizeof(SmallBankRecord),
+    };
+
+    tables = (Table**)malloc(sizeof(Table*)*2);    
+    tables[SAVINGS] = new(0) Table(savingsCfg);
+    tables[CHECKING] = new(0) Table(checkingCfg);
+    for (uint32_t i = 0; i < config.numRecords; ++i) {
+      SmallBankRecord sbRecord;
+      sbRecord.amount = (long)(rand() % 100);
+      tables[SAVINGS]->Put((uint64_t)i, &sbRecord);
+
+      sbRecord.amount = (long)(rand() % 100);
+      tables[CHECKING]->Put((uint64_t)i, &sbRecord);
+    }
+    tables[SAVINGS]->SetInit();
+    tables[CHECKING]->SetInit();
+  }
+  else {
+    assert(false);
+  }
+  std::cout << "Finished table init. \n";
 
   // Setup worker threads
   EagerWorker **threads = SetupLockThreads(inputs, outputs, 256, mgr, 
@@ -1028,7 +1279,7 @@ void LockingExperiment(LockingConfig config) {
     outputs[i]->DequeueBlocking();
   }
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
-  //    ProfilerStop();
+  //  ProfilerStop();
   elapsed_time = diff_time(end_time, start_time);
 
   double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
@@ -1038,6 +1289,7 @@ void LockingExperiment(LockingConfig config) {
 
   resultFile << "time:" << elapsedMilli << " txns:" << config.numTxns << " ";
   resultFile << "threads:" << config.numThreads << " locking ";
+  resultFile << "records:" << config.numRecords << " ";
   if (config.experiment == 0) {
     resultFile << "10rmw" << " ";
   }
@@ -1053,7 +1305,7 @@ void LockingExperiment(LockingConfig config) {
   }
   else if (config.distribution == 1) {
     resultFile << "zipf theta:" << config.theta << "\n";
-  }
+  }  
 
   //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
   resultFile.close();  
@@ -1088,9 +1340,16 @@ int main(int argc, char **argv) {
   std::cout << cfg.ccType << "\n";
   if (cfg.ccType == MULTIVERSION) {
     MVScheduler::NUM_CC_THREADS = (uint32_t)cfg.mvConfig.numCCThreads;
-    recordSize = cfg.mvConfig.recordSize;
+    NUM_CC_THREADS = (uint32_t)cfg.mvConfig.numCCThreads;
+    if (cfg.mvConfig.experiment == 2) {
+      recordSize = sizeof(SmallBankRecord);
+    }
+    else if (cfg.mvConfig.experiment < 2) {
+      recordSize = cfg.mvConfig.recordSize;
+    }
+    
     assert(cfg.mvConfig.distribution < 2);
-    assert(recordSize == 8 || recordSize == 1000);
+        //    assert(recordSize == 8 || recordSize == 1000);
     DoExperiment(cfg.mvConfig.numCCThreads, cfg.mvConfig.numWorkerThreads, 
                  cfg.mvConfig.numRecords, 
                  cfg.mvConfig.epochSize, 

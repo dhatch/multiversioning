@@ -7,7 +7,10 @@ uint64_t _MVRecord_::INFINITY = 0xFFFFFFFFFFFFFFFF;
 
 MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu) {
   std::cout << "NUMA node: " << numa_node_of_cpu(cpu) << "\n";
-
+  
+  if (size < 1) {
+    size = 1;
+  }
   MVRecord *data;// = (MVRecord*)alloc_mem(size, cpu);
   int numa_node = numa_node_of_cpu(cpu);
   numa_set_strict(1);

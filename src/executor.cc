@@ -399,6 +399,7 @@ bool Executor::ProcessTxn(Action *action) {
       // record has been executed.    
       Action *dependAction = action->readset[i].value->writer;
       if (dependAction != NULL && !ProcessSingle(dependAction)) {
+        //        assert(false);
         ready = false;
       }
       else if (action->readset[i].value->value == NULL) {
@@ -453,6 +454,7 @@ bool Executor::ProcessTxn(Action *action) {
   
   // Transaction aborted
   if (abort || !action->Run()) {
+    assert(false);
     for (uint32_t i = 0; i < numWrites; ++i) {
       uint32_t tbl = action->writeset[i].tableId;
       uint32_t recSize = config.recordSizes[tbl];
