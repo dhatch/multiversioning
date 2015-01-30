@@ -12,6 +12,15 @@
 #include <mv_record.h>
 #include <util.h>
 
+#define TIMESTAMP_MASK (0xFFFFFFFFFFFFFFF0)
+#define EPOCH_MASK (0xFFFFFFFF00000000)
+
+#define CREATE_TID(epoch, counter) ((epoch<<32) | (counter<<4))
+#define GET_TIMESTAMP(tid) (tid & TIMESTAMP_MASK)
+#define GET_EPOCH(tid) (tid & EPOCH_MASK)
+#define GET_COUNTER(tid) (GET_TIMESTAMP(tid) & ~EPOCH_MASK)
+#define IS_LOCKED(tid) ((tid & ~(TIMESTAMP_MASK)) == 1)
+
 extern uint32_t NUM_CC_THREADS;
 class Action;
 
@@ -304,6 +313,97 @@ class EagerCompositeKey {
     return Hash128to64(std::make_pair(key, (uint64_t)(tableId)));
   }
 };
+
+class occ_composite_key {
+ private:
+        static inline bool TryAcquireLock(volatile uint64_t *version_ptr) {
+                volatile uint64_t cmp_tid, locked_tid;
+                cmp_tid = *version_ptr;
+                locked_tid = (cmp_tid | 1);
+                if (!IS_LOCKED(cmp_tid) &&
+                    cmp_and_swap(version_ptr, cmp_tid, locked_tid))
+                        return true;
+                return false;
+        }
+        
+ public:
+        uint32_t tableId;
+        uint64_t key;
+        uint64_t old_tid;
+        bool is_rmw;
+        void *value;
+
+        void* GetValue() {
+                char *byte_array = (char*)value;
+                return &byte_array[sizeof(uint64_t)];
+        }
+
+        uint64_t GetTimestamp() {
+                return old_tid;
+        }
+
+        /*
+         * Perform Silo's commit protocol for a record in the readset.
+         */
+        bool CommitRead() {
+                if (is_rmw) 
+                        return true;
+                volatile uint64_t *version_ptr = (volatile uint64_t*)value;
+                if ((*version_ptr != old_tid) ||
+                    (IS_LOCKED(*version_ptr) && !is_rmw)) {
+                        return false;
+                }
+                return true;
+        }
+
+        /*
+         * Perform Silo's commit protocol for a record in the writeset. Needs to
+         * be split into two ("Start" and "End" because we acquire locks on the 
+         * records in "Start" and release the locks in "End").
+         */
+        uint64_t StartCommitWrite() {
+                volatile uint64_t *version_ptr = (volatile uint64_t*)value;
+                uint32_t backoff, temp;
+                if (USE_BACKOFF) 
+                        backoff = 1;
+                while (true) {
+                        if (TryAcquireLock(version_ptr)) {
+                                assert(IS_LOCKED(*version_ptr));
+                                break;
+                        }
+                        if (USE_BACKOFF) {
+                                temp = backoff;
+                                while (temp-- > 0)
+                                        single_work();
+                                backoff = backoff*2;
+                        }
+                }
+                return GET_TIMESTAMP(locked_tid);                
+        }
+
+        /*
+         * Finish commit protocol.
+         */
+        void EndCommitWrite(uint32_t epoch, uint32_t counter) {
+                uint64_t new_tid;
+                volatile uint64_t *tid_ptr;
+                new_tid = CREATE_TID(epoch, counter);
+                tid_ptr = (volatile uint64_t*)value;
+                assert(!IS_LOCKED(new_tid));
+                assert(IS_LOCKED(*tid_ptr));
+                xchgq(tid_ptr, new_tid);
+        }
+};
+
+class occ_action {
+        uint64_t tid;
+        std::vector<occ_composite_key> readset;
+        std::vector<occ_composite_key> writeset;
+
+        virtual bool Run() = 0;
+};
+
+
 
 class EagerAction;
 struct EagerRecordInfo {

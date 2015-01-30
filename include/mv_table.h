@@ -44,7 +44,9 @@ class MVTablePartition {
 
 
   MVRecord* GetMVRecord(const CompositeKey &pkey, uint64_t version);
-        
+
+  
+  
   //  void WritePartition();
         
   //  MVRecordAllocator* GetAlloc();
