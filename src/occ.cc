@@ -28,12 +28,14 @@ void OCCWorker::RunSingle(OCCAction *action)
         PrepareWrites(action);
         PrepareReads(action);
         while (true) {
-                action->ObtainTIDs();
+                ObtainTIDs(action);
                 commit = action->Run();
                 AcquireWriteLocks(action);
                 if (Validate(action)) {
-                        if (commit)
-                                InstallWrites(action);
+                        if (commit) {
+                                cur_tid = ComputeTID(action);
+                                InstallWrites(action, cur_tid);
+                        }
                         RecycleBufs(action);
                         break;
                 } else {
@@ -70,6 +72,20 @@ uint64_t OCCWorker::ComputeTID(OCCAction *action)
 }
 
 /*
+ * Remember the TID of every record in the readset. Used for validation.
+ */
+void OCCWorker::ObtainTIDs(OCCAction *action)
+{
+        uint32_t num_reads, i;
+        volatile uint64_t *tid_ptr;
+        num_reads = action->readset.size();
+        for (i = 0; i < num_reads; ++i) {
+                tid_ptr = (volatile uint64_t*)action->readset[i].value;
+                action->readset[i].old_tid = *tid_ptr;
+        }
+}
+
+/*
  * Obtain a reference to each record in the readset. Remember the TID and keep a
  * reference for each record.
  */
@@ -77,6 +93,7 @@ void OCCWorker::PrepareReads(OCCAction *action)
 {
         uint32_t num_reads, table_id;
         uint64_t key;
+        volatile uint64_t old_tid;
         void *value;
         num_reads = action->readset.size();
         for (uint32_t i = 0; i < num_reads; ++i) {
@@ -105,6 +122,9 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
         }
 }
 
+/*
+ *
+ */
 void OCCWorker::PrepareWrites(OCCAction *action)
 {
         uint32_t num_writes, table_id;
@@ -122,6 +142,9 @@ void OCCWorker::PrepareWrites(OCCAction *action)
         }
 }
 
+/*
+ *
+ */
 void OCCWorker::RecycleBufs(OCCAction *action)
 {
         uint32_t num_writes, table_id;
@@ -131,14 +154,6 @@ void OCCWorker::RecycleBufs(OCCAction *action)
                 table_id = action->writeset[i].tableId;
                 rec = action->writeset[i].value;
                 bufs->ReturnRecord(table_id, rec);
-        }
-}
-
-void OCCWorker::LockWrites(OCCAction *action)
-{
-        uint32_t num_writes, i;
-        for (i = 0; i < num_writes; ++i) {
-                action->write_records[i].
         }
 }
 
@@ -220,4 +235,46 @@ void OCCWorker::ReleaseWriteLocks(OCCAction *action)
                 assert(GET_TIMESTAMP(old_tid) == GET_TIMESTAMP(*tid_ptr));
                 xchgq(tid_ptr, old_tid);
         }
+}
+
+uint64_t RecordBuffers::CalculateAllocSize(struct RecordBuffersConfig conf)
+{
+        uint32_t i;
+        uint64_t ret, total_sz;
+        ret = 0;
+        for (i = 0; i < conf.num_tables; ++i) {
+                total_sz = sizeof(struct RecordBuffy*) + conf.record_sizes[i];
+                ret += conf.num_buffers * total_sz;
+        }
+        return ret;
+}
+
+RecordBuffers::RecordBuffers(struct RecordBuffersConfig conf)
+{        
+        record_lists = NULL;
+        uint32_t i;
+        uint64_t total_size = CalculateAllocSize(conf);
+        void *temp = alloc_mem(total_size, conf.cpu);
+        uint64_t offset = 0;
+        for (i = 0; i < conf.num_tables; ++i) {
+                
+        }
+}
+
+void* RecordBuffers::GetRecord(uint32_t tableId)
+{
+        RecordBuffy *ret;
+        assert(record_lists[tableId] != NULL);
+        ret = record_lists;
+        record_lists = ret->next;
+        ret->next = NULL;
+        return ret;
+}
+
+void RecordBuffers::ReturnRecord(uint32_t tableId, void *record)
+{
+        RecordBuffy *ret;
+        ret = (RecordBuffy*)record;
+        ret->next = record_lists[tableId];
+        record_lists[tableId] = ret;
 }

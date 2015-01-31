@@ -17,8 +17,27 @@ struct OCCConfig {
         volatile uint32_t *epoch;
 };
 
+struct RecordBuffersConfig {
+        uint32_t num_tables;
+        uint32_t *record_sizes;
+        uint32_t num_buffers;
+};
+
+struct RecordBuffy {
+        struct RecordBuffy *next;
+        char value[0];
+};
+
 class RecordBuffers {
+ private:
+        RecordBuffy **record_lists;
+
+        static void CalculateAllocSize(struct RecordBuffersConfig conf);
  public:
+        void* operator new (std::size_t sz, int cpu) {
+                return alloc_mem(sz, cpu);
+        }
+        
         void* GetRecord(uint32_t tableId);
         void ReturnRecord(uint32_t tableId, void *record);
 };
