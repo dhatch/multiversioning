@@ -316,15 +316,6 @@ class EagerCompositeKey {
 
 class occ_composite_key {
  private:
-        static inline bool TryAcquireLock(volatile uint64_t *version_ptr) {
-                volatile uint64_t cmp_tid, locked_tid;
-                cmp_tid = *version_ptr;
-                locked_tid = (cmp_tid | 1);
-                if (!IS_LOCKED(cmp_tid) &&
-                    cmp_and_swap(version_ptr, cmp_tid, locked_tid))
-                        return true;
-                return false;
-        }
         
  public:
         uint32_t tableId;
@@ -345,14 +336,12 @@ class occ_composite_key {
         /*
          * Perform Silo's commit protocol for a record in the readset.
          */
-        bool CommitRead() {
+        bool ValidateRead() {
                 if (is_rmw) 
                         return true;
                 volatile uint64_t *version_ptr = (volatile uint64_t*)value;
-                if ((*version_ptr != old_tid) ||
-                    (IS_LOCKED(*version_ptr) && !is_rmw)) {
+                if ((*version_ptr != old_tid) || IS_LOCKED(*version_ptr)) 
                         return false;
-                }
                 return true;
         }
 
@@ -399,7 +388,7 @@ class occ_action {
         uint64_t tid;
         std::vector<occ_composite_key> readset;
         std::vector<occ_composite_key> writeset;
-
+        std::vector<void*> write_records;
         virtual bool Run() = 0;
 };
 
