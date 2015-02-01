@@ -31,13 +31,14 @@ struct RecordBuffy {
 class RecordBuffers {
  private:
         RecordBuffy **record_lists;
-
-        static void CalculateAllocSize(struct RecordBuffersConfig conf);
+        static void* AllocBufs(struct RecordBuffersConfig conf);
  public:
-        void* operator new (std::size_t sz, int cpu) {
+        void* operator new(std::size_t sz, int cpu)
+        {
                 return alloc_mem(sz, cpu);
         }
-        
+
+        RecordBuffers(struct RecordBuffersConfig conf);        
         void* GetRecord(uint32_t tableId);
         void ReturnRecord(uint32_t tableId, void *record);
 };

@@ -237,27 +237,54 @@ void OCCWorker::ReleaseWriteLocks(OCCAction *action)
         }
 }
 
-uint64_t RecordBuffers::CalculateAllocSize(struct RecordBuffersConfig conf)
+/*
+ * Create a linked list of thread local buffers for a particular type of record.
+ * Given the size of each buffer and the number of buffers.
+ */
+void RecordBuffers::LinkBufs(struct RecordBuffy *start, uint32_t buf_size,
+                             uint32_t num_bufs)
 {
-        uint32_t i;
-        uint64_t ret, total_sz;
-        ret = 0;
-        for (i = 0; i < conf.num_tables; ++i) {
-                total_sz = sizeof(struct RecordBuffy*) + conf.record_sizes[i];
-                ret += conf.num_buffers * total_sz;
+        uint32_t offset, i;
+        char *cur;
+        struct RecordBuffy *temp;
+        offset = sizeof(struct RecordBuffy*) + buf_size;
+        cur = (char*)start;
+        for (i = 0; i < num_bufs; ++i) {
+                temp  = (struct RecordBuffy*)cur;
+                temp->next = (struct RecordBuffy*)(cur + offset);
+                cur = (char*)(temp->next);
         }
-        return ret;
+        temp->next = NULL;
 }
 
-RecordBuffers::RecordBuffers(struct RecordBuffersConfig conf)
-{        
-        record_lists = NULL;
+void* RecordBuffers::AllocBufs(struct RecordBuffersConfig conf)
+{
         uint32_t i;
-        uint64_t total_size = CalculateAllocSize(conf);
-        void *temp = alloc_mem(total_size, conf.cpu);
-        uint64_t offset = 0;
+        uint64_t total_size, single_buf_sz;
         for (i = 0; i < conf.num_tables; ++i) {
-                
+                single_buf_sz =
+                        sizeof(struct RecordBuffy*)+conf.record_sizes[i];
+                total_size += conf.num_buffers * single_buf_sz;
+        }
+        return alloc_mem(total_size, conf.cpu);
+}
+
+/*
+ * 
+ */
+RecordBuffers::RecordBuffers(struct RecordBuffersConfig conf)
+{
+        uint32_t i;
+        uint64_t total_size;
+        char *temp;
+        record_lists = alloc_mem(conf.num_tables*sizeof(struct RecordBuffy*),
+                                 conf.cpu);
+        temp = (char*)AllocBufs(conf);
+        for (i = 0; i < conf.num_tables; ++i) {
+                LinkBufs((struct RecordBuffy*)temp, conf.record_sizes[i],
+                         conf.num_buffers);
+                record_lists[i] = (struct RecordBuffy*)temp;
+                temp += conf.record_sizes[i]*conf.num_buffers;
         }
 }
 
