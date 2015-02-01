@@ -52,17 +52,17 @@ uint64_t OCCWorker::ComputeTID(OCCAction *action)
 {
         uint64_t max_tid, cur_tid;
         uint32_t num_reads, num_writes, i;
-        max_tid = CREATE_TID(action->epoch, 0);
+        max_tid = CREATE_TID(GET_EPOCH(action->tid), 0);
         num_reads = action->readset.size();
         num_writes = action->writeset.size();
         for (i = 0; i < num_reads; ++i) {
-                cur_tid = GET_TIMESTAMP(*action->readset[i].old_tid);
+                cur_tid = GET_TIMESTAMP(action->readset[i].old_tid);
                 if (cur_tid > max_tid)
                         max_tid = cur_tid;
         }
         for (i = 0; i < num_writes; ++i) {
-                assert(IS_LOCKED(*action->write_records[i]));
-                cur_tid = GET_TIMESTAMP(*action->write_records[i]);
+                assert(IS_LOCKED(*(uint64_t*)action->write_records[i]));
+                cur_tid = GET_TIMESTAMP(*(uint64_t*)action->write_records[i]);
                 assert(!IS_LOCKED(cur_tid));
                 if (cur_tid > max_tid)
                         max_tid = cur_tid;
@@ -116,7 +116,7 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
         void *value;
         for (uint32_t i = 0; i < action->writeset.size(); ++i) {
                 value = action->write_records[i];
-                memset(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
+                memcpy(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
                        record_size);
                 xchgq(RECORD_TID_PTR(value), tid);
         }
@@ -173,7 +173,7 @@ bool OCCWorker::Validate(OCCAction *action)
 /*
  * Try to acquire a record's write latch.
  */
-static inline bool OCCWorker::TryAcquireLock(volatile uint64_t *version_ptr)
+inline bool OCCWorker::TryAcquireLock(volatile uint64_t *version_ptr)
 {
         volatile uint64_t cmp_tid, locked_tid;
         cmp_tid = *version_ptr;
@@ -277,8 +277,9 @@ RecordBuffers::RecordBuffers(struct RecordBuffersConfig conf)
         uint32_t i;
         uint64_t total_size;
         char *temp;
-        record_lists = alloc_mem(conf.num_tables*sizeof(struct RecordBuffy*),
+        temp = (char *)alloc_mem(conf.num_tables*sizeof(struct RecordBuffy*),
                                  conf.cpu);
+        record_lists = (struct RecordBuffy**)temp;
         temp = (char*)AllocBufs(conf);
         for (i = 0; i < conf.num_tables; ++i) {
                 LinkBufs((struct RecordBuffy*)temp, conf.record_sizes[i],
@@ -292,8 +293,8 @@ void* RecordBuffers::GetRecord(uint32_t tableId)
 {
         RecordBuffy *ret;
         assert(record_lists[tableId] != NULL);
-        ret = record_lists;
-        record_lists = ret->next;
+        ret = record_lists[tableId];
+        record_lists[tableId] = ret->next;
         ret->next = NULL;
         return ret;
 }

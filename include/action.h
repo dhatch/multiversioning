@@ -349,7 +349,7 @@ class occ_composite_key {
          * Perform Silo's commit protocol for a record in the writeset. Needs to
          * be split into two ("Start" and "End" because we acquire locks on the 
          * records in "Start" and release the locks in "End").
-         */
+
         uint64_t StartCommitWrite() {
                 volatile uint64_t *version_ptr = (volatile uint64_t*)value;
                 uint32_t backoff, temp;
@@ -372,7 +372,7 @@ class occ_composite_key {
 
         /*
          * Finish commit protocol.
-         */
+
         void EndCommitWrite(uint32_t epoch, uint32_t counter) {
                 uint64_t new_tid;
                 volatile uint64_t *tid_ptr;
@@ -382,13 +382,16 @@ class occ_composite_key {
                 assert(IS_LOCKED(*tid_ptr));
                 xchgq(tid_ptr, new_tid);
         }
+        */
 };
 
-class occ_action {
+class OCCAction {
+ public:
         uint64_t tid;
         std::vector<occ_composite_key> readset;
         std::vector<occ_composite_key> writeset;
         std::vector<void*> write_records;
+        
         virtual bool Run() = 0;
 };
 
