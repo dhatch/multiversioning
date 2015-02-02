@@ -20,7 +20,8 @@ struct OCCConfig {
         int cpu;
         Table **tables;
         bool is_leader;
-        volatile uint32_t *epoch;
+        volatile uint32_t *epoch_ptr;
+        uint64_t epoch_threshold;
 };
 
 struct RecordBuffersConfig {
@@ -53,19 +54,22 @@ class RecordBuffers {
 };
 
 class OCCWorker : public Runnable {
- private:
+ private:        
         OCCConfig config;
+        uint64_t incr_timestamp;
+        uint32_t last_epoch;
         uint32_t txn_counter;
         RecordBuffers *bufs;
         virtual void RunSingle(OCCAction *action);
         virtual bool Validate(OCCAction *action);
         virtual void PrepareWrites(OCCAction *action);
         virtual void PrepareReads(OCCAction *action);
-        virtual uint64_t ComputeTID(OCCAction *action);
+        virtual uint64_t ComputeTID(OCCAction *action, uint32_t epoch);
         virtual void ObtainTIDs(OCCAction *action);
         virtual void InstallWrites(OCCAction *action, uint64_t tid);
         virtual void RecycleBufs(OCCAction *action);
-
+        virtual void UpdateEpoch();
+        
         static void AcquireSingleLock(volatile uint64_t *version_ptr);
         static bool TryAcquireLock(volatile uint64_t *version_ptr);
         static void AcquireWriteLocks(OCCAction *action);

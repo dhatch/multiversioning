@@ -11,10 +11,22 @@ void OCCWorker::Init()
 void OCCWorker::StartWorking()
 {
         OCCActionBatch input, output;
-        input = config.inputQueue->DequeueBlocking();
-        for (uint32_t i = 0; i < input.batchSize; ++i)
-                RunSingle(input.batch[i]);
-        config.outputQueue->EnqueueBlocking(input);
+        while (true) {
+                input = config.inputQueue->DequeueBlocking();
+                for (uint32_t i = 0; i < input.batchSize; ++i) {
+                        RunSingle(input.batch[i]);
+                        if (config.is_leader) 
+                                UpdateEpoch();
+                }
+                config.outputQueue->EnqueueBlocking(input);
+        }
+}
+
+void OCCWorker::UpdateEpoch()
+{
+        uint64_t now = rdtsc();
+        if (now - incr_timestamp > config.epoch_threshold)
+                fetch_and_increment_32(config.epoch_ptr);
 }
 
 /*
@@ -24,18 +36,23 @@ void OCCWorker::StartWorking()
 void OCCWorker::RunSingle(OCCAction *action)
 {
         uint64_t cur_tid;
-        bool commit;
+        bool commit, no_conflicts;
+        volatile uint32_t epoch;
         PrepareWrites(action);
         PrepareReads(action);
         while (true) {
                 ObtainTIDs(action);
                 commit = action->Run();
                 AcquireWriteLocks(action);
+                barrier();
+                epoch = *config.epoch_ptr;
+                barrier();
                 if (Validate(action)) {
                         if (commit) {
-                                cur_tid = ComputeTID(action);
+                                cur_tid = ComputeTID(action, epoch);
                                 InstallWrites(action, cur_tid);
                         }
+                        ReleaseWriteLocks(action);
                         RecycleBufs(action);
                         break;
                 } else {
@@ -48,11 +65,17 @@ void OCCWorker::RunSingle(OCCAction *action)
  * The TID exceeds the existing TIDs of every record in the readset, writeset, 
  * and epoch.
  */
-uint64_t OCCWorker::ComputeTID(OCCAction *action)
+uint64_t OCCWorker::ComputeTID(OCCAction *action, uint32_t epoch)
 {
         uint64_t max_tid, cur_tid;
         uint32_t num_reads, num_writes, i;
-        max_tid = CREATE_TID(GET_EPOCH(action->tid), 0);
+        if (last_epoch < epoch) {
+                txn_counter = 1;
+                last_epoch = epoch;
+        } else {
+                txn_counter += 1;
+        }
+        max_tid = CREATE_TID(epoch, txn_counter); 
         num_reads = action->readset.size();
         num_writes = action->writeset.size();
         for (i = 0; i < num_reads; ++i) {

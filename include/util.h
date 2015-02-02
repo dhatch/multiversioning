@@ -83,6 +83,17 @@ unlock(volatile uint64_t *word) {
   xchgq(word, 0);
 }
 
+static inline uint32_t
+fetch_and_increment_32(volatile uint32_t *variable)
+{
+        int counter_value = 1;
+        asm volatile ("lock; xaddq %%rax, %1;"
+                      : "=a" (counter_value), "+m" (*variable)
+                      : "a" (counter_value)
+                      : "memory");
+        return counter_value + 1;
+}
+
 static inline uint64_t
 fetch_and_increment(volatile uint64_t *variable)
 {
