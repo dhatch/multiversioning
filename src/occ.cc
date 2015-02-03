@@ -58,8 +58,9 @@ void OCCWorker::RunSingle(OCCAction *action)
                         if (commit) {
                                 cur_tid = ComputeTID(action, epoch);
                                 InstallWrites(action, cur_tid);
+                        } else {                        
+                                ReleaseWriteLocks(action);
                         }
-                        ReleaseWriteLocks(action);
                         RecycleBufs(action);
                         break;
                 } else {
@@ -82,11 +83,13 @@ uint64_t OCCWorker::ComputeTID(OCCAction *action, uint32_t epoch)
         } else {
                 txn_counter += 1;
         }
-        max_tid = CREATE_TID(epoch, txn_counter); 
+        max_tid = CREATE_TID(epoch, txn_counter);
+        assert(!IS_LOCKED(max_tid));
         num_reads = action->readset.size();
         num_writes = action->writeset.size();
         for (i = 0; i < num_reads; ++i) {
                 cur_tid = GET_TIMESTAMP(action->readset[i].old_tid);
+                assert(!IS_LOCKED(cur_tid));
                 if (cur_tid > max_tid)
                         max_tid = cur_tid;
         }
@@ -98,6 +101,7 @@ uint64_t OCCWorker::ComputeTID(OCCAction *action, uint32_t epoch)
                         max_tid = cur_tid;
         }
         max_tid += 0x10;
+        assert(!IS_LOCKED(max_tid));
         return max_tid;
 }
 
@@ -244,8 +248,10 @@ void OCCWorker::AcquireWriteLocks(OCCAction *action)
 {
         uint32_t num_writes, i;
         num_writes = action->writeset.size();
-        for (i = 0; i < num_writes; ++i) 
+        for (i = 0; i < num_writes; ++i) {
                 AcquireSingleLock((volatile uint64_t*)action->write_records[i]);
+                assert(IS_LOCKED(*(volatile uint64_t*)action->write_records[i]));
+        }
 }
 
 /*
@@ -260,7 +266,7 @@ void OCCWorker::ReleaseWriteLocks(OCCAction *action)
         for (i = 0; i < num_writes; ++i) {
                 tid_ptr = (volatile uint64_t*)action->write_records[i];
                 assert(IS_LOCKED(*tid_ptr));
-                old_tid = *tid_ptr & ~TIMESTAMP_MASK;
+                old_tid = *tid_ptr & TIMESTAMP_MASK;
                 assert(!IS_LOCKED(old_tid));
                 assert(GET_TIMESTAMP(old_tid) == GET_TIMESTAMP(*tid_ptr));
                 xchgq(tid_ptr, old_tid);

@@ -968,35 +968,30 @@ OCCAction* GenerateSmallBankOCCAction(uint64_t numRecords, bool readOnly)
         int txnType = rand() % mod;
         if (txnType == 0) {             // Balance
                 uint64_t customer = (uint64_t)(rand() % numRecords);
-
-                ret = new OCCSmallBank::Balance(customer, numRecords);
+                ret = new OCCSmallBank::Balance(customer);
         } else if (txnType == 1) {        // DepositChecking
                 uint64_t customer =
                         (uint64_t)(rand() % numRecords);
                 long amount = (long)(rand() % 25);
-                ret = new OCCSmallBank::DepositChecking(customer, amount, 
-                                                        numRecords);
+                ret = new OCCSmallBank::DepositChecking(customer, amount);
         } else if (txnType == 2) {        // TransactSaving
                 uint64_t customer = (uint64_t)(rand() % numRecords);
                 long amount = (long)(rand() % 25);
-                ret = new OCCSmallBank::TransactSaving(customer, amount, 
-                                                       numRecords);
+                ret = new OCCSmallBank::TransactSaving(customer, amount);
         } else if (txnType == 3) {        // Amalgamate
                 uint64_t fromCustomer = (uint64_t)(rand() % numRecords);
                 uint64_t toCustomer;
                 do {
                         toCustomer = (uint64_t)(rand() % numRecords);
                 } while (toCustomer == fromCustomer);
-                ret = new OCCSmallBank::Amalgamate(fromCustomer, toCustomer, 
-                                                   numRecords);
+                ret = new OCCSmallBank::Amalgamate(fromCustomer, toCustomer);
         } else if (txnType == 4) {        // WriteCheck
                 uint64_t customer = (uint64_t)(rand() % numRecords);
                 long amount = (long)(rand() % 25);
                 if (rand() % 2 == 0) {
                         amount *= -1;
                 }
-                ret = new OCCSmallBank::WriteCheck(customer, amount, 
-                                                   numRecords);
+                ret = new OCCSmallBank::WriteCheck(customer, amount);        
         }
         std::sort(ret->writeset.begin(), ret->writeset.end());
         return ret;
@@ -1021,17 +1016,14 @@ OCCAction* GenerateOCCRMWAction(RecordGenerator *gen, uint32_t txnSize,
         for (uint32_t j = 0; j < txnSize; ++j) {
                 uint64_t key = GenUniqueKey(gen, &seen_keys);
                 if (experiment == 0) {
-                        occ_composite_key k(0, key, true);
-                        action->readset.push_back(k);
-                        action->writeset.push_back(k);
+                        action->AddReadKey(0, key, true);
+                        action->AddWriteKey(0, key);
                 } else if (experiment == 1) {
                         if (j < 2) {
-                                occ_composite_key k(0, key, true);
-                                action->readset.push_back(k);
-                                action->writeset.push_back(k);
+                                action->AddReadKey(0, key, true);
+                                action->AddWriteKey(0, key);
                         } else {
-                                occ_composite_key k(0, key, false);
-                                action->readset.push_back(k);
+                                action->AddReadKey(0, key, false);
                         }
                 }                                    
         }

@@ -22,7 +22,7 @@ namespace OCCSmallBank {
                 long totalBalance;
                 
         public:
-                Balance(uint64_t customerId, uint64_t numAccounts);
+                Balance(uint64_t customerId);
                 virtual bool Run();
         };
         
@@ -31,8 +31,7 @@ namespace OCCSmallBank {
                 long amount;
         
         public:
-                DepositChecking(uint64_t customer, long amount,
-                                uint64_t numAccounts);
+                DepositChecking(uint64_t customer, long amount);
                 virtual bool Run();
         };
 
@@ -40,15 +39,13 @@ namespace OCCSmallBank {
         private:
                 long amount;
         public:
-                TransactSaving(uint64_t customer, long amount,
-                               uint64_t numAccounts);
+                TransactSaving(uint64_t customer, long amount);
                 virtual bool Run();
         };
 
         class Amalgamate : public OCCAction {
         public:
-                Amalgamate(uint64_t fromCustomer, uint64_t toCustomer, 
-                           uint64_t numAccounts);
+                Amalgamate(uint64_t fromCustomer, uint64_t toCustomer);
                 virtual bool Run();
         };
   
@@ -57,9 +54,7 @@ namespace OCCSmallBank {
                 long amount;
     
         public:
-                WriteCheck(uint64_t customer, long amount,
-                           uint64_t numAccounts);
-
+                WriteCheck(uint64_t customer, long amount);
                 virtual bool Run();
         };  
 };

@@ -15,7 +15,7 @@
 #define TIMESTAMP_MASK (0xFFFFFFFFFFFFFFF0)
 #define EPOCH_MASK (0xFFFFFFFF00000000)
 
-#define CREATE_TID(epoch, counter) ((epoch<<32) | (counter<<4))
+#define CREATE_TID(epoch, counter) ((((uint64_t)epoch)<<32) | (((uint64_t)counter)<<4))
 #define GET_TIMESTAMP(tid) (tid & TIMESTAMP_MASK)
 #define GET_EPOCH(tid) (tid & EPOCH_MASK)
 #define GET_COUNTER(tid) (GET_TIMESTAMP(tid) & ~EPOCH_MASK)
@@ -426,15 +426,17 @@ class OCCAction {
         
         virtual bool Run() = 0;
 
-        void AddReadKey(uint32_t tableId, uint64_t key, uint64_t total_keys,
-                   bool is_rmw) {
+        void AddReadKey(uint32_t tableId, uint64_t key, bool is_rmw) 
+        {
                 occ_composite_key k(tableId, key, is_rmw);
                 readset.push_back(k);
         }
         
-        void AddWriteKey(uint32_t tableId, uint64_t key, uint64_t total_keys) {
+        void AddWriteKey(uint32_t tableId, uint64_t key)
+        {
                 occ_composite_key k(tableId, key, false);
                 writeset.push_back(k);
+                write_records.push_back(NULL);
         }
 
 };

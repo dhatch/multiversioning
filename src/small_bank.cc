@@ -1,10 +1,10 @@
 #include <small_bank.h>
 
-OCCSmallBank::Balance::Balance(uint64_t customer, uint64_t numAccounts)
+OCCSmallBank::Balance::Balance(uint64_t customer)
 {
         this->totalBalance = 0;
-        AddReadKey(CHECKING, customer, numAccounts, false);
-        AddReadKey(SAVINGS, customer, numAccounts, false);
+        AddReadKey(CHECKING, customer, false);
+        AddReadKey(SAVINGS, customer, false);
 }
 
 bool OCCSmallBank::Balance::Run()
@@ -15,13 +15,11 @@ bool OCCSmallBank::Balance::Run()
         return true;
 }
 
-OCCSmallBank::DepositChecking::DepositChecking(uint64_t customer,
-                                               long amount,
-                                               uint64_t numAccounts)
+OCCSmallBank::DepositChecking::DepositChecking(uint64_t customer, long amount)
 {
         this->amount = amount;
-        AddReadKey(CHECKING, customer, numAccounts, true);
-        AddWriteKey(CHECKING, customer, numAccounts);
+        AddReadKey(CHECKING, customer, true);
+        AddWriteKey(CHECKING, customer);
 }
 
 bool OCCSmallBank::DepositChecking::Run()
@@ -35,13 +33,11 @@ bool OCCSmallBank::DepositChecking::Run()
 }
 
 
-OCCSmallBank::TransactSaving::TransactSaving(uint64_t customer,
-                                             long amount,
-                                             uint64_t numAccounts)
+OCCSmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount)
 {
         this->amount = amount;
-        AddReadKey(SAVINGS, customer, numAccounts, true);
-        AddWriteKey(SAVINGS, customer, numAccounts);
+        AddReadKey(SAVINGS, customer, true);
+        AddWriteKey(SAVINGS, customer);
 }
 
 bool OCCSmallBank::TransactSaving::Run()
@@ -52,16 +48,14 @@ bool OCCSmallBank::TransactSaving::Run()
         return true;
 }
 
-OCCSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer,
-                                     uint64_t toCustomer,
-                                     uint64_t numAccounts)
+OCCSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer, uint64_t toCustomer)
 {
-        AddReadKey(CHECKING, fromCustomer, numAccounts, true);
-        AddReadKey(SAVINGS, fromCustomer, numAccounts, true);
-        AddReadKey(CHECKING, toCustomer, numAccounts, true);
-        AddWriteKey(CHECKING, fromCustomer, numAccounts);
-        AddWriteKey(SAVINGS, fromCustomer, numAccounts);
-        AddWriteKey(CHECKING, toCustomer, numAccounts);
+        AddReadKey(CHECKING, fromCustomer, true);
+        AddReadKey(SAVINGS, fromCustomer, true);
+        AddReadKey(CHECKING, toCustomer, true);
+        AddWriteKey(CHECKING, fromCustomer);
+        AddWriteKey(SAVINGS, fromCustomer);
+        AddWriteKey(CHECKING, toCustomer);
 }
 
 bool OCCSmallBank::Amalgamate::Run()
@@ -76,13 +70,12 @@ bool OCCSmallBank::Amalgamate::Run()
         return true;
 }
 
-OCCSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount,
-                                     uint64_t numAccounts)
+OCCSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount)
 {
         this->amount = amount;
-        AddReadKey(SAVINGS, customer, numAccounts, false);
-        AddReadKey(CHECKING, customer, numAccounts, true);
-        AddWriteKey(CHECKING, customer, numAccounts);
+        AddReadKey(SAVINGS, customer, false);
+        AddReadKey(CHECKING, customer, true);
+        AddWriteKey(CHECKING, customer);
 }
 
 bool OCCSmallBank::WriteCheck::Run()
