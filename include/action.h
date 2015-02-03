@@ -389,6 +389,32 @@ class occ_composite_key {
                 xchgq(tid_ptr, new_tid);
         }
         */
+        
+        bool operator==(const occ_composite_key &other) const {
+                return other.tableId == this->tableId && other.key == this->key;
+        }
+
+        bool operator!=(const occ_composite_key &other) const {
+                return !(*this == other);
+        }
+  
+        bool operator<(const occ_composite_key &other) const {
+                return ((this->tableId < other.tableId) || 
+                        ((this->tableId == other.tableId) && (this->key < other.key)));
+        }
+  
+        bool operator>(const occ_composite_key &other) const {
+                return ((this->tableId > other.tableId) ||
+                        ((this->tableId == other.tableId) && (this->key > other.key)));
+        }
+  
+        bool operator<=(const occ_composite_key &other) const {
+                return !(*this > other);
+        }
+  
+        bool operator>=(const occ_composite_key &other) const {
+                return !(*this < other);
+        }
 };
 
 class OCCAction {
@@ -399,6 +425,18 @@ class OCCAction {
         std::vector<void*> write_records;
         
         virtual bool Run() = 0;
+
+        void AddReadKey(uint32_t tableId, uint64_t key, uint64_t total_keys,
+                   bool is_rmw) {
+                occ_composite_key k(tableId, key, is_rmw);
+                readset.push_back(k);
+        }
+        
+        void AddWriteKey(uint32_t tableId, uint64_t key, uint64_t total_keys) {
+                occ_composite_key k(tableId, key, false);
+                writeset.push_back(k);
+        }
+
 };
 
 class RMWOCCAction : public OCCAction {

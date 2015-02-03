@@ -1,5 +1,102 @@
-
 #include <small_bank.h>
+
+OCCSmallBank::Balance::Balance(uint64_t customer, uint64_t numAccounts)
+{
+        this->totalBalance = 0;
+        AddReadKey(CHECKING, customer, numAccounts, false);
+        AddReadKey(SAVINGS, customer, numAccounts, false);
+}
+
+bool OCCSmallBank::Balance::Run()
+{
+        SmallBankRecord *checking = (SmallBankRecord*)readset[0].GetValue();
+        SmallBankRecord *savings = (SmallBankRecord*)readset[1].GetValue();
+        this->totalBalance = checking->amount + savings->amount;
+        return true;
+}
+
+OCCSmallBank::DepositChecking::DepositChecking(uint64_t customer,
+                                               long amount,
+                                               uint64_t numAccounts)
+{
+        this->amount = amount;
+        AddReadKey(CHECKING, customer, numAccounts, true);
+        AddWriteKey(CHECKING, customer, numAccounts);
+}
+
+bool OCCSmallBank::DepositChecking::Run()
+{
+        SmallBankRecord *checkingBalance =
+                (SmallBankRecord*)readset[0].GetValue();
+        long oldBalance = checkingBalance->amount;
+        SmallBankRecord *newBalance = (SmallBankRecord*)writeset[0].GetValue();
+        newBalance->amount += this->amount;
+        return true;
+}
+
+
+OCCSmallBank::TransactSaving::TransactSaving(uint64_t customer,
+                                             long amount,
+                                             uint64_t numAccounts)
+{
+        this->amount = amount;
+        AddReadKey(SAVINGS, customer, numAccounts, true);
+        AddWriteKey(SAVINGS, customer, numAccounts);
+}
+
+bool OCCSmallBank::TransactSaving::Run()
+{
+        SmallBankRecord *read = (SmallBankRecord*)readset[0].GetValue();
+        SmallBankRecord *write  = (SmallBankRecord*)writeset[0].GetValue();
+        write->amount = read->amount + this->amount;
+        return true;
+}
+
+OCCSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer,
+                                     uint64_t toCustomer,
+                                     uint64_t numAccounts)
+{
+        AddReadKey(CHECKING, fromCustomer, numAccounts, true);
+        AddReadKey(SAVINGS, fromCustomer, numAccounts, true);
+        AddReadKey(CHECKING, toCustomer, numAccounts, true);
+        AddWriteKey(CHECKING, fromCustomer, numAccounts);
+        AddWriteKey(SAVINGS, fromCustomer, numAccounts);
+        AddWriteKey(CHECKING, toCustomer, numAccounts);
+}
+
+bool OCCSmallBank::Amalgamate::Run()
+{
+        long sum = 0;
+        sum += ((SmallBankRecord*)readset[0].GetValue())->amount;
+        sum += ((SmallBankRecord*)readset[1].GetValue())->amount;
+        sum += ((SmallBankRecord*)readset[2].GetValue())->amount;
+        ((SmallBankRecord*)writeset[0].GetValue())->amount = 0;
+        ((SmallBankRecord*)writeset[1].GetValue())->amount = 0;
+        ((SmallBankRecord*)writeset[2].GetValue())->amount = sum;
+        return true;
+}
+
+OCCSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount,
+                                     uint64_t numAccounts)
+{
+        this->amount = amount;
+        AddReadKey(SAVINGS, customer, numAccounts, false);
+        AddReadKey(CHECKING, customer, numAccounts, true);
+        AddWriteKey(CHECKING, customer, numAccounts);
+}
+
+bool OCCSmallBank::WriteCheck::Run()
+{
+        long sum = 0;
+        sum += ((SmallBankRecord*)readset[0].GetValue())->amount;
+        sum += ((SmallBankRecord*)readset[1].GetValue())->amount;
+        sum -= amount;
+        if (sum < 0)
+                amount += 1;
+        ((SmallBankRecord*)writeset[0].GetValue())->amount -= amount;
+        return true;
+}
+
 
 LockingSmallBank::Balance::Balance(uint64_t customer, uint64_t numAccounts, 
                                    char *time) {
