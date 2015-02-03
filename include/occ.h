@@ -80,6 +80,8 @@ class OCCWorker : public Runnable {
  protected:
         virtual void StartWorking();
         virtual void Init();
+ public:
+        OCCWorker(OCCWorkerConfig conf, RecordBuffersConfig rb_conf);
 };
 
 #endif		// OCC_H_

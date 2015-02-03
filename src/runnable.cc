@@ -4,8 +4,8 @@
 #include <pthread.h>
 
 Runnable::Runnable(int cpu_number) {
-    m_start_signal = 0;
-    m_cpu_number = cpu_number;
+        m_start_signal = 0;
+        m_cpu_number = cpu_number;
 }
 
 void

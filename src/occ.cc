@@ -1,6 +1,13 @@
 #include <occ.h>
 #include <action.h>
 
+OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
+        : Runnable(conf.cpu)
+{
+        this->config = conf;
+        this->bufs = new(conf.cpu) RecordBuffers(rb_conf);
+}
+
 void OCCWorker::Init()
 {
 }

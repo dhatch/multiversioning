@@ -1059,6 +1059,7 @@ OCCAction** CreateSingleOCCActionBatch(uint32_t numTxns, uint32_t txnSize,
                 if (experiment == 2) {
                         ret[i] = GenerateSmallBankOCCAction(numRecords, false);
                 } else if (experiment < 2) {
+                        ret[i] = GenerateOCCRMWAction(gen, txnSize, experiment);
                 }
         }
         return ret;
@@ -1258,8 +1259,11 @@ EagerWorker** SetupLockThreads(SimpleQueue<EagerActionBatch> **inputQueue,
 OCCWorker** SetupOCCWorkers(SimpleQueue<OCCActionBatch> **inputQueue,
                             SimpleQueue<OCCActionBatch> **outputQueue,
                             Table **tables, int numThreads,
-                            uint64_t epoch_threshold)
+                            uint64_t epoch_threshold, uint32_t numTables)
 {
+        uint32_t recordSizes[2];
+        recordSizes[0] = recordSize;
+        recordSizes[1] = recordSize;
         OCCWorker **ret = (OCCWorker**)malloc(sizeof(OCCWorker*)*numThreads);
         assert(ret != NULL);
         volatile uint32_t *epoch_ptr =
@@ -1280,6 +1284,15 @@ OCCWorker** SetupOCCWorkers(SimpleQueue<OCCActionBatch> **inputQueue,
                         epoch_threshold,
                         false,
                 };
+
+                struct RecordBuffersConfig rb_conf = {
+                        numTables,
+                        recordSizes,
+                        100,
+                        i,
+                };
+                
+                ret[i] = new OCCWorker(conf, rb_conf);
         }
         return ret;
 }
@@ -1460,7 +1473,7 @@ void OCCExperiment(OCCConfig config) {
 
         OCCWorker **workers = SetupOCCWorkers(inputs, outputs, tables,
                                               config.numThreads,
-                                              config.occ_epoch);
+                                              config.occ_epoch, 2);
         // Setup input
         OCCActionBatch *batches = SetupOCCInput(config.txnSize,
                                                 config.numThreads,

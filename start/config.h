@@ -106,7 +106,7 @@ class ExperimentConfig {
     int ccType = -1;
     if ((argMap.count(CC_TYPE) == 0) || 
         ((ccType = atoi(argMap[CC_TYPE])) != MULTIVERSION && 
-         ccType != LOCKING)) {
+         ccType != LOCKING && ccType != OCC)) {
       std::cerr << "Undefined concurrency control type\n";
       exit(-1);
     }
