@@ -16,6 +16,53 @@ struct SmallBankRecord {
   //  char timestamp[248];
 };
 
+namespace OCCSmallBank {
+        class Balance : public OCCAction {
+        private:
+                long totalBalance;
+                
+        public:
+                Balance(uint64_t customerId, uint64_t numAccounts, char *time);
+                virtual bool Run();
+        };
+        
+        class DepositChecking : public OCCAction {
+        private:
+                long amount;
+        
+        public:
+                DepositChecking(uint64_t customer, long amount,
+                                uint64_t numAccounts, char *time);
+                virtual bool Run();
+        };
+
+        class TransactSaving : public OCCAction {    
+        private:
+                long amount;
+        public:
+                TransactSaving(uint64_t customer, long amount,
+                               uint64_t numAccounts, char *time);
+                virtual bool Run();
+        };
+
+        class Amalgamate : public OCCAction {
+        public:
+                Amalgamate(uint64_t fromCustomer, uint64_t toCustomer, 
+                           uint64_t numAccounts, char *time);
+                virtual bool Run();
+        };
+  
+        class WriteCheck : public OCCAction {
+        private:
+                long amount;
+    
+        public:
+                WriteCheck(uint64_t customer, long amount, uint64_t numAccounts,
+                           char *time);
+                virtual bool Run();
+        };  
+};
+
 namespace LockingSmallBank {
   class Balance : public EagerAction {
   private:

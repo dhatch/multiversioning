@@ -21,13 +21,29 @@ static struct option long_options[] = {
   {"record_size", required_argument, NULL, 10},
   {"distribution", required_argument, NULL, 11},
   {"theta", required_argument, NULL, 12},
-  {NULL, no_argument, NULL, 13},
+  {"occ_epoch", required_argument, NULL, 13},
+  {NULL, no_argument, NULL, 14},
 };
 
 
 enum ConcurrencyControl {
   MULTIVERSION = 0,
-  LOCKING,
+  LOCKING = 1,
+  OCC,
+};
+
+struct OCCConfig {
+        uint32_t numThreads;
+        uint32_t numTxns;
+        uint32_t numRecords;
+        uint32_t numContendedRecords;
+        uint32_t txnSize;
+        uint32_t experiment;
+        uint64_t recordSize;
+        uint32_t distribution;
+        double theta;
+        bool globalTime;
+        uint64_t occ_epoch;
 };
 
 struct LockingConfig {
@@ -71,13 +87,14 @@ class ExperimentConfig {
     RECORD_SIZE,
     DISTRIBUTION,
     THETA,
+    OCC_EPOCH,
   };
   unordered_map<int, char*> argMap;
 
  public:
-
   ConcurrencyControl ccType;
   LockingConfig lockConfig;
+  OCCConfig occConfig;
   MVConfig mvConfig;    
 
   ExperimentConfig(int argc, char **argv) {
@@ -135,8 +152,7 @@ class ExperimentConfig {
         mvConfig.theta = (double)atof(argMap[THETA]);
       }
       this->ccType = MULTIVERSION;
-    }
-    else {  // ccType == LOCKING
+    } else if (ccType == LOCKING) {  // ccType == LOCKING
       
       if (argMap.count(NUM_LOCK_THREADS) == 0 || 
           argMap.count(NUM_TXNS) == 0 ||
@@ -178,6 +194,44 @@ class ExperimentConfig {
       }
 
       this->ccType = LOCKING;
+    } else if (ccType == OCC) {
+
+      if (argMap.count(NUM_LOCK_THREADS) == 0 || 
+          argMap.count(NUM_TXNS) == 0 ||
+          argMap.count(NUM_RECORDS) == 0 ||
+          argMap.count(NUM_CONTENDED) == 0 ||
+          argMap.count(TXN_SIZE) == 0 || 
+          argMap.count(EXPERIMENT) == 0 ||
+          argMap.count(RECORD_SIZE) == 0 || 
+          argMap.count(DISTRIBUTION) == 0 ||
+          argMap.count(OCC_EPOCH) == 0) {
+        
+        std::cerr << "Missing one or more OCC params\n";
+        std::cerr << "--" << long_options[NUM_LOCK_THREADS].name << "\n";
+        std::cerr << "--" << long_options[NUM_TXNS].name << "\n";
+        std::cerr << "--" << long_options[NUM_RECORDS].name << "\n";
+        std::cerr << "--" << long_options[NUM_CONTENDED].name << "\n";
+        std::cerr << "--" << long_options[TXN_SIZE].name << "\n";
+        std::cerr << "--" << long_options[EXPERIMENT].name << "\n";
+        std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
+        std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
+        std::cerr << "--" << long_options[OCC_EPOCH].name << "\n";
+        exit(-1);
+      }
+      occConfig.numThreads = (uint32_t)atoi(argMap[NUM_LOCK_THREADS]);
+      occConfig.numTxns = (uint32_t)atoi(argMap[NUM_TXNS]);
+      occConfig.numRecords = (uint32_t)atoi(argMap[NUM_RECORDS]);
+      occConfig.numContendedRecords = 
+        (uint32_t)atoi(argMap[NUM_CONTENDED]);
+      occConfig.txnSize = (uint32_t)atoi(argMap[TXN_SIZE]);
+      occConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
+      occConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
+      occConfig.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
+      if (argMap.count(THETA) > 0) {
+        occConfig.theta = (double)atof(argMap[THETA]);
+      }
+      occConfig.occ_epoch = (uint32_t)atoi(argMap[OCC_EPOCH]);              
+      this->ccType = OCC;
     }
   }
 

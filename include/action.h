@@ -318,6 +318,12 @@ class occ_composite_key {
  private:
         
  public:
+        occ_composite_key(uint32_t tableId, uint64_t key, bool is_rmw) {
+                this->tableId = tableId;
+                this->key = key;
+                this->is_rmw = is_rmw;
+        }
+        
         uint32_t tableId;
         uint64_t key;
         uint64_t old_tid;
@@ -395,7 +401,51 @@ class OCCAction {
         virtual bool Run() = 0;
 };
 
+class RMWOCCAction : public OCCAction {
+ public:
+        virtual bool Run() {
+                if (recordSize == 8) {      // longs
+                        uint64_t counter = 0;
+                        uint32_t numReads = readset.size();
+                        uint32_t numWrites = writeset.size();
+                        for (uint32_t i = 0; i < numReads; ++i) {
+                                uint64_t *record = (uint64_t*)readset[i].GetValue();
+                                counter += *record;
+                        }
 
+                        for (uint32_t i = 0; i < numWrites; ++i) {
+                                uint64_t *record = (uint64_t*)writeset[i].GetValue();
+                                *record += counter;
+                        }
+                }
+                else if (recordSize == 1000) {      //YCSB
+                        uint32_t numReads = readset.size();
+                        uint32_t numWrites = writeset.size();
+      
+                        uint64_t counter = 0;
+        
+                        // Read the ith field
+                        for (uint32_t j = 0; j < numReads; ++j) {
+                                uint64_t *record = (uint64_t*)readset[j].GetValue();
+                                for (uint32_t i = 0; i < 125; ++i) {
+                                        counter += record[i];
+                                }
+                        }
+        
+                        // Write the ith field
+                        for (uint32_t j = 0; j < numWrites; ++j) {
+                                uint64_t *record = (uint64_t*)writeset[j].GetValue();
+                                for (uint32_t i = 0; i < 125; ++i) {
+                                        if (i % 8 == 0) {
+                                                counter = counter*2;
+                                        }
+                                        record[i] = counter;
+                                }
+                        }
+                }
+                return true;
+        }
+};
 
 class EagerAction;
 struct EagerRecordInfo {

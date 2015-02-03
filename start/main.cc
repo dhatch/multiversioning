@@ -1,4 +1,5 @@
 #include <database.h>
+#include <occ.h>
 #include <preprocessor.h>
 #include <cpuinfo.h>
 #include <config.h>
@@ -953,6 +954,119 @@ bool SortCmp(LockingCompositeKey key1, LockingCompositeKey key2) {
 }
 */
 
+OCCAction* GenerateSmallBankOCCAction(uint64_t numRecords, bool readOnly)
+{
+        OCCAction *ret = NULL;
+        char temp_buf[248];
+        int mod;
+        if (readOnly == true) {
+                mod = 1;
+        } else {
+                mod = 5;
+        }
+        GenRandomSmallBank(temp_buf);
+        int txnType = rand() % mod;
+        if (txnType == 0) {             // Balance
+                uint64_t customer = (uint64_t)(rand() % numRecords);
+
+                ret = new OCCSmallBank::Balance(customer, numRecords, 
+                                                   temp_buf);
+        } else if (txnType == 1) {        // DepositChecking
+                uint64_t customer =
+                        (uint64_t)(rand() % numRecords);
+                long amount = (long)(rand() % 25);
+                ret = new OCCSmallBank::DepositChecking(customer, amount,
+                                                        numRecords,
+                                                        temp_buf);
+        } else if (txnType == 2) {        // TransactSaving
+                uint64_t customer = (uint64_t)(rand() % numRecords);
+                long amount = (long)(rand() % 25);
+                ret = new OCCSmallBank::TransactSaving(customer, amount, 
+                                                       numRecords,
+                                                       temp_buf);
+        } else if (txnType == 3) {        // Amalgamate
+                uint64_t fromCustomer = (uint64_t)(rand() % numRecords);
+                uint64_t toCustomer;
+                do {
+                        toCustomer = (uint64_t)(rand() % numRecords);
+                } while (toCustomer == fromCustomer);
+                ret = new OCCSmallBank::Amalgamate(fromCustomer, toCustomer, 
+                                                   numRecords,
+                                                   temp_buf);
+        } else if (txnType == 4) {        // WriteCheck
+                uint64_t customer = (uint64_t)(rand() % numRecords);
+                long amount = (long)(rand() % 25);
+                if (rand() % 2 == 0) {
+                        amount *= -1;
+                }
+                ret = new OCCSmallBank::WriteCheck(customer, amount, 
+                                                   numRecords,
+                                                   temp_buf);
+        }
+        return ret;
+}
+
+uint64_t GenUniqueKey(RecordGenerator *gen, std::set<uint64_t> *seen_keys)
+{
+        while (true) {
+                uint64_t key = gen->GenNext();
+                if (seen_keys->find(key) == seen_keys->end()) {
+                        seen_keys->insert(key);
+                        return key;
+                }
+        }
+}
+
+OCCAction* GenerateOCCRMWAction(RecordGenerator *gen, uint32_t txnSize,
+                                int experiment)
+{
+        OCCAction *action = new RMWOCCAction();
+        std::set<uint64_t> seen_keys;
+        for (uint32_t j = 0; j < txnSize; ++j) {
+                uint64_t key = GenUniqueKey(gen, &seen_keys);
+                if (experiment == 0) {
+                        occ_composite_key k(0, key, true);
+                        action->readset.push_back(k);
+                        action->writeset.push_back(k);
+                } else if (experiment == 1) {
+                        if (j < 2) {
+                                occ_composite_key k(0, key, true);
+                                action->readset.push_back(k);
+                                action->writeset.push_back(k);
+                        } else {
+                                occ_composite_key k(0, key, false);
+                                action->readset.push_back(k);
+                        }
+                }                                    
+        }
+        return action;
+}
+
+OCCAction** CreateSingleOCCActionBatch(uint32_t numTxns, uint32_t txnSize,
+                                       uint64_t numRecords, uint32_t experiment,
+                                       RecordGenerator *gen)
+{
+        std::cout << "Num records: " << numRecords << "\n";
+        std::cout << "Txn size: " << txnSize << "\n";
+        OCCAction **ret = 
+                (OCCAction**)alloc_mem(numTxns*sizeof(OCCAction*), 71);
+        assert(ret != NULL);
+        memset(ret, 0x0, numTxns*sizeof(OCCAction*));
+        std::set<uint64_t> seenKeys; 
+
+        EagerRecordInfo recordInfo;
+        char temp_buf[248];
+
+        for (uint32_t i = 0; i < numTxns; ++i) {
+                seenKeys.clear();
+                if (experiment == 2) {
+                        ret[i] = GenerateSmallBankOCCAction(numRecords, false);
+                } else if (experiment < 2) {
+                }
+        }
+        return ret;
+}
+
 EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize, 
                                              uint64_t numRecords, 
                                              uint32_t experiment,
@@ -1065,11 +1179,39 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
   return ret;
 }
 
+OCCActionBatch* SetupOCCInput(uint32_t txnSize, uint32_t numThreads,
+                              uint32_t numTxns, uint32_t numRecords,
+                              uint32_t experiment, uint32_t distribution,
+                              double theta)
+{
+        RecordGenerator *gen = NULL;
+        if (distribution == 0) {
+                gen = new UniformGenerator(numRecords);
+        }
+        else if (distribution == 1) {
+                gen = new ZipfGenerator(0, numRecords, theta);
+        }
+        OCCActionBatch *ret = 
+                (OCCActionBatch*)malloc(sizeof(OCCActionBatch)*numThreads);
+        uint32_t txnsPerThread = numTxns/numThreads;
+        for (uint32_t i = 0; i < numThreads; ++i) {
+                OCCAction **actions = 
+                        CreateSingleOCCActionBatch(txnsPerThread, txnSize,
+                                                   numRecords, experiment, gen);
+                ret[i] = {
+                        txnsPerThread,
+                        actions,
+                };
+        }
+        return ret;
+}
+
 EagerActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads, 
                                     uint32_t numTxns, uint32_t numRecords, 
                                     uint32_t experiment,
                                     uint32_t distribution,
-                                    double theta) {
+                                    double theta)
+{
   RecordGenerator *gen = NULL;
   if (distribution == 0) {
     gen = new UniformGenerator(numRecords);
@@ -1116,10 +1258,224 @@ EagerWorker** SetupLockThreads(SimpleQueue<EagerActionBatch> **inputQueue,
   return ret;
 }
 
+OCCWorker** SetupOCCWorkers(SimpleQueue<OCCActionBatch> **inputQueue,
+                            SimpleQueue<OCCActionBatch> **outputQueue,
+                            Table **tables, int numThreads,
+                            uint64_t epoch_threshold)
+{
+        OCCWorker **ret = (OCCWorker**)malloc(sizeof(OCCWorker*)*numThreads);
+        assert(ret != NULL);
+        volatile uint32_t *epoch_ptr =
+                (volatile uint32_t*)alloc_mem(sizeof(uint32_t), 0);
+        assert(epoch_ptr != NULL);
+        barrier();
+        *epoch_ptr = 0;
+        barrier();
+        for (int i = 0; i < numThreads; ++i) {
+                bool is_leader = (i == 0);
+                struct OCCWorkerConfig conf = {
+                        inputQueue[i],
+                        outputQueue[i],
+                        i,
+                        tables,
+                        is_leader,
+                        epoch_ptr,
+                        epoch_threshold,
+                        false,
+                };
+        }
+        return ret;
+}
 
+Table** SetupYCSBOCCTables(OCCConfig config)
+{
+        assert(config.experiment < 2);
+        Table **tables;
+        char *bigval[OCC_RECORD_SIZE(1000)];
+        TableConfig tblConfig = {
+                0,
+                (uint64_t)config.numRecords,
+                0,
+                (int)(config.numThreads-1),
+                2*(uint64_t)(config.numRecords),
+                OCC_RECORD_SIZE(recordSize),
+        };
+        tables = (Table**)malloc(sizeof(Table*));
+        tables[0] = new(0) Table(tblConfig);
+        for (uint64_t i = 0; i < config.numRecords; ++i) {
+                uint64_t *bigInt = (uint64_t*)bigval;
+                if (recordSize == 1000) {
+                        for (uint32_t j = 0; j < 125; ++j) {
+                                bigInt[j+1] = (uint64_t)rand();
+                        }
+                        bigInt[0] = 0;
+                        tables[0]->Put(i, bigval);
+                } else if (recordSize == 8) {
+                        bigInt[0] = 0;
+                        bigInt[1] = i;
+                        tables[0]->Put(i, bigval);
+                }
+        }
+        tables[0]->SetInit();
+        return tables;
+}
 
-void LockingExperiment(LockingConfig config) {
+Table** SetupSmallBankOCCTables(OCCConfig config)
+{
+        assert(config.experiment == 2);
+        Table **tables;
+        uint64_t *tableSizes = (uint64_t*)malloc(2*sizeof(uint64_t));
+        tableSizes[0] = (uint64_t)config.numRecords;
+        tableSizes[1] = (uint64_t)config.numRecords;
+
+        uint32_t numTables = 2;
+        
+        // Savings table config
+        TableConfig savingsCfg = {
+                SAVINGS,
+                (uint64_t)config.numRecords,
+                0,
+                (int)(config.numThreads-1),
+                (uint64_t)(config.numRecords),
+                OCC_RECORD_SIZE(sizeof(SmallBankRecord)),
+        };
+        
+        // Checking table config
+        TableConfig checkingCfg = {
+                CHECKING,
+                (uint64_t)config.numRecords,
+                0,
+                (int)(config.numThreads-1),
+                (uint64_t)(config.numRecords),
+                OCC_RECORD_SIZE(sizeof(SmallBankRecord)),
+        };
+
+        tables = (Table**)malloc(sizeof(Table*)*2);    
+        tables[SAVINGS] = new(0) Table(savingsCfg);
+        tables[CHECKING] = new(0) Table(checkingCfg);
+        char temp[OCC_RECORD_SIZE(sizeof(SmallBankRecord))];
+        memset(temp, 0, OCC_RECORD_SIZE(sizeof(SmallBankRecord)));
+        for (uint32_t i = 0; i < config.numRecords; ++i) {
+                SmallBankRecord *sbRecord =
+                        (SmallBankRecord*)&temp[sizeof(uint64_t)];
+                sbRecord->amount = (long)(rand() % 100);
+                tables[SAVINGS]->Put((uint64_t)i, temp);
+
+                sbRecord->amount = (long)(rand() % 100);
+                tables[CHECKING]->Put((uint64_t)i, temp);
+        }
+        tables[SAVINGS]->SetInit();
+        tables[CHECKING]->SetInit();
+        return tables;
+}
+
+Table** SetupOCCTables(OCCConfig config)
+{
+        Table **tables = NULL;
+        if (config.experiment < 2) {
+                tables = SetupYCSBOCCTables(config);
+        } else if (config.experiment == 2) {
+                tables = SetupSmallBankOCCTables(config);
+        }
+        return tables;
+}
+
+void WriteOCCOutput(double elapsedMilli, OCCConfig config)
+{
+        std::ofstream resultFile;
+        resultFile.open("occ.txt", std::ios::app | std::ios::out);
+
+        resultFile << "time:" << elapsedMilli << " txns:" << config.numTxns << " ";
+        resultFile << "threads:" << config.numThreads << " occ ";
+        resultFile << "records:" << config.numRecords << " ";
+        if (config.experiment == 0) {
+                resultFile << "10rmw" << " ";
+        }
+        else if (config.experiment == 1) {
+                resultFile << "8r2rmw" << " ";
+        }
+        else if (config.experiment == 2) {
+                resultFile << "small_bank" << " ";
+        }
+ 
+        if (config.distribution == 0) {
+                resultFile << "uniform" << "\n";
+        }
+        else if (config.distribution == 1) {
+                resultFile << "zipf theta:" << config.theta << "\n";
+        }  
+        resultFile.close();  
+}
+
+void RunOCCWorkers(SimpleQueue<OCCActionBatch> **inputQueues,
+                   SimpleQueue<OCCActionBatch> **outputQueues,
+                   OCCWorker **workers, OCCActionBatch *inputBatches,
+                   OCCConfig config)
+{
+        int success = pin_thread(79);
+        assert(success == 0);
   
+        for (uint32_t i = 0; i < config.numThreads; ++i) {
+                workers[i]->Run();
+        }
+  
+        barrier();
+
+        timespec start_time, end_time, elapsed_time;
+        //  ProfilerStart("/home/jmf/multiversioning/locking.prof");
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);  
+        for (uint32_t i = 0; i < config.numThreads; ++i) {
+                inputQueues[i]->EnqueueBlocking(inputBatches[i]);
+        }
+
+        for (uint32_t i = 0; i < config.numThreads; ++i) {
+                outputQueues[i]->DequeueBlocking();
+        }
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
+        //  ProfilerStop();
+        elapsed_time = diff_time(end_time, start_time);
+
+        double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
+        std::cout << elapsedMilli << '\n';
+        WriteOCCOutput(elapsedMilli, config);
+}
+
+void OCCExperiment(OCCConfig config) {
+        SimpleQueue<OCCActionBatch> **inputs =
+                (SimpleQueue<OCCActionBatch>**)malloc(sizeof(SimpleQueue<OCCActionBatch>*)
+                                                      *config.numThreads);
+        for (uint32_t i = 0; i < config.numThreads; ++i) {
+                char *data = (char *)alloc_mem(CACHE_LINE*1024, 71);
+                inputs[i] = new SimpleQueue<OCCActionBatch>(data, 1024);
+        }
+
+        // Setup output queues
+        SimpleQueue<OCCActionBatch> **outputs =
+                (SimpleQueue<OCCActionBatch>**)malloc(sizeof(SimpleQueue<OCCActionBatch>*)
+                                                      *config.numThreads);
+        for (uint32_t i = 0; i < config.numThreads; ++i) {
+                char *data = (char*)alloc_mem(CACHE_LINE*1024, 71);
+                outputs[i] = new SimpleQueue<OCCActionBatch>(data, 1024);
+        }
+
+        // Setup tables
+        Table **tables = SetupOCCTables(config);
+
+        OCCWorker **workers = SetupOCCWorkers(inputs, outputs, tables,
+                                              config.numThreads,
+                                              config.occ_epoch);
+        // Setup input
+        OCCActionBatch *batches = SetupOCCInput(config.txnSize,
+                                                config.numThreads,
+                                                config.numTxns,
+                                                config.numRecords,
+                                                config.experiment,
+                                                config.distribution,
+                                                config.theta);
+        RunOCCWorkers(inputs, outputs, workers, batches, config);
+}
+
+void LockingExperiment(LockingConfig config) {  
   // Setup input queues
   SimpleQueue<EagerActionBatch> **inputs = 
     (SimpleQueue<EagerActionBatch>**)malloc(sizeof(SimpleQueue<EagerActionBatch>*)
@@ -1359,12 +1715,17 @@ int main(int argc, char **argv) {
                  cfg.mvConfig.distribution,
                  cfg.mvConfig.theta);
     exit(0);
-  }
-  else {
-    recordSize = cfg.lockConfig.recordSize;
-    assert(cfg.lockConfig.distribution < 2);
-    assert(recordSize == 8 || recordSize == 1000);
-    LockingExperiment(cfg.lockConfig);
-    exit(0);
-  }
+  } else if (cfg.ccType == LOCKING) {
+          recordSize = cfg.lockConfig.recordSize;
+          assert(cfg.lockConfig.distribution < 2);
+          assert(recordSize == 8 || recordSize == 1000);
+          LockingExperiment(cfg.lockConfig);
+          exit(0);
+  } else if (cfg.ccType == OCC) {
+          recordSize = cfg.occConfig.recordSize;
+          assert(cfg.occConfig.distribution < 2);
+          assert(recordSize == 8 || recordSize == 1000);
+          OCCExperiment(cfg.occConfig);
+          exit(0);
+  } 
 }

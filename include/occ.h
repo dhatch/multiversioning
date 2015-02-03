@@ -8,13 +8,14 @@
 
 #define RECORD_TID_PTR(rec_ptr) ((volatile uint64_t*)rec_ptr)
 #define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
+#define OCC_RECORD_SIZE(value_sz) (sizeof(uint64_t)+value_sz)
 
 struct OCCActionBatch {
         uint32_t batchSize;
         OCCAction **batch;
 };
 
-struct OCCConfig {
+struct OCCWorkerConfig {
         SimpleQueue<OCCActionBatch> *inputQueue;
         SimpleQueue<OCCActionBatch> *outputQueue;
         int cpu;
@@ -22,6 +23,7 @@ struct OCCConfig {
         bool is_leader;
         volatile uint32_t *epoch_ptr;
         uint64_t epoch_threshold;
+        bool globalTimestamps;
 };
 
 struct RecordBuffersConfig {
@@ -55,7 +57,7 @@ class RecordBuffers {
 
 class OCCWorker : public Runnable {
  private:        
-        OCCConfig config;
+        OCCWorkerConfig config;
         uint64_t incr_timestamp;
         uint32_t last_epoch;
         uint32_t txn_counter;
