@@ -6,9 +6,9 @@
 #include <cassert>
 
 struct TableRecord {
-  struct TableRecord *next;
-  uint64_t key;
-  char value[0];
+        struct TableRecord *next;
+        uint64_t key;
+        char value[0];
 };
 
 struct TableConfig {

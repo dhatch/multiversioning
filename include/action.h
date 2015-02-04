@@ -343,10 +343,9 @@ class occ_composite_key {
          * Perform Silo's commit protocol for a record in the readset.
          */
         bool ValidateRead() {
-                if (is_rmw) 
-                        return true;
                 volatile uint64_t *version_ptr = (volatile uint64_t*)value;
-                if ((*version_ptr != old_tid) || IS_LOCKED(old_tid)) 
+                if ((GET_TIMESTAMP(*version_ptr) != GET_TIMESTAMP(old_tid)) ||
+                    (IS_LOCKED(*version_ptr) && !is_rmw))
                         return false;
                 return true;
         }

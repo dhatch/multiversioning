@@ -22,7 +22,7 @@ void OCCWorker::StartWorking()
                 input = config.inputQueue->DequeueBlocking();
                 for (uint32_t i = 0; i < input.batchSize; ++i) {
                         RunSingle(input.batch[i]);
-                        if (config.is_leader) 
+                        if ((config.cpu == 0) && (i%2048 == 0))
                                 UpdateEpoch();
                 }
                 config.outputQueue->EnqueueBlocking(input);
@@ -32,8 +32,10 @@ void OCCWorker::StartWorking()
 void OCCWorker::UpdateEpoch()
 {
         uint64_t now = rdtsc();
-        if (now - incr_timestamp > config.epoch_threshold)
+        if (now - incr_timestamp > config.epoch_threshold) {
                 fetch_and_increment_32(config.epoch_ptr);
+                incr_timestamp = now;
+        }
 }
 
 /*

@@ -10,17 +10,20 @@ fmt_locking = "build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num
 
 fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size 10 --experiment {4} --record_size {7} --distribution {5} --theta {6}"
 
+fmt_occ = "build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000"
+
 def main():
 #    small_bank_uncontended()
 #    small_bank_contended()
-    small_bank_reads()
+#    small_bank_reads()
 #    uncontended_1000()
 #    small_bank_contended(False, True)
 #    small_bank_uncontended(False, True)
 #    contended_1000()
 #    ccontrol()
-
 #    vary_contention()
+    occ_contended_1000()    
+    occ_uncontended_1000()
 
 
 def gen_range(low, high, diff):
@@ -160,8 +163,28 @@ def locking_expt(outdir, filename, lowThreads, highThreads, txns, records, expt,
             os.chdir(outdir)
             os.system("gnuplot plot.plt")
             os.chdir(saved_dir)
-    
 
+def occ_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size):
+    outfile = os.path.join(outdir, filename)
+    
+    temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
+
+    os.system("mkdir -p outdir")
+    outdep = os.path.join(outdir, "." + filename)
+    if not os.path.exists(outdep):
+
+        val_range = gen_range(lowThreads, highThreads, 4)
+        for i in val_range:
+            os.system("rm occ.txt")
+            cmd = fmt_occ.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size))
+            os.system(cmd)
+            os.system("cat occ.txt >>" + outfile)
+            clean.clean_fn("occ", outfile, temp)
+            saved_dir = os.getcwd()
+            os.chdir(outdir)
+            os.system("gnuplot plot.plt")
+            os.chdir(saved_dir)
+            
 def ccontrol():
     outdir = "results/concurrency_control"
     for i in range(0, 5):
@@ -230,6 +253,22 @@ def uncontended_1000():
     os.system("touch " + os.path.join(outdir, "." + "locking_10rmw.txt"))
     os.system("touch " + os.path.join(outdir, "." + "locking_8r2rmw.txt"))
 
+def occ_uncontended_1000():
+    result_dir = "results/rec_1000/uncontended"
+    for i in range(0, 5):
+        occ_expt(result_dir, "occ_8r2rmw.txt", 12, 40, 10000000, 1000000, 1, 0, 0.9, 1000)
+        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 8, 1000000, 1000000, 1, 0, 0.9, 1000)
+        occ_expt(result_dir, "occ_10rmw.txt", 4, 8, 1000000, 1000000, 0, 0, 0.9, 1000)
+        occ_expt(result_dir, "occ_10rmw.txt", 12, 40, 10000000, 1000000, 0, 0, 0.9, 1000)
+
+def occ_contended_1000():
+    result_dir = "results/rec_1000/contended"
+    for i in range(0, 5):
+        occ_expt(result_dir, "occ_8r2rmw.txt", 12, 40, 10000000, 1000000, 1, 1, 0.9, 1000)
+        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 8, 1000000, 1000000, 1, 1, 0.9, 1000)
+        occ_expt(result_dir, "occ_10rmw.txt", 4, 8, 1000000, 1000000, 0, 1, 0.9, 1000)
+        occ_expt(result_dir, "occ_10rmw.txt", 12, 40, 10000000, 1000000, 0, 1, 0.9, 1000)
+        
 
 def contended_1000():
 
