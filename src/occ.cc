@@ -304,6 +304,7 @@ void* RecordBuffers::AllocBufs(struct RecordBuffersConfig conf)
                         sizeof(struct RecordBuffy*)+conf.record_sizes[i];
                 total_size += conf.num_buffers * single_buf_sz;
         }
+        std::cout << "Total requested size:" << total_size << "\n";
         return alloc_mem(total_size, conf.cpu);
 }
 
@@ -317,8 +318,10 @@ RecordBuffers::RecordBuffers(struct RecordBuffersConfig conf)
         char *temp;
         temp = (char *)alloc_mem(conf.num_tables*sizeof(struct RecordBuffy*),
                                  conf.cpu);
+        assert(temp != NULL);
         record_lists = (struct RecordBuffy**)temp;
         temp = (char*)AllocBufs(conf);
+        assert(temp != NULL);
         for (i = 0; i < conf.num_tables; ++i) {
                 LinkBufs((struct RecordBuffy*)temp, conf.record_sizes[i],
                          conf.num_buffers);
