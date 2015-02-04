@@ -1289,11 +1289,24 @@ OCCWorker** SetupOCCWorkers(SimpleQueue<OCCActionBatch> **inputQueue,
         return ret;
 }
 
+void ValidateYCSBOCCTAbles(Table *table, uint64_t num_records)
+{
+        for (uint64_t i = 0; i < num_records; ++i) {
+                uint64_t *temp = (uint64_t*)table->Get(i);
+                assert(temp[0] == 0);
+                if (recordSize == 8)
+                        assert(temp[1] == i);
+                else
+                        temp[125] += 1;
+        } 
+}
+
 Table** SetupYCSBOCCTables(OCCConfig config)
 {
+        std::cout << "NumRecords:" << config.numRecords << "\n";
         assert(config.experiment < 2);
         Table **tables;
-        char *bigval[OCC_RECORD_SIZE(1000)];
+        char bigval[OCC_RECORD_SIZE(1000)];
         TableConfig tblConfig = {
                 0,
                 (uint64_t)config.numRecords,
@@ -1307,18 +1320,20 @@ Table** SetupYCSBOCCTables(OCCConfig config)
         for (uint64_t i = 0; i < config.numRecords; ++i) {
                 uint64_t *bigInt = (uint64_t*)bigval;
                 if (recordSize == 1000) {
-                        for (uint32_t j = 0; j < 125; ++j) {
+                        assert(OCC_RECORD_SIZE(recordSize) == 1008);
+                        for (uint32_t j = 0; j < 125; ++j) 
                                 bigInt[j+1] = (uint64_t)rand();
-                        }
                         bigInt[0] = 0;
                         tables[0]->Put(i, bigval);
                 } else if (recordSize == 8) {
+                        assert(OCC_RECORD_SIZE(recordSize) == 16);
                         bigInt[0] = 0;
                         bigInt[1] = i;
                         tables[0]->Put(i, bigval);
                 }
         }
         tables[0]->SetInit();
+        ValidateYCSBOCCTAbles(tables[0], config.numRecords);
         return tables;
 }
 

@@ -87,7 +87,12 @@ class Table {
     
     assert(rec != NULL);
     return (void*)(rec->value);
-  }  
+  }
+
+  uint32_t RecordSize()
+  {
+          return conf.valueSz;
+  }
 };
 
 #endif          // TABLE_H_

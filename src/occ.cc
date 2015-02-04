@@ -150,6 +150,8 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
         void *value;
         for (uint32_t i = 0; i < action->writeset.size(); ++i) {
                 value = action->write_records[i];
+                table_id = action->writeset[i].tableId;
+                record_size = config.tables[table_id]->RecordSize() - sizeof(uint64_t);
                 memcpy(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
                        record_size);
                 xchgq(RECORD_TID_PTR(value), tid);

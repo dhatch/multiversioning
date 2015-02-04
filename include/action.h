@@ -331,8 +331,8 @@ class occ_composite_key {
         void *value;
 
         void* GetValue() {
-                char *byte_array = (char*)value;
-                return &byte_array[sizeof(uint64_t)];
+                uint64_t *temp = (uint64_t*)value;
+                return &temp[1];
         }
 
         uint64_t GetTimestamp() {
@@ -346,7 +346,7 @@ class occ_composite_key {
                 if (is_rmw) 
                         return true;
                 volatile uint64_t *version_ptr = (volatile uint64_t*)value;
-                if ((*version_ptr != old_tid) || IS_LOCKED(*version_ptr)) 
+                if ((*version_ptr != old_tid) || IS_LOCKED(old_tid)) 
                         return false;
                 return true;
         }
