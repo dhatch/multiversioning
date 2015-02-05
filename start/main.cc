@@ -571,7 +571,7 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
       seenKeys.clear();
       
       if (experiment == 2) {
-        int temp = rand() % 1;
+        int temp = rand() % 5;
         if (temp == 0) {
           uint64_t customer = (uint64_t)(rand() % numRecords);
           ret[j] = new MVSmallBank::Balance(customer, temp_buf);

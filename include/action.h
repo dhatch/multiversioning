@@ -181,6 +181,13 @@ class Action {
     CompositeKey toAdd = GenerateKey(tableId, key);
     this->writeset.push_back(toAdd);
   }
+
+  virtual void AddWriteKey(uint32_t tableId, uint64_t key, bool is_rmw) {
+    CompositeKey toAdd = GenerateKey(tableId, key);
+    toAdd.is_rmw = true;
+    this->writeset.push_back(toAdd);
+  }
+
 };
 
 // Use this action to populate the database
@@ -326,7 +333,7 @@ class occ_composite_key {
         
         uint32_t tableId;
         uint64_t key;
-        uint64_t old_tid;
+        volatile uint64_t old_tid;
         bool is_rmw;
         void *value;
 
@@ -344,8 +351,9 @@ class occ_composite_key {
          */
         bool ValidateRead() {
                 volatile uint64_t *version_ptr = (volatile uint64_t*)value;
-                if ((GET_TIMESTAMP(*version_ptr) != GET_TIMESTAMP(old_tid)) ||
-                    (IS_LOCKED(*version_ptr) && !is_rmw))
+                volatile uint64_t ver = *version_ptr;
+                if ((GET_TIMESTAMP(ver) != GET_TIMESTAMP(old_tid)) ||
+                    (IS_LOCKED(ver) && !is_rmw) || IS_LOCKED(old_tid))
                         return false;
                 return true;
         }
@@ -438,7 +446,8 @@ class OCCAction {
                 write_records.push_back(NULL);
         }
 
-};
+
+}; 
 
 class RMWOCCAction : public OCCAction {
  public:

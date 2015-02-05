@@ -22,7 +22,7 @@ void OCCWorker::StartWorking()
                 input = config.inputQueue->DequeueBlocking();
                 for (uint32_t i = 0; i < input.batchSize; ++i) {
                         RunSingle(input.batch[i]);
-                        if ((config.cpu == 0) && (i%2048 == 0))
+                        if ((config.cpu == 0))
                                 UpdateEpoch();
                 }
                 config.outputQueue->EnqueueBlocking(input);
@@ -47,9 +47,11 @@ void OCCWorker::RunSingle(OCCAction *action)
         uint64_t cur_tid;
         bool commit, no_conflicts;
         volatile uint32_t epoch;
-        PrepareWrites(action);
-        PrepareReads(action);
         while (true) {
+                barrier();
+                PrepareWrites(action);
+                PrepareReads(action);
+                barrier();
                 ObtainTIDs(action);
                 commit = action->Run();
                 AcquireWriteLocks(action);
@@ -67,6 +69,7 @@ void OCCWorker::RunSingle(OCCAction *action)
                         break;
                 } else {
                         ReleaseWriteLocks(action);
+                        RecycleBufs(action);
                 }
         }
 }
@@ -117,7 +120,9 @@ void OCCWorker::ObtainTIDs(OCCAction *action)
         num_reads = action->readset.size();
         for (i = 0; i < num_reads; ++i) {
                 tid_ptr = (volatile uint64_t*)action->readset[i].value;
+                barrier();
                 action->readset[i].old_tid = *tid_ptr;
+                barrier();
         }
 }
 
@@ -214,10 +219,10 @@ bool OCCWorker::Validate(OCCAction *action)
 inline bool OCCWorker::TryAcquireLock(volatile uint64_t *version_ptr)
 {
         volatile uint64_t cmp_tid, locked_tid;
-        cmp_tid = *version_ptr;
+        cmp_tid = GET_TIMESTAMP(*version_ptr);
+        assert(!IS_LOCKED(cmp_tid));
         locked_tid = (cmp_tid | 1);
-        if (!IS_LOCKED(cmp_tid) &&
-            cmp_and_swap(version_ptr, cmp_tid, locked_tid))
+        if (!IS_LOCKED(*version_ptr) && cmp_and_swap(version_ptr, cmp_tid, locked_tid))
                 return true;
         return false;
 }

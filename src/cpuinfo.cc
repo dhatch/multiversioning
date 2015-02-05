@@ -128,10 +128,10 @@ alloc_mem(size_t size, int cpu) {
   else {
     //    return malloc(size);
 
-                    int numa_node = numa_node_of_cpu(cpu);
-                    numa_set_strict(1);
-                    void *buf = numa_alloc_onnode(size, numa_node);
-                    //void *buf = numa_alloc_interleaved(size);
+          //                    int numa_node = numa_node_of_cpu(cpu);
+          //                    numa_set_strict(1);
+          //                    void *buf = numa_alloc_onnode(size, numa_node);
+                    void *buf = numa_alloc_interleaved(size);
     
     if (buf == NULL) {
         return buf;
@@ -149,7 +149,7 @@ alloc_mem(size_t size, int cpu) {
 }
 
 void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
-        //  return alloc_mem(size, startCpu);
+        return alloc_mem(size, startCpu);
 
   struct bitmask *mask = numa_bitmask_alloc(80);
   numa_set_strict(1);
