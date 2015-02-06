@@ -74,8 +74,8 @@ class OCCWorker : public Runnable {
         
         static void AcquireSingleLock(volatile uint64_t *version_ptr);
         static bool TryAcquireLock(volatile uint64_t *version_ptr);
-        static void AcquireWriteLocks(OCCAction *action);
-        static void ReleaseWriteLocks(OCCAction *action);
+        void AcquireWriteLocks(OCCAction *action);
+        void ReleaseWriteLocks(OCCAction *action);
         
  protected:
         virtual void StartWorking();

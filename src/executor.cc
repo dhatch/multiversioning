@@ -249,7 +249,11 @@ void Executor::ExecPending() {
 }
 
 void Executor::ProcessBatch(const ActionBatch &batch) {
-  
+        for (uint32_t i = config.threadId; i < batch.numActions; i += config.numExecutors) {
+                Action *cur = batch.actionBuf[i];
+                ProcessSingle(cur);
+        }
+        /*
   for (uint32_t i = batch.numActions-1-config.threadId; i < batch.numActions;
        i -= config.numExecutors) {
     while (pendingList->Size() > 10) {
@@ -261,7 +265,8 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
       pendingList->EnqueuePending(cur);
     }
   }
-
+        */
+        
   // DEBUGGIN
   /*
   pendingList->ResetCursor();
@@ -396,17 +401,16 @@ bool Executor::ProcessTxn(Action *action) {
 
     if (action->readset[i].value != NULL) {
       // Check that the txn which is supposed to have produced the value of the 
-      // record has been executed.    
-      Action *dependAction = action->readset[i].value->writer;
-      if (dependAction != NULL && !ProcessSingle(dependAction)) {
-        //        assert(false);
-        ready = false;
-      }
-      else if (action->readset[i].value->value == NULL) {
-        abort = true;
+      // record has been executed.
+            while (true) {
+                    Action *dependAction = action->readset[i].value->writer;
+                    if (dependAction != NULL && !ProcessSingle(dependAction)) 
+                            continue;
+                    else
+                            break;
       }
     }
-  }    
+  }   
 
   for (size_t i = 0; i < numWrites; ++i) {
     // Keep a reference to the sticky we need to evaluate. 
@@ -421,6 +425,17 @@ bool Executor::ProcessTxn(Action *action) {
       // Sticky better exist
       assert(record != NULL);
       action->writeset[i].value = record;      
+    }
+
+    if (action->writeset[i].is_rmw) {
+            while (true) {
+                    Action *prevAction = action->writeset[i].value->recordLink->writer;
+                    if (prevAction != NULL && !ProcessSingle(prevAction)) {
+                            continue;
+                    } else {
+                            break;
+                    }
+            }
     }
     
     // Ensure that the previous version of this record has been written

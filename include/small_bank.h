@@ -6,55 +6,63 @@
 
 #include <action.h>
 
+#define METADATA_SIZE 256
+
 enum SmallBankTable {
   CHECKING = 0,
   SAVINGS,
 };
 
 struct SmallBankRecord {
-  long amount;
-  //  char timestamp[248];
+        long amount;
+        char meta_data[METADATA_SIZE];
 };
 
 namespace OCCSmallBank {
         class Balance : public OCCAction {
         private:
                 long totalBalance;
+                char *meta_data;
                 
         public:
-                Balance(uint64_t customerId);
+                Balance(uint64_t customerId, char *meta_data);
                 virtual bool Run();
         };
         
         class DepositChecking : public OCCAction {
         private:
                 long amount;
+                char *meta_data;
         
         public:
-                DepositChecking(uint64_t customer, long amount);
+                DepositChecking(uint64_t customer, long amount,
+                                char *meta_data);
                 virtual bool Run();
         };
 
         class TransactSaving : public OCCAction {    
         private:
                 long amount;
+                char *meta_data;
         public:
-                TransactSaving(uint64_t customer, long amount);
+                TransactSaving(uint64_t customer, long amount, char *meta_data);
                 virtual bool Run();
         };
 
         class Amalgamate : public OCCAction {
+                char *meta_data;
         public:
-                Amalgamate(uint64_t fromCustomer, uint64_t toCustomer);
+                Amalgamate(uint64_t fromCustomer, uint64_t toCustomer,
+                           char *meta_data);
                 virtual bool Run();
         };
   
         class WriteCheck : public OCCAction {
         private:
                 long amount;
-    
+                char *meta_data;
         public:
-                WriteCheck(uint64_t customer, long amount);
+                WriteCheck(uint64_t customer, long amount, char *meta_data);
                 virtual bool Run();
         };  
 };
@@ -132,10 +140,10 @@ namespace MVSmallBank {
   class Balance : public Action {
   private:
     long totalBalance;
-    //    char timestamp[248];
+    char *meta_data;
     
   public:
-      Balance(uint64_t customerId, char *time);
+      Balance(uint64_t customerId, char *meta_data);
     
     virtual bool Run();
   };
@@ -143,10 +151,10 @@ namespace MVSmallBank {
   class DepositChecking : public Action {
   private:
     long amount;
-    //    char timestamp[248];
+    char *meta_data;
     
   public:
-    DepositChecking(uint64_t customerId, long amount, char *time);
+    DepositChecking(uint64_t customerId, long amount, char *meta_data);
 
     virtual bool Run();
   };
@@ -154,19 +162,19 @@ namespace MVSmallBank {
   class TransactSaving : public Action {
   private:
     long amount;
-    //    char timestamp[248];
+    char *meta_data;
     
   public:
-    TransactSaving(uint64_t customerId, long amount, char *time);
+    TransactSaving(uint64_t customerId, long amount, char *meta_data);
 
     virtual bool Run();
   };
   
   class Amalgamate : public Action {
   private:
-    //    char timestamp[248];
+          char *meta_data;
   public:
-    Amalgamate(uint64_t fromCustomer, uint64_t toCustomer, char *time);
+    Amalgamate(uint64_t fromCustomer, uint64_t toCustomer, char *meta_data);
 
     virtual bool Run();
   };
@@ -174,10 +182,10 @@ namespace MVSmallBank {
   class WriteCheck : public Action {
   private:
     long amount;
-    //    char timestamp[248];
+    char *meta_data;
      
   public:
-    WriteCheck(uint64_t customer, long amount, char *time);
+    WriteCheck(uint64_t customer, long amount, char *meta_data);
 
     virtual bool Run();
   };

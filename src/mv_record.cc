@@ -36,7 +36,8 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu) {
   
   uint64_t recordDataSize = recordSize*numRecords;
   std::cout << "Record size: " << recordSize << "\nRecord data size: " << recordDataSize << "\n";
-  char *recordData = (char*)alloc_mem(recordDataSize, cpu);
+  //  char *recordData = (char*)alloc_mem(recordDataSize, cpu);
+  char *recordData = (char*)alloc_interleaved_all(recordDataSize);
   assert(recordData != NULL);
   memset(recordData, 0xA3, recordDataSize);
 

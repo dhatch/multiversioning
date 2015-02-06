@@ -1,5 +1,6 @@
 #include <occ.h>
 #include <action.h>
+#include <algorithm>
 
 OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         : Runnable(conf.cpu)
@@ -47,11 +48,11 @@ void OCCWorker::RunSingle(OCCAction *action)
         uint64_t cur_tid;
         bool commit, no_conflicts;
         volatile uint32_t epoch;
+        barrier();
+        PrepareWrites(action);
+        PrepareReads(action);
+        barrier();
         while (true) {
-                barrier();
-                PrepareWrites(action);
-                PrepareReads(action);
-                barrier();
                 ObtainTIDs(action);
                 commit = action->Run();
                 AcquireWriteLocks(action);
@@ -80,8 +81,9 @@ void OCCWorker::RunSingle(OCCAction *action)
  */
 uint64_t OCCWorker::ComputeTID(OCCAction *action, uint32_t epoch)
 {
-        uint64_t max_tid, cur_tid;
-        uint32_t num_reads, num_writes, i;
+        uint64_t max_tid, cur_tid, key;
+        uint32_t num_reads, num_writes, i, table_id;
+        volatile uint64_t *value;
         if (last_epoch < epoch) {
                 txn_counter = 1;
                 last_epoch = epoch;
@@ -99,8 +101,11 @@ uint64_t OCCWorker::ComputeTID(OCCAction *action, uint32_t epoch)
                         max_tid = cur_tid;
         }
         for (i = 0; i < num_writes; ++i) {
-                assert(IS_LOCKED(*(uint64_t*)action->write_records[i]));
-                cur_tid = GET_TIMESTAMP(*(uint64_t*)action->write_records[i]);
+                table_id = action->writeset[i].tableId;
+                key = action->writeset[i].key;
+                value = (volatile uint64_t*)config.tables[table_id]->Get(key);
+                assert(IS_LOCKED(*value));
+                cur_tid = GET_TIMESTAMP(*value);
                 assert(!IS_LOCKED(cur_tid));
                 if (cur_tid > max_tid)
                         max_tid = cur_tid;
@@ -156,8 +161,9 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
         uint64_t key;
         void *value;
         for (uint32_t i = 0; i < action->writeset.size(); ++i) {
-                value = action->write_records[i];
                 table_id = action->writeset[i].tableId;
+                key = action->writeset[i].key;
+                value = (void*)config.tables[table_id]->Get(key);
                 record_size = config.tables[table_id]->RecordSize() - sizeof(uint64_t);
                 memcpy(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
                        record_size);
@@ -180,8 +186,6 @@ void OCCWorker::PrepareWrites(OCCAction *action)
                 key = action->writeset[i].key;
                 rec = bufs->GetRecord(table_id);
                 action->writeset[i].value = rec;
-                value = config.tables[table_id]->Get(key);
-                action->write_records[i] = value;
         }
 }
 
@@ -255,11 +259,17 @@ void OCCWorker::AcquireSingleLock(volatile uint64_t *version_ptr)
  */
 void OCCWorker::AcquireWriteLocks(OCCAction *action)
 {
-        uint32_t num_writes, i;
+        uint32_t num_writes, i, table_id;
+        uint64_t key;
+        volatile uint64_t *tid_ptr;
         num_writes = action->writeset.size();
+        std::sort(action->writeset.begin(), action->writeset.end());
         for (i = 0; i < num_writes; ++i) {
-                AcquireSingleLock((volatile uint64_t*)action->write_records[i]);
-                assert(IS_LOCKED(*(volatile uint64_t*)action->write_records[i]));
+                table_id = action->writeset[i].tableId;
+                key = action->writeset[i].key;
+                tid_ptr = (volatile uint64_t*)config.tables[table_id]->Get(key);
+                AcquireSingleLock(tid_ptr);
+                assert(IS_LOCKED(*tid_ptr));
         }
 }
 
@@ -268,12 +278,14 @@ void OCCWorker::AcquireWriteLocks(OCCAction *action)
  */
 void OCCWorker::ReleaseWriteLocks(OCCAction *action)
 {
-        uint32_t num_writes, i;
+        uint32_t num_writes, i, table_id;
         volatile uint64_t *tid_ptr;
-        uint64_t old_tid;
+        uint64_t old_tid, key;
         num_writes = action->writeset.size();
         for (i = 0; i < num_writes; ++i) {
-                tid_ptr = (volatile uint64_t*)action->write_records[i];
+                table_id = action->writeset[i].tableId;
+                key = action->writeset[i].key;
+                tid_ptr = (volatile uint64_t*)config.tables[table_id]->Get(key);
                 assert(IS_LOCKED(*tid_ptr));
                 old_tid = *tid_ptr & TIMESTAMP_MASK;
                 assert(!IS_LOCKED(old_tid));

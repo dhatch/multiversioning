@@ -22,9 +22,10 @@ def main():
 #    contended_1000()
 #    ccontrol()
 #    vary_contention()
-    occ_contended_1000()    
-    occ_uncontended_1000()
 
+#    occ_uncontended_1000()
+    small_bank_contended()
+    small_bank_uncontended()
 
 def gen_range(low, high, diff):
     ret = []
@@ -212,21 +213,23 @@ def small_bank_reads():
     
 
 def small_bank_uncontended(): 
-    result_dir = "results/small_bank/uncontended/"
-    for i in range(0, 5):
-        mv_expt(result_dir, "mv_uncontended.txt", 10, 10000000, 100000, 2, 30, 2, 0, 0.9, 1000)
-        locking_expt(result_dir, "locking_uncontended.txt", 2, 40, 10000000, 100000, 2, 0, 0.9, 1000)
-    os.system("touch " + os.path.join(result_dir, "." + "mv_uncontended.txt"))
-    os.system("touch " + os.path.join(result_dir, "." + "locking_uncontended.txt"))
+    result_dir = "results/small_bank_new/uncontended/"
+    occ_expt(result_dir, "occ_uncontended.txt", 2, 40, 10000000, 100000, 2, 0, 0.9, 1000)
+#    for i in range(0, 5):
+#        mv_expt(result_dir, "mv_uncontended.txt", 10, 10000000, 100000, 2, 30, 2, 0, 0.9, 1000)
+
+#    os.system("touch " + os.path.join(result_dir, "." + "mv_uncontended.txt"))
+#    os.system("touch " + os.path.join(result_dir, "." + "locking_uncontended.txt"))
 
 
 def small_bank_contended(): 
-    result_dir = "results/small_bank/contended/"
-    for i in range(0, 5):
-        mv_expt(result_dir, "mv_contended.txt", 10, 10000000, 100, 2, 30, 2, 0, 0.9, 1000)
-        locking_expt(result_dir, "locking_contended.txt", 2, 40, 10000000, 100, 2, 0, 0.9, 1000)
-    os.system("touch " + os.path.join(result_dir, "." + "mv_contended.txt"))
-    os.system("touch " + os.path.join(result_dir, "." + "locking_contended.txt"))
+    result_dir = "results/small_bank_new/contended/"
+    occ_expt(result_dir, "occ_contended.txt", 2, 40, 10000000, 100, 2, 0, 0.9, 1000)
+#    for i in range(0, 5):
+#        mv_expt(result_dir, "mv_contended.txt", 10, 10000000, 100, 2, 30, 2, 0, 0.9, 1000)
+
+#    os.system("touch " + os.path.join(result_dir, "." + "mv_contended.txt"))
+#    os.system("touch " + os.path.join(result_dir, "." + "locking_contended.txt"))
 
 
 

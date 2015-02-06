@@ -48,6 +48,7 @@ class CompositeKey {
   uint32_t tableId;
   uint64_t key;
   uint32_t threadId;
+  bool is_rmw;
   MVRecord *value;
   
   CompositeKey(uint32_t table, uint64_t key) {
@@ -136,6 +137,10 @@ class Action {
     return (void*)(writeset[index].value->value);
   }
 
+  void *ReadWrite(uint32_t index) {
+          return (void*)(writeset[index].value->recordLink->value);
+  }
+  
  public:  
     uint64_t version;
     uint64_t combinedHash;
@@ -179,6 +184,7 @@ class Action {
 
   virtual void AddWriteKey(uint32_t tableId, uint64_t key) {
     CompositeKey toAdd = GenerateKey(tableId, key);
+    toAdd.is_rmw = false;
     this->writeset.push_back(toAdd);
   }
 

@@ -93,11 +93,11 @@ void CreateQueues(int cpuNumber, uint32_t subCount,
 }
 
 void GenRandomSmallBank(char *rec) {
-  int len = 248/4;
-  int *temp = (int*)rec;
-  for (int i = 0; i < len; ++i) {
-    temp[i] = rand();
-  }
+        int len = METADATA_SIZE/4;
+        int *temp = (int*)rec;
+        for (int i = 0; i < len; ++i) {
+                temp[i] = rand();
+        }
 }
 
 MVSchedulerConfig SetupSched(int cpuNumber, 
@@ -566,11 +566,12 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
     assert(ret != NULL);
     std::set<uint64_t> seenKeys;
     uint64_t counter = 0;
-    char temp_buf[248];
     for (uint32_t j = 0; j < epochSize; ++j) {
       seenKeys.clear();
       
       if (experiment == 2) {
+              char *temp_buf;
+              temp_buf = (char*)malloc(METADATA_SIZE);
         int temp = rand() % 5;
         if (temp == 0) {
           uint64_t customer = (uint64_t)(rand() % numRecords);
@@ -779,7 +780,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
       schedThreads = SetupSchedulers(numCCThreads, &schedInputQueue, 
                                      &schedOutputQueues, 
                                      (uint32_t)numExecutors,                                   
-                                     (uint64_t)1<<30, 
+                                     (uint64_t)1<<28, 
                                      1,
                                      numRecords, 
                                      schedGCQueues);
@@ -870,7 +871,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     }
 
 
-    for (int i = 0; i < numEpochs-50; ++i) {
+    for (int i = 0; i < numEpochs-5; ++i) {
         outputQueue->DequeueBlocking();
         //        std::cout << "Iteration " << i << "\n";
     }
@@ -883,7 +884,7 @@ void DoExperiment(int numCCThreads, int numExecutors, int numRecords,
     std::ofstream resultFile;
     resultFile.open("results.txt", std::ios::app | std::ios::out);
 
-    resultFile << "time:" << elapsedMilli << " txns:" << (numEpochs-50)*epochSize << " ";
+    resultFile << "time:" << elapsedMilli << " txns:" << (numEpochs-5)*epochSize << " ";
     resultFile << "ccthreads:" << numCCThreads << " workerthreads:" << numExecutors << " mv ";
     resultFile << "records:" << numRecords << " ";
     if (experiment == 0) {
@@ -957,43 +958,48 @@ bool SortCmp(LockingCompositeKey key1, LockingCompositeKey key2) {
 OCCAction* GenerateSmallBankOCCAction(uint64_t numRecords, bool readOnly)
 {
         OCCAction *ret = NULL;
-        char temp_buf[248];
+        char *temp_buf;
         int mod;
         if (readOnly == true) {
                 mod = 1;
         } else {
                 mod = 5;
         }
+        temp_buf = (char*)malloc(METADATA_SIZE);        
         GenRandomSmallBank(temp_buf);
+        //        mlock(temp_buf);
+        
         int txnType = rand() % mod;
         if (txnType == 0) {             // Balance
                 uint64_t customer = (uint64_t)(rand() % numRecords);
-                ret = new OCCSmallBank::Balance(customer);
+                ret = new OCCSmallBank::Balance(customer, temp_buf);
         } else if (txnType == 1) {        // DepositChecking
                 uint64_t customer =
                         (uint64_t)(rand() % numRecords);
                 long amount = (long)(rand() % 25);
-                ret = new OCCSmallBank::DepositChecking(customer, amount);
+                ret = new OCCSmallBank::DepositChecking(customer, amount,
+                                                        temp_buf);
         } else if (txnType == 2) {        // TransactSaving
                 uint64_t customer = (uint64_t)(rand() % numRecords);
                 long amount = (long)(rand() % 25);
-                ret = new OCCSmallBank::TransactSaving(customer, amount);
+                ret = new OCCSmallBank::TransactSaving(customer, amount,
+                                                       temp_buf);
         } else if (txnType == 3) {        // Amalgamate
                 uint64_t fromCustomer = (uint64_t)(rand() % numRecords);
                 uint64_t toCustomer;
                 do {
                         toCustomer = (uint64_t)(rand() % numRecords);
                 } while (toCustomer == fromCustomer);
-                ret = new OCCSmallBank::Amalgamate(fromCustomer, toCustomer);
+                ret = new OCCSmallBank::Amalgamate(fromCustomer, toCustomer,
+                                                   temp_buf);
         } else if (txnType == 4) {        // WriteCheck
                 uint64_t customer = (uint64_t)(rand() % numRecords);
                 long amount = (long)(rand() % 25);
                 if (rand() % 2 == 0) {
                         amount *= -1;
                 }
-                ret = new OCCSmallBank::WriteCheck(customer, amount);        
+                ret = new OCCSmallBank::WriteCheck(customer, amount, temp_buf);
         }
-        std::sort(ret->writeset.begin(), ret->writeset.end());
         return ret;
 }
 
@@ -1027,7 +1033,6 @@ OCCAction* GenerateOCCRMWAction(RecordGenerator *gen, uint32_t txnSize,
                         }
                 }                                    
         }
-        std::sort(action->writeset.begin(), action->writeset.end());
         return action;
 }
 
