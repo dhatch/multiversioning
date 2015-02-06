@@ -357,9 +357,11 @@ class occ_composite_key {
          */
         bool ValidateRead() {
                 volatile uint64_t *version_ptr = (volatile uint64_t*)value;
+                barrier();
                 volatile uint64_t ver = *version_ptr;
+                barrier();
                 if ((GET_TIMESTAMP(ver) != GET_TIMESTAMP(old_tid)) ||
-                    (IS_LOCKED(ver) && !is_rmw) || IS_LOCKED(old_tid))
+                    (IS_LOCKED(ver) && !is_rmw))
                         return false;
                 return true;
         }

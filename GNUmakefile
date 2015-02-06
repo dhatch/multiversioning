@@ -1,4 +1,4 @@
-CFLAGS=-O3 -g -Werror -Wall -Wextra  -std=c++0x -w -DNDEBUG
+CFLAGS=-O2 -g -Werror -Wall -Wextra  -std=c++0x -w -DNDEBUG
 LIBS=-lnuma -lpthread -lrt -lcityhash -lprofiler
 CXX=g++
 
@@ -6,7 +6,8 @@ INCLUDE=include
 SRC=src
 SOURCES=$(wildcard $(SRC)/*.cc $(SRC)/*.c)
 OBJECTS=$(patsubst $(SRC)/%.cc,build/%.o,$(SOURCES))
-
+START=$(wildcard start/*.cc start/*.c)
+START_OBJECTS=$(patsubst start/%.cc,start/%.o,$(START))
 TEST=test
 TESTSOURCES=$(wildcard $(TEST)/*.cc)
 TESTOBJECTS=$(patsubst test/%.cc,test/%.o,$(TESTSOURCES))
@@ -38,7 +39,7 @@ start/%.o: start/%.cc $(DEPSDIR)/stamp
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -Istart -c -o $@ $<
 
-build/db:start/main.o $(OBJECTS)
+build/db:$(START_OBJECTS) $(OBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS)

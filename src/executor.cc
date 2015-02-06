@@ -249,11 +249,6 @@ void Executor::ExecPending() {
 }
 
 void Executor::ProcessBatch(const ActionBatch &batch) {
-        for (uint32_t i = config.threadId; i < batch.numActions; i += config.numExecutors) {
-                Action *cur = batch.actionBuf[i];
-                ProcessSingle(cur);
-        }
-        /*
   for (uint32_t i = batch.numActions-1-config.threadId; i < batch.numActions;
        i -= config.numExecutors) {
     while (pendingList->Size() > 10) {
@@ -265,8 +260,7 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
       pendingList->EnqueuePending(cur);
     }
   }
-        */
-        
+
   // DEBUGGIN
   /*
   pendingList->ResetCursor();
@@ -402,15 +396,23 @@ bool Executor::ProcessTxn(Action *action) {
     if (action->readset[i].value != NULL) {
       // Check that the txn which is supposed to have produced the value of the 
       // record has been executed.
-            while (true) {
-                    Action *dependAction = action->readset[i].value->writer;
-                    if (dependAction != NULL && !ProcessSingle(dependAction)) 
-                            continue;
-                    else
-                            break;
+
+            Action *dependAction = action->readset[i].value->writer;
+            /*
+            while ((dependAction = action->readset[i].value->writer) != NULL &&
+                   !ProcessSingle(dependAction))
+                    ;
+            */
+      if (dependAction != NULL && !ProcessSingle(dependAction)) {
+        //        assert(false);
+        ready = false;
       }
+      else if (action->readset[i].value->value == NULL) {
+        abort = true;
+      }
+
     }
-  }   
+  }    
 
   for (size_t i = 0; i < numWrites; ++i) {
     // Keep a reference to the sticky we need to evaluate. 
@@ -426,14 +428,20 @@ bool Executor::ProcessTxn(Action *action) {
       assert(record != NULL);
       action->writeset[i].value = record;      
     }
-
+    
     if (action->writeset[i].is_rmw) {
-            while (true) {
-                    Action *prevAction = action->writeset[i].value->recordLink->writer;
-                    if (prevAction != NULL && !ProcessSingle(prevAction)) {
-                            continue;
-                    } else {
-                            break;
+            MVRecord *prev = action->writeset[i].value->recordLink;
+            if (prev != NULL) {
+                    // There exists a previous version
+                    /*
+                    Action *dependAction;
+                    while ((dependAction = prev->writer) != NULL &&
+                           !ProcessSingle(dependAction))
+                            ;
+                    */
+                    Action *dependAction = prev->writer;
+                    if (dependAction != NULL && !ProcessSingle(dependAction)) {
+                            ready = false;
                     }
             }
     }

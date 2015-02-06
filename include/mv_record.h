@@ -81,7 +81,7 @@ class MVRecordAllocator {
         
   // Constructor takes a size parameter, which is the total number of bytes 
   // allocator can work with.
-  MVRecordAllocator(uint64_t size, int cpu);
+  MVRecordAllocator(uint64_t size, int cpu, int worker_start, int worker_end);
         
   // 
   bool GetRecord(MVRecord **out);

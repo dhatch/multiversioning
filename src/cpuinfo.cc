@@ -149,7 +149,7 @@ alloc_mem(size_t size, int cpu) {
 }
 
 void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
-        return alloc_interleaved_all(size);
+        //        return alloc_interleaved_all(size);
         //        return alloc_mem(size, startCpu);
 
   struct bitmask *mask = numa_bitmask_alloc(80);

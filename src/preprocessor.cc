@@ -81,7 +81,9 @@ void MVScheduler::Init() {
 
   // Initialize the allocator and the partitions.
   this->alloc = new (m_cpu_number) MVRecordAllocator(config.allocatorSize, 
-                                                    m_cpu_number);
+                                                     m_cpu_number,
+                                                     config.worker_start,
+                                                     config.worker_end);
   for (uint32_t i = 0; i < this->config.numTables; ++i) {
 
     // Track the partition locally and add it to the database's catalog.

@@ -77,7 +77,7 @@ struct MVSchedulerConfig {
   size_t *tblPartitionSizes;    // Size of each table's partition
   
   uint32_t numOutputs;
-
+        
   uint32_t numSubords;
   uint32_t numRecycleQueues;
 
@@ -87,6 +87,9 @@ struct MVSchedulerConfig {
   SimpleQueue<ActionBatch> **subQueues;
   SimpleQueue<MVRecordList> **recycleQueues;
 
+        int worker_start;
+        int worker_end;
+        
   /*
   // Coordination queues required by the leader thread.
   SimpleQueue<ActionBatch> *leaderInputQueue;
