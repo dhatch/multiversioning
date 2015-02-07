@@ -627,8 +627,8 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
                             toAdd.is_rmw = true;
                       ret[j]->writeset.push_back(toAdd);
                     }
-                    else if (experiment == 1 && j < 8) {
-                            //                            toAdd.is_rmw = true;
+                    else if (experiment == 1 && i < 10) {
+                            toAdd.is_rmw = true;
                       ret[j]->writeset.push_back(toAdd);
                     } else if (experiment == 1) {
                             ret[j]->readset.push_back(toAdd);

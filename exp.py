@@ -24,8 +24,11 @@ def main():
 #    vary_contention()
 
 #    occ_uncontended_1000()
-    small_bank_contended()
-    small_bank_uncontended()
+#    small_bank_contended()
+#    small_bank_uncontended()
+    write_contended()
+    write_uncontended()
+
 
 def gen_range(low, high, diff):
     ret = []
@@ -272,6 +275,15 @@ def occ_contended_1000():
         occ_expt(result_dir, "occ_10rmw.txt", 4, 8, 1000000, 1000000, 0, 1, 0.9, 1000)
         occ_expt(result_dir, "occ_10rmw.txt", 12, 40, 10000000, 1000000, 0, 1, 0.9, 1000)
         
+def write_contended():
+    result_dir = "results/rec_1000/writes_contended"
+    mv_expt(result_dir, "mv_2r8w.txt", 14, 1000000, 1000000, 2, 26, 1, 1, 0.9, 1000)
+#    occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 2, 1, 0.9, 1000)
+
+def write_uncontended():
+    result_dir = "results/rec_1000/writes_uncontended"
+    mv_expt(result_dir, "mv_2r8w.txt", 14, 1000000, 1000000, 2, 26, 1, 1, 0.0, 1000)
+#    occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 2, 1, 0.0, 1000)
 
 def contended_1000():
 
