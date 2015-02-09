@@ -172,14 +172,18 @@ bool MVTablePartition::WriteNewVersion(CompositeKey &pkey, Action *action,
   uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
   MVRecord *cur = tableSlots[slotNumber];
   MVRecord **prev = &tableSlots[slotNumber];
-
+  uint64_t epoch = GET_MV_EPOCH(version);
+  
   while (cur != NULL) {
                 
     // We found the record. Link to the old record.
     if (cur->key == pkey.key) {
       toAdd->link = cur->link;
       toAdd->recordLink = cur;
-      //      cur->deleteTimestamp = version;
+      if (GET_MV_EPOCH(cur->createTimestamp) == epoch)
+              toAdd->epoch_ancestor = cur->epoch_ancestor;
+      else
+              toAdd->epoch_ancestor = cur;
       break;
     }
 

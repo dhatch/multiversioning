@@ -32,8 +32,9 @@ struct _MVRecord_ {
 
   MVRecord *link;        
   MVRecord *recordLink;
-  
+        MVRecord *epoch_ancestor;
   MVRecord *allocLink;
+
   uint32_t writingThread;
 } __attribute__((__packed__));
 

@@ -103,7 +103,7 @@ bool MVRecordAllocator::GetRecord(MVRecord **OUT_recordPtr) {
   ret->link = NULL;
   ret->recordLink = NULL;
   ret->allocLink = NULL;
-        
+  ret->epoch_ancestor = NULL;
   *OUT_recordPtr = ret;
   count -= 1;
   return true;

@@ -596,8 +596,9 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
       }
 
       else if (experiment < 2) {
-              int flip = rand() % 4;
+              int flip = rand() % 100;
         ret[j] = new RMWAction();
+        ret[j]->readonly = false;
         assert(ret[j] != NULL);
         ret[j]->combinedHash = 0;
         ret[j]->version = (((uint64_t)epoch<<32) | counter);
@@ -625,15 +626,17 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
                     uint32_t threadId = CompositeKey::HashKey(&toAdd) % MVScheduler::NUM_CC_THREADS;
                     toAdd.threadId = threadId;
                     if (experiment == 0) {
-                            if (flip < 3) {
+                            if (flip < 50) {
                                     ret[j]->readset.push_back(toAdd);
-                            } else {
+                                    ret[j]->readonly = true;
+                            } else if (i < 5) {
                                     toAdd.is_rmw = true;
                                     ret[j]->writeset.push_back(toAdd);
                             }
                     } else if (experiment == 1) {
-                            if (flip < 1) {
+                            if (flip < 2) {
                                     ret[j]->readset.push_back(toAdd);
+                                    ret[j]->readonly = true;
                             } else {
                                     if (i < 2) {
                                             toAdd.is_rmw = true;
@@ -718,7 +721,7 @@ ActionBatch LoadDatabaseTxns(int numRecords, int txnSize) {
     curAction->state = STICKY;
     curAction->combinedHash = 0;
     curAction->version = (((uint64_t)1<<32) | counter);
-
+    curAction->readonly = false;
     // Generate the txn's write set
     for (uint64_t j = 0;
          (j<(uint64_t)txnSize) && (counter<(uint64_t)numRecords);

@@ -27,7 +27,7 @@ def main():
 #    small_bank_contended()
 #    small_bank_uncontended()
     write_contended()
-    write_uncontended()
+#    write_uncontended()
 
 
 def gen_range(low, high, diff):
@@ -277,8 +277,8 @@ def occ_contended_1000():
         
 def write_contended():
     result_dir = "results/rec_1000/writes_contended"
-    occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
-    mv_expt(result_dir, "mv_2r8w.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.9, 1000)
+    occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+    mv_expt(result_dir, "mv_2r8w.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.9, 1000)
 
 
 def write_uncontended():

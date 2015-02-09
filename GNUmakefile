@@ -1,4 +1,4 @@
-CFLAGS=-O3 -g -Werror -Wall -Wextra  -std=c++0x -w -DNDEBUG
+CFLAGS=-O3 -g -Werror -Wall -Wextra  -std=c++0x -w 
 LIBS=-lnuma -lpthread -lrt -lcityhash -lprofiler
 CXX=g++
 

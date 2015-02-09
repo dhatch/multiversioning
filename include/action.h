@@ -21,6 +21,9 @@
 #define GET_COUNTER(tid) (GET_TIMESTAMP(tid) & ~EPOCH_MASK)
 #define IS_LOCKED(tid) ((tid & ~(TIMESTAMP_MASK)) == 1)
 
+#define MV_EPOCH_MASK 0xFFFFFFFF00000000
+#define GET_MV_EPOCH(timestamp) (timestamp & MV_EPOCH_MASK)
+
 extern uint32_t NUM_CC_THREADS;
 class Action;
 
@@ -127,7 +130,13 @@ class Action {
 
 
   void* Read(uint32_t index) {
-    return (void*)(readset[index].value->value);
+          if (readonly == true &&
+              GET_MV_EPOCH(version) == GET_MV_EPOCH(readset[index].value->createTimestamp)) {
+                  MVRecord *snapshot = readset[index].value->epoch_ancestor;
+                  return (void*)snapshot->value;
+          } else {
+                  return (void*)(readset[index].value->value);
+          }
   }
 
   void* GetWriteRef(uint32_t index) {
@@ -144,6 +153,7 @@ class Action {
  public:  
     uint64_t version;
     uint64_t combinedHash;
+    bool readonly;
     //  bool materialize;
     //  bool is_blind;  
     //  timespec start_time;

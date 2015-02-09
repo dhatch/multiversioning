@@ -361,6 +361,16 @@ bool Executor::ProcessSingle(Action *action) {
 
 bool Executor::ProcessTxn(Action *action) {
   assert(action != NULL && action->state == PROCESSING);
+  if (action->readonly == true) {
+          assert(action->writeset.size() == 0);
+          //          uint32_t num_reads = action->readset.size();
+          action->Run();
+          barrier();
+          action->state = SUBSTANTIATED;
+          barrier();
+          //          xchgq(&action->state, SUBSTANTIATED);
+          return true;
+  }
   bool ready = true;
   bool abort = false;
   uint32_t numReads = action->readset.size();

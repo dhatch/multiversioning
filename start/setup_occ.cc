@@ -37,15 +37,17 @@ OCCAction* generate_occ_rmw_action(RecordGenerator *gen, uint32_t txnSize,
 {
         OCCAction *action = new RMWOCCAction();
         std::set<uint64_t> seen_keys;
-        int flip = rand() % 4;
+        int flip = rand() % 100;
         for (uint32_t j = 0; j < txnSize; ++j) {
                 uint64_t key = GenUniqueKey(gen, &seen_keys);
                 if (experiment == 0) {
-                        if (flip < 3) {
+                        if (flip < 50) {
                                 action->AddReadKey(0, key, false);
                         } else {
-                                action->AddReadKey(0, key, true);
-                                action->AddWriteKey(0, key);
+                                if (j < 5) {
+                                        action->AddReadKey(0, key, true);
+                                        action->AddWriteKey(0, key);
+                                }
                         }
                 } else if (experiment == 1) {
                         if (flip < 1) {
