@@ -596,6 +596,7 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
       }
 
       else if (experiment < 2) {
+              int flip = rand() % 4;
         ret[j] = new RMWAction();
         assert(ret[j] != NULL);
         ret[j]->combinedHash = 0;
@@ -624,14 +625,23 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
                     uint32_t threadId = CompositeKey::HashKey(&toAdd) % MVScheduler::NUM_CC_THREADS;
                     toAdd.threadId = threadId;
                     if (experiment == 0) {
-                            toAdd.is_rmw = true;
-                      ret[j]->writeset.push_back(toAdd);
-                    }
-                    else if (experiment == 1 && i < 10) {
-                            toAdd.is_rmw = true;
-                      ret[j]->writeset.push_back(toAdd);
+                            if (flip < 3) {
+                                    ret[j]->readset.push_back(toAdd);
+                            } else {
+                                    toAdd.is_rmw = true;
+                                    ret[j]->writeset.push_back(toAdd);
+                            }
                     } else if (experiment == 1) {
-                            ret[j]->readset.push_back(toAdd);
+                            if (flip < 1) {
+                                    ret[j]->readset.push_back(toAdd);
+                            } else {
+                                    if (i < 2) {
+                                            toAdd.is_rmw = true;
+                                            ret[j]->writeset.push_back(toAdd);
+                                    } else {
+                                            ret[j]->readset.push_back(toAdd);
+                                    }
+                            }
                     }
                     ret[j]->combinedHash |= (((uint64_t)1)<<threadId);
                     break;

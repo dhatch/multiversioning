@@ -226,17 +226,19 @@ class InsertAction : public Action {
 
 // Use this action to evaluate RMW workload on integers
 class RMWAction : public Action {
+        volatile uint64_t total;
  public:
   virtual bool Run() {
     if (recordSize == 8) {
       // Accumulate all read values into counter
-      uint64_t counter = 0;
+            uint64_t counter = 0;
       uint32_t numReads = readset.size();
       for (uint32_t i = 0; i < numReads; ++i) {
         uint64_t *readRef = (uint64_t*)Read(i);
         counter += *readRef;
       }
-    
+      total = counter;
+      
       // Add counter to each record in write set
       uint32_t numWrites = writeset.size();
       for (uint32_t i = 0; i < numWrites; ++i) {
@@ -246,7 +248,7 @@ class RMWAction : public Action {
     }
     else if (recordSize == 1000) {
       // Accumulate all read values into counter
-      uint64_t counter = 0;
+          uint64_t counter = 0;
       uint32_t numReads = readset.size();
       for (uint32_t i = 0; i < numReads; ++i) {
         uint64_t *readRef = (uint64_t*)Read(i);
@@ -254,6 +256,7 @@ class RMWAction : public Action {
           counter += readRef[j];
         }
       }
+      total = counter;
     
       // Add counter to each record in write set
       uint32_t numWrites = writeset.size();
@@ -458,6 +461,8 @@ class OCCAction {
 }; 
 
 class RMWOCCAction : public OCCAction {
+ private:
+        volatile uint64_t total;
  public:
         virtual bool Run() {
                 if (recordSize == 8) {      // longs
@@ -469,6 +474,8 @@ class RMWOCCAction : public OCCAction {
                                 counter += *record;
                         }
 
+                        total = counter;
+                        
                         for (uint32_t i = 0; i < numWrites; ++i) {
                                 uint64_t *record = (uint64_t*)writeset[i].GetValue();
                                 *record += counter;
@@ -487,7 +494,8 @@ class RMWOCCAction : public OCCAction {
                                         counter += record[i];
                                 }
                         }
-        
+
+                        total = counter;
                         // Write the ith field
                         for (uint32_t j = 0; j < numWrites; ++j) {
                                 uint64_t *record = (uint64_t*)writeset[j].GetValue();

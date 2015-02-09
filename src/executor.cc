@@ -251,7 +251,7 @@ void Executor::ExecPending() {
 void Executor::ProcessBatch(const ActionBatch &batch) {
   for (uint32_t i = batch.numActions-1-config.threadId; i < batch.numActions;
        i -= config.numExecutors) {
-    while (pendingList->Size() > 10) {
+    while (pendingList->Size() > 100) {
       ExecPending();
     }
 

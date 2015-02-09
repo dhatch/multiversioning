@@ -133,7 +133,7 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
     os.system("mkdir -p outdir")
     if not os.path.exists(outdep):
 
-        val_range = gen_range(lowThreads, highThreads, 2)
+        val_range = gen_range(lowThreads, highThreads, 4)
 
         for i in val_range:
             os.system("rm results.txt")
@@ -277,13 +277,15 @@ def occ_contended_1000():
         
 def write_contended():
     result_dir = "results/rec_1000/writes_contended"
-    mv_expt(result_dir, "mv_2r8w.txt", 14, 1000000, 1000000, 2, 26, 1, 1, 0.9, 1000)
-#    occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 2, 1, 0.9, 1000)
+    occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
+    mv_expt(result_dir, "mv_2r8w.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.9, 1000)
+
 
 def write_uncontended():
     result_dir = "results/rec_1000/writes_uncontended"
-    mv_expt(result_dir, "mv_2r8w.txt", 14, 1000000, 1000000, 2, 26, 1, 1, 0.0, 1000)
-#    occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 2, 1, 0.0, 1000)
+    occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+    mv_expt(result_dir, "mv_2r8w.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
+
 
 def contended_1000():
 
