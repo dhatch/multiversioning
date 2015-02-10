@@ -975,6 +975,7 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
 
   for (uint32_t i = 0; i < numTxns; ++i) {
     seenKeys.clear();
+    int flip = rand() % 100;
     if (experiment == 2) {
       GenRandomSmallBank(temp_buf);
         int txnType = rand() % 1;
@@ -1032,9 +1033,13 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
             recordInfo.record.key = key;
             recordInfo.record.hash = recordInfo.record.Hash() % numRecords;
             if (experiment == 0) {
-
-              action->writeset.push_back(recordInfo);
-              action->shadowWriteset.push_back(recordInfo);
+                    if (flip < 50) {
+                            action->readset.push_back(recordInfo);
+                            action->shadowReadset.push_back(recordInfo);
+                    } else if (j < 5) {
+                            action->writeset.push_back(recordInfo);
+                            action->shadowWriteset.push_back(recordInfo);
+                    }
             }
             else if (experiment == 1) {
               if (j < 2) {

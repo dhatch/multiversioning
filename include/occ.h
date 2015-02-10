@@ -22,6 +22,7 @@ struct OCCWorkerConfig {
         Table **tables;
         bool is_leader;
         volatile uint32_t *epoch_ptr;
+        volatile uint64_t num_completed;
         uint64_t epoch_threshold;
         bool globalTimestamps;
 };
@@ -82,6 +83,8 @@ class OCCWorker : public Runnable {
         virtual void Init();
  public:
         OCCWorker(OCCWorkerConfig conf, RecordBuffersConfig rb_conf);
+
+        virtual uint64_t NumCompleted();
 };
 
 #endif		// OCC_H_

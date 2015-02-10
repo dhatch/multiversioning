@@ -6,11 +6,11 @@ import os.path
 import clean
 
 
-fmt_locking = "build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5}"
+fmt_locking = "build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --read_pct 0 --read_txn_size 10"
 
-fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size 10 --experiment {4} --record_size {7} --distribution {5} --theta {6}"
+fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size 10 --experiment {4} --record_size {7} --distribution {5} --theta {6} --read_pct 0 --read_txn_size 10"
 
-fmt_occ = "build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000"
+fmt_occ = "build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 0 --read_txn_size 10"
 
 def main():
 #    small_bank_uncontended()
@@ -156,7 +156,7 @@ def locking_expt(outdir, filename, lowThreads, highThreads, txns, records, expt,
     outdep = os.path.join(outdir, "." + filename)
     if not os.path.exists(outdep):
 
-        val_range = gen_range(lowThreads, highThreads, 2)
+        val_range = gen_range(lowThreads, highThreads, 4)
         for i in val_range:
             os.system("rm locking.txt")
             cmd = fmt_locking.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size))
@@ -276,7 +276,8 @@ def occ_contended_1000():
         occ_expt(result_dir, "occ_10rmw.txt", 12, 40, 10000000, 1000000, 0, 1, 0.9, 1000)
         
 def write_contended():
-    result_dir = "results/rec_1000/writes_contended"
+    result_dir = "results/rec_1000/writes_reads"
+    locking_expt(result_dir, "locking_2r8w.txt", 4, 40, 3000000, 1000000, 0, 1, 0.9, 1000)
     occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
     mv_expt(result_dir, "mv_2r8w.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.9, 1000)
 

@@ -24,7 +24,9 @@ static struct option long_options[] = {
   {"distribution", required_argument, NULL, 11},
   {"theta", required_argument, NULL, 12},
   {"occ_epoch", required_argument, NULL, 13},
-  {NULL, no_argument, NULL, 14},
+  {"read_pct", required_argument, NULL, 14},
+  {"read_txn_size", required_argument, NULL, 15},
+  {NULL, no_argument, NULL, 16},
 };
 
 
@@ -46,6 +48,8 @@ struct OCCConfig {
         double theta;
         bool globalTime;
         uint64_t occ_epoch;
+        int read_pct;
+        int read_txn_size;
 };
 
 struct LockingConfig {
@@ -58,6 +62,8 @@ struct LockingConfig {
   uint64_t recordSize;
   uint32_t distribution;
   double theta;
+        int read_pct;
+        int read_txn_size;
 };
 
 struct MVConfig {
@@ -71,6 +77,9 @@ struct MVConfig {
   uint64_t recordSize;
   uint32_t distribution;
   double theta;
+        int read_pct;
+        int read_txn_size;
+        
 };
 
 class ExperimentConfig {
@@ -90,6 +99,8 @@ class ExperimentConfig {
     DISTRIBUTION,
     THETA,
     OCC_EPOCH,
+    READ_PCT,
+    READ_TXN_SIZE,
   };
   unordered_map<int, char*> argMap;
 
@@ -122,7 +133,9 @@ class ExperimentConfig {
           argMap.count(TXN_SIZE) == 0 || 
           argMap.count(EXPERIMENT) == 0 ||
           argMap.count(RECORD_SIZE) == 0 || 
-          argMap.count(DISTRIBUTION) == 0) {
+          argMap.count(DISTRIBUTION) == 0 ||
+          argMap.count(READ_PCT) == 0 ||
+          argMap.count(READ_TXN_SIZE) == 0) {
         std::cerr << "Missing one or more multiversion concurrency control params\n";
         std::cerr << "--" << long_options[NUM_CC_THREADS].name << "\n";
         std::cerr << "--" << long_options[NUM_TXNS].name << "\n";
@@ -133,6 +146,8 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[EXPERIMENT].name << "\n";
         std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
         std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
+        std::cerr << "--" << long_options[READ_PCT].name << "\n";
+        std::cerr << "--" << long_options[READ_TXN_SIZE].name << "\n";
         exit(-1);        
       }
       
@@ -150,6 +165,9 @@ class ExperimentConfig {
       mvConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
       mvConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
       mvConfig.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
+      mvConfig.read_pct = (int)atoi(argMap[READ_PCT]);
+      mvConfig.read_txn_size = (int)atoi(argMap[READ_TXN_SIZE]);
+      
       if (argMap.count(THETA) > 0) {
         mvConfig.theta = (double)atof(argMap[THETA]);
       }
@@ -163,7 +181,9 @@ class ExperimentConfig {
           argMap.count(TXN_SIZE) == 0 || 
           argMap.count(EXPERIMENT) == 0 ||
           argMap.count(RECORD_SIZE) == 0 || 
-          argMap.count(DISTRIBUTION) == 0) {
+          argMap.count(DISTRIBUTION) == 0 ||
+          argMap.count(READ_PCT) == 0 ||
+          argMap.count(READ_TXN_SIZE) == 0) {
         
         std::cerr << "Missing one or more locking concurrency control params\n";
         std::cerr << "--" << long_options[NUM_LOCK_THREADS].name << "\n";
@@ -174,6 +194,8 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[EXPERIMENT].name << "\n";
         std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
         std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
+        std::cerr << "--" << long_options[READ_PCT].name << "\n";
+        std::cerr << "--" << long_options[READ_TXN_SIZE].name << "\n";
         exit(-1);
       }
 
@@ -191,6 +213,8 @@ class ExperimentConfig {
       lockConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
       lockConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
       lockConfig.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
+      lockConfig.read_pct = (int)atoi(argMap[READ_PCT]);
+      lockConfig.read_txn_size = (int)atoi(argMap[READ_TXN_SIZE]);
       if (argMap.count(THETA) > 0) {
         lockConfig.theta = (double)atof(argMap[THETA]);
       }
@@ -206,7 +230,9 @@ class ExperimentConfig {
           argMap.count(EXPERIMENT) == 0 ||
           argMap.count(RECORD_SIZE) == 0 || 
           argMap.count(DISTRIBUTION) == 0 ||
-          argMap.count(OCC_EPOCH) == 0) {
+          argMap.count(OCC_EPOCH) == 0 ||
+          argMap.count(READ_PCT) == 0 ||
+          argMap.count(READ_TXN_SIZE) == 0) {
         
         std::cerr << "Missing one or more OCC params\n";
         std::cerr << "--" << long_options[NUM_LOCK_THREADS].name << "\n";
@@ -218,6 +244,8 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
         std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
         std::cerr << "--" << long_options[OCC_EPOCH].name << "\n";
+        std::cerr << "--" << long_options[READ_PCT].name << "\n";
+        std::cerr << "--" << long_options[READ_TXN_SIZE].name << "\n";
         exit(-1);
       }
       occConfig.numThreads = (uint32_t)atoi(argMap[NUM_LOCK_THREADS]);
@@ -229,6 +257,8 @@ class ExperimentConfig {
       occConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
       occConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
       occConfig.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
+      occConfig.read_pct = (int)atoi(argMap[READ_PCT]);
+      occConfig.read_txn_size = (int)atoi(argMap[READ_TXN_SIZE]);
       if (argMap.count(THETA) > 0) {
         occConfig.theta = (double)atof(argMap[THETA]);
       }

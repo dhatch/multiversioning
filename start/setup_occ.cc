@@ -43,11 +43,9 @@ OCCAction* generate_occ_rmw_action(RecordGenerator *gen, uint32_t txnSize,
                 if (experiment == 0) {
                         if (flip < 50) {
                                 action->AddReadKey(0, key, false);
-                        } else {
-                                if (j < 5) {
-                                        action->AddReadKey(0, key, true);
-                                        action->AddWriteKey(0, key);
-                                }
+                        } else if (j < 5) {
+                                action->AddReadKey(0, key, true);
+                                action->AddWriteKey(0, key);
                         }
                 } else if (experiment == 1) {
                         if (flip < 1) {
@@ -121,19 +119,29 @@ OCCAction* generate_small_bank_occ_action(uint64_t numRecords, bool read_only)
         return ret;
 }
 
-OCCActionBatch* setup_occ_input(OCCConfig config)
+OCCActionBatch** setup_occ_input(OCCConfig config, uint32_t iters)
+{
+        OCCActionBatch **ret;
+        uint32_t i;
+        ret = (OCCActionBatch**)malloc(sizeof(OCCActionBatch*)*iters);
+        for (i = 0; i < iters; ++i) 
+                ret[i] = setup_occ_single_input(config);
+        return ret;
+}
+
+OCCActionBatch* setup_occ_single_input(OCCConfig config)
 {
         RecordGenerator *gen = NULL;
         OCCActionBatch *ret;
-        uint32_t txns_per_thread, remainder, i;
+        uint32_t txns_per_thread, remainder, i, j;
         OCCAction **actions;
         if (config.distribution == 0) 
                 gen = new UniformGenerator(config.numRecords);
         else if (config.distribution == 1) 
                 gen = new ZipfGenerator(0, config.numRecords, config.theta);
         ret = (OCCActionBatch*)malloc(sizeof(OCCActionBatch)*config.numThreads);
-        txns_per_thread = config.numTxns/config.numThreads;
-        remainder = config.numTxns % config.numThreads;
+        txns_per_thread = (config.numTxns)/config.numThreads;
+        remainder = (config.numTxns) % config.numThreads;
         for (i = 0; i < config.numThreads; ++i) {
                 if (i == config.numThreads-1)
                         txns_per_thread += remainder;
@@ -287,15 +295,17 @@ Table** setup_occ_tables(OCCConfig config)
         return tables;
 }
 
-void write_occ_output(timespec elapsed_time, OCCConfig config)
+void write_occ_output(struct occ_result result, OCCConfig config)
 {
         double elapsed_milli;
+        timespec elapsed_time;
         std::ofstream result_file;
+        elapsed_time = result.time_elapsed;
         elapsed_milli =
                 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
         std::cout << elapsed_milli << '\n';
         result_file.open("occ.txt", std::ios::app | std::ios::out);
-        result_file << "time:" << elapsed_milli << " txns:" << config.numTxns;
+        result_file << "time:" << elapsed_milli << " txns:" << result.num_txns;
         result_file << " threads:" << config.numThreads << " occ ";
         result_file << "records:" << config.numRecords << " ";
         if (config.experiment == 0) 
@@ -313,13 +323,62 @@ void write_occ_output(timespec elapsed_time, OCCConfig config)
         result_file.close();  
 }
 
-timespec do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
-                        SimpleQueue<OCCActionBatch> **outputQueues,
-                        OCCWorker **workers, OCCActionBatch *inputBatches,
-                        OCCConfig config)
+uint64_t get_completed_count(OCCWorker **workers, uint32_t num_workers,
+                             OCCActionBatch *input_batches)
+{
+        volatile uint64_t cur;
+        uint64_t total_completed = 0;
+        uint32_t i;
+        for (i = 0; i < num_workers; ++i) {
+                cur = workers[i]->NumCompleted();
+                if (cur >= (input_batches[i].batchSize)) {
+                        total_completed += cur;
+                } else {
+                        total_completed = 0;
+                        break;
+                }
+        }
+        return total_completed;
+}
+
+uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
+                            OCCWorker **workers, uint32_t num_workers,
+                            uint64_t threshold, OCCActionBatch *input_batches)
+{
+        uint32_t i;
+        volatile uint64_t num_completed = 0;
+        OCCActionBatch done;
+        volatile uint64_t start, end;
+        barrier();
+        start = rdtsc();
+        barrier();
+        while (true) {                
+                for (i = 0; i < OCC_WAIT_INTERVAL; ++i) {
+                        single_work();
+                }
+                end = rdtsc();
+                if (end - start > 2*1000000000)
+                        break;
+        }
+        barrier();
+        for (i = 0; i < num_workers; ++i) {
+                num_completed += workers[i]->NumCompleted();
+        }
+        barrier();
+        return num_completed;
+}
+
+struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
+                                 SimpleQueue<OCCActionBatch> **outputQueues,
+                                 OCCWorker **workers,
+                                 OCCActionBatch **inputBatches,
+                                 uint32_t num_batches,
+                                 OCCConfig config)
 {
         timespec start_time, end_time, elapsed_time;
-        uint32_t i;
+        uint32_t i, j;
+        uint64_t num_completed;
+        struct occ_result result;
         for (i = 0; i < config.numThreads; ++i)
                 workers[i]->Run();
         if (PROFILE)
@@ -327,34 +386,37 @@ timespec do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
         barrier();
-        for (i = 0; i < config.numThreads; ++i) {
-                inputQueues[i]->EnqueueBlocking(inputBatches[i]);
-        }
+        for (i = 0; i < num_batches; ++i) 
+                for (j = 0; j < config.numThreads; ++j) 
+                        inputQueues[j]->EnqueueBlocking(inputBatches[i][j]);
         barrier();
-        for (i = 0; i < config.numThreads; ++i) {
-                outputQueues[i]->DequeueBlocking();
-        }
+        result.num_txns = wait_to_completion(outputQueues, workers,
+                                             config.numThreads, config.numTxns,
+                                             inputBatches[0]);
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
         barrier();
+        std::cout << "Num completed: " << result.num_txns << "\n";
         if (PROFILE)
                 ProfilerStop();
-        elapsed_time = diff_time(end_time, start_time);
-        return elapsed_time;
+        result.time_elapsed = diff_time(end_time, start_time);
+        return result;
 }
 
-timespec run_occ_workers(SimpleQueue<OCCActionBatch> **inputQueues,
-                         SimpleQueue<OCCActionBatch> **outputQueues,
-                         OCCWorker **workers, OCCActionBatch *inputBatches,
-                         OCCConfig config)
+struct occ_result run_occ_workers(SimpleQueue<OCCActionBatch> **inputQueues,
+                                  SimpleQueue<OCCActionBatch> **outputQueues,
+                                  OCCWorker **workers,
+                                  OCCActionBatch **inputBatches,
+                                  uint32_t num_batches,
+                                  OCCConfig config)
 {
         int success;
-        timespec elapsed_time;
+        struct occ_result result;        
         success = pin_thread(79);
         assert(success == 0);
-        elapsed_time = do_measurement(inputQueues, outputQueues, workers,
-                                      inputBatches, config);
-        return elapsed_time;
+        result = do_measurement(inputQueues, outputQueues, workers,
+                                inputBatches, num_batches, config);
+        return result;
 }
 
 void occ_experiment(OCCConfig config)
@@ -362,15 +424,15 @@ void occ_experiment(OCCConfig config)
         SimpleQueue<OCCActionBatch> **input_queues, **output_queues;
         Table **tables;
         OCCWorker **workers;
-        OCCActionBatch *inputs;
-        timespec elapsed_time;
+        OCCActionBatch **inputs;
+        struct occ_result result;
         input_queues = setup_queues<OCCActionBatch>(config.numThreads, 1024);
         output_queues = setup_queues<OCCActionBatch>(config.numThreads, 1024);
         tables = setup_occ_tables(config);
         workers = setup_occ_workers(input_queues, output_queues, tables,
                                     config.numThreads, config.occ_epoch, 2);
-        inputs = setup_occ_input(config);
-        elapsed_time = run_occ_workers(input_queues, output_queues, workers,
-                                       inputs, config);
-        write_occ_output(elapsed_time, config);
+        inputs = setup_occ_input(config, OCC_TXN_BUFFER);
+        result = run_occ_workers(input_queues, output_queues, workers,
+                                 inputs, OCC_TXN_BUFFER, config);
+        write_occ_output(result, config);
 }

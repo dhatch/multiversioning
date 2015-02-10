@@ -19,6 +19,7 @@ void OCCWorker::Init()
 void OCCWorker::StartWorking()
 {
         OCCActionBatch input, output;
+        config.num_completed = 0;
         while (true) {
                 input = config.inputQueue->DequeueBlocking();
                 for (uint32_t i = 0; i < input.batchSize; ++i) {
@@ -26,6 +27,7 @@ void OCCWorker::StartWorking()
                         if ((config.cpu == 0))
                                 UpdateEpoch();
                 }
+                input.batchSize = config.num_completed;
                 config.outputQueue->EnqueueBlocking(input);
         }
 }
@@ -37,6 +39,11 @@ void OCCWorker::UpdateEpoch()
                 fetch_and_increment_32(config.epoch_ptr);
                 incr_timestamp = now;
         }
+}
+
+uint64_t OCCWorker::NumCompleted()
+{
+        return config.num_completed;
 }
 
 /*
@@ -70,9 +77,9 @@ void OCCWorker::RunSingle(OCCAction *action)
                         break;
                 } else {
                         ReleaseWriteLocks(action);
-                        RecycleBufs(action);
                 }
         }
+        fetch_and_increment(&config.num_completed);
 }
 
 /*
