@@ -4,6 +4,7 @@
 #define OCC_WAIT_INTERVAL 1000
 #define OCC_TXN_BUFFER 10
 
+#include <occ_action.h>
 #include <config.h>
 #include <table.h>
 #include <occ.h>
@@ -14,13 +15,11 @@ struct occ_result {
         uint64_t num_txns;
 };
 
-OCCAction** create_single_occ_action_batch(uint32_t numTxns, uint32_t txnSize,
-                                           uint64_t numRecords,
-                                           uint32_t experiment,
+OCCAction** create_single_occ_action_batch(uint32_t batch_size,
+                                           OCCConfig config,
                                            RecordGenerator *gen);
 
-OCCAction* generate_occ_rmw_action(RecordGenerator *gen, uint32_t txnSize,
-                                   int experiment);
+OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen);
 
 OCCAction* generate_small_bank_occ_action(uint64_t numRecords, bool read_only);
 

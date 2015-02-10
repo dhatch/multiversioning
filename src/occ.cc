@@ -162,7 +162,7 @@ void OCCWorker::PrepareReads(OCCAction *action)
  */
 void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
 {
-        assert(action->writeset.size() == action->write_records.size());
+        //        assert(action->writeset.size() == action->write_records.size());
         assert(!IS_LOCKED(tid));
         uint32_t record_size, table_id;
         uint64_t key;

@@ -8,46 +8,43 @@
 #include <gperftools/profiler.h>
 #include <fstream>
 
-OCCAction** create_single_occ_action_batch(uint32_t numTxns, uint32_t txnSize,
-                                           uint64_t numRecords,
-                                           uint32_t experiment,
+OCCAction** create_single_occ_action_batch(uint32_t batch_size,
+                                           OCCConfig config,
                                            RecordGenerator *gen)
 {
         uint32_t i;
         OCCAction **ret;
-        ret = (OCCAction**)alloc_mem(numTxns*sizeof(OCCAction*), 71);
+        ret = (OCCAction**)alloc_mem(batch_size*sizeof(OCCAction*), 71);
         assert(ret != NULL);
-        memset(ret, 0x0, numTxns*sizeof(OCCAction*));
-        for (i = 0; i < numTxns; ++i) {
-                if (experiment == 3)
-                        ret[i] = generate_small_bank_occ_action(numRecords,
+        memset(ret, 0x0, batch_size*sizeof(OCCAction*));
+        for (i = 0; i < batch_size; ++i) {
+                if (config.experiment == 3)
+                        ret[i] = generate_small_bank_occ_action(config.numRecords,
                                                                 false);
-                else if (experiment == 4)
-                        ret[i] = generate_small_bank_occ_action(numRecords,
+                else if (config.experiment == 4)
+                        ret[i] = generate_small_bank_occ_action(config.numRecords,
                                                                 true);
-                else if (experiment < 3) 
-                        ret[i] = generate_occ_rmw_action(gen, txnSize,
-                                                         experiment);
+                else if (config.experiment < 3) 
+                        ret[i] = generate_occ_rmw_action(config, gen);
         }
         return ret;
 }
 
-OCCAction* generate_occ_rmw_action(RecordGenerator *gen, uint32_t txnSize,
-                                   int experiment)
+OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
 {
         OCCAction *action = new RMWOCCAction();
         std::set<uint64_t> seen_keys;
         int flip = rand() % 100;
-        for (uint32_t j = 0; j < txnSize; ++j) {
+        for (uint32_t j = 0; j < config.txnSize; ++j) {
                 uint64_t key = GenUniqueKey(gen, &seen_keys);
-                if (experiment == 0) {
+                if (config.experiment == 0) {
                         if (flip < 50) {
                                 action->AddReadKey(0, key, false);
                         } else if (j < 5) {
                                 action->AddReadKey(0, key, true);
                                 action->AddWriteKey(0, key);
                         }
-                } else if (experiment == 1) {
+                } else if (config.experiment == 1) {
                         if (flip < 1) {
                                 action->AddReadKey(0, key, false);
                         } else {
@@ -58,7 +55,7 @@ OCCAction* generate_occ_rmw_action(RecordGenerator *gen, uint32_t txnSize,
                                         action->AddReadKey(0, key, false);
                                 }
                         }
-                } else if (experiment == 2) {
+                } else if (config.experiment == 2) {
                         if (flip == 0) {
                                 action->AddReadKey(0, key, false);
                         } else {
@@ -146,9 +143,7 @@ OCCActionBatch* setup_occ_single_input(OCCConfig config)
                 if (i == config.numThreads-1)
                         txns_per_thread += remainder;
                 actions = create_single_occ_action_batch(txns_per_thread,
-                                                         config.txnSize,
-                                                         config.numRecords,
-                                                         config.experiment,
+                                                         config,
                                                          gen);
                 ret[i] = {
                         txns_per_thread,
@@ -349,9 +344,11 @@ uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
         volatile uint64_t num_completed = 0;
         OCCActionBatch done;
         volatile uint64_t start, end;
+        /*
         barrier();
         start = rdtsc();
         barrier();
+        
         while (true) {                
                 for (i = 0; i < OCC_WAIT_INTERVAL; ++i) {
                         single_work();
@@ -361,10 +358,11 @@ uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
                         break;
         }
         barrier();
+        */
         for (i = 0; i < num_workers; ++i) {
                 num_completed += workers[i]->NumCompleted();
         }
-        barrier();
+        //        barrier();
         return num_completed;
 }
 

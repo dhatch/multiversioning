@@ -4,7 +4,7 @@
 #include <runnable.hh>
 #include <table.h>
 #include <concurrent_queue.h>
-#include <action.h>
+#include <occ_action.h>
 
 #define RECORD_TID_PTR(rec_ptr) ((volatile uint64_t*)rec_ptr)
 #define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
