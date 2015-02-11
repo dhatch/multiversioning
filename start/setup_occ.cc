@@ -30,44 +30,55 @@ OCCAction** create_single_occ_action_batch(uint32_t batch_size,
         return ret;
 }
 
+OCCAction* gen_occ_rmw_mix(uint32_t num_writes, uint32_t num_rmws,
+                           uint32_t num_reads, RecordGenerator *gen)
+{
+        uint64_t key;
+        std::set<uint64_t> seen_keys;
+        uint32_t i;
+        OCCAction *action = new RMWOCCAction();
+        for (i = 0; i < num_writes; ++i) {
+                key = GenUniqueKey(gen, &seen_keys);
+                action->AddWriteKey(0, key);
+        }
+        for (i = 0; i < num_rmws; ++i) {
+                key = GenUniqueKey(gen, &seen_keys);
+                action->AddWriteKey(0, key);
+                action->AddReadKey(0, key, true);
+        }
+        for (i = 0; i < num_reads; ++i) {
+                key = GenUniqueKey(gen, &seen_keys);
+                action->AddReadKey(0, key, false);                
+        }
+}
+
 OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
 {
-        OCCAction *action = new RMWOCCAction();
-        std::set<uint64_t> seen_keys;
-        int flip = rand() % 100;
-        for (uint32_t j = 0; j < config.txnSize; ++j) {
-                uint64_t key = GenUniqueKey(gen, &seen_keys);
-                if (config.experiment == 0) {
-                        if (flip < 50) {
-                                action->AddReadKey(0, key, false);
-                        } else if (j < 5) {
-                                action->AddReadKey(0, key, true);
-                                action->AddWriteKey(0, key);
-                        }
-                } else if (config.experiment == 1) {
-                        if (flip < 1) {
-                                action->AddReadKey(0, key, false);
-                        } else {
-                                if (j < 2) {
-                                        action->AddReadKey(0, key, true);
-                                        action->AddWriteKey(0, key);
-                                } else {
-                                        action->AddReadKey(0, key, false);
-                                }
-                        }
-                } else if (config.experiment == 2) {
-                        if (flip == 0) {
-                                action->AddReadKey(0, key, false);
-                        } else {
-                                if (j < 2) {
-                                        action->AddWriteKey(0, key);
-                                } else {
-                                        action->AddReadKey(0, key, false);
-                                }
-                        }
-                }
+        uint32_t num_reads, num_writes, num_rmws;
+        int flip;
+        flip = rand() % 100;
+        if (flip > config.read_pct) {
+                num_reads = config.read_txn_size;
+                num_writes = 0;
+                num_rmws = 0;
+        } else if (config.experiment == 0) {
+                num_reads = 0;
+                num_writes = 0;
+                num_rmws = config.txnSize;
+        } else if (config.experiment == 1) {
+                assert(RMW_COUNT <= config.txnSize);
+                num_reads = RMW_COUNT - config.txnSize;
+                num_writes = 0;
+                num_rmws = RMW_COUNT;
+        } else if (config.experiment == 2) {
+                num_reads = 0;
+                num_writes = config.txnSize;
+                num_rmws = 0;
+        } else {
+                std::cerr << "Invalid experiment!\n";
+                assert(false);
         }
-        return action;
+        return gen_occ_rmw_mix(num_reads, num_writes, num_rmws, gen);
 }
 
 OCCAction* generate_small_bank_occ_action(uint64_t numRecords, bool read_only)
@@ -339,32 +350,12 @@ uint64_t get_completed_count(OCCWorker **workers, uint32_t num_workers,
 uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
                             OCCWorker **workers, uint32_t num_workers,
                             uint64_t threshold, OCCActionBatch *input_batches)
-{
+{        
         uint32_t i;
-        volatile uint64_t num_completed = 0;
-        OCCActionBatch done;
-        volatile uint64_t start, end;
-        /*
-        barrier();
-        start = rdtsc();
-        barrier();
-        
-        while (true) {                
-                for (i = 0; i < OCC_WAIT_INTERVAL; ++i) {
-                        single_work();
-                }
-                end = rdtsc();
-                if (end - start > 2*1000000000)
-                        break;
-        }
-        barrier();
-        */
-        for (i = 0; i < num_workers; ++i) {
-                num_completed += workers[i]->NumCompleted();
-        }
-        //        barrier();
-        return num_completed;
-}
+        for (i = 0; i < num_workers; ++i)
+                output_queues[i]->DequeueBlocking();
+        return 0;
+ }
 
 struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                                  SimpleQueue<OCCActionBatch> **outputQueues,
@@ -398,6 +389,7 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         if (PROFILE)
                 ProfilerStop();
         result.time_elapsed = diff_time(end_time, start_time);
+        result.num_txns = config.numTxns;
         return result;
 }
 

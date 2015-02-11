@@ -4,6 +4,7 @@
 #include <set>
 #include <small_bank.h>
 
+#define RMW_COUNT 2
 #define PROFILE 0
 
 
@@ -67,5 +68,24 @@ static timespec diff_time(timespec end, timespec start)
         return temp;
 }
 
+static void* gen_random_array(size_t sz)
+{
+        void *array;
+        size_t len, remainder, i;
+        uint32_t *int_array, temp;
+        char *byte_array;
+        array = malloc(sz);
+        assert(array != NULL);
+        len = sz / sizeof(uint32_t);
+        remainder = sz % sizeof(uint32_t);
+        int_array = (uint32_t*)array;
+        byte_array = (char*)&int_array[len];
+        for (i = 0; i < len; ++i) 
+                int_array[i] = (uint32_t)rand();
+        if (remainder > 0) {
+                temp = (uint32_t)rand();
+                memcpy(byte_array, &temp, remainder);
+        }
+}
 
 #endif // COMMON_H_

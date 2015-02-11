@@ -49,7 +49,6 @@ void RMWOCCAction::DoReads()
         uint64_t *field_ptr;
         num_fields = recordSize/sizeof(uint64_t);
         num_reads = readset.size();
-        memset(__accumulated, 0, recordSize);
         for (i = 0; i < num_reads; ++i) {
                 field_ptr = (uint64_t*)readset[i].GetValue();
                 for (j = 0; j < num_fields; ++j) 

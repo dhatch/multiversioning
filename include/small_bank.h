@@ -7,7 +7,6 @@
 #include <occ_action.h>
 #include <action.h>
 
-
 #define METADATA_SIZE 256
 
 enum SmallBankTable {
