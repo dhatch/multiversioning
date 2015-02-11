@@ -634,12 +634,12 @@ ActionBatch CreateRandomAction(int txnSize, uint32_t epochSize, int numRecords,
                                     ret[j]->writeset.push_back(toAdd);
                             }
                     } else if (experiment == 1) {
-                            if (flip < 2) {
+                            if (flip < 0) {
                                     ret[j]->readset.push_back(toAdd);
                                     ret[j]->readonly = true;
-                            } else {
+                            } else if (i < 5) {
                                     if (i < 2) {
-                                            toAdd.is_rmw = true;
+                                            //                                            toAdd.is_rmw = true;
                                             ret[j]->writeset.push_back(toAdd);
                                     } else {
                                             ret[j]->readset.push_back(toAdd);
@@ -1042,14 +1042,22 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
                     }
             }
             else if (experiment == 1) {
-              if (j < 2) {
-                action->writeset.push_back(recordInfo);
-                action->shadowWriteset.push_back(recordInfo);
-              }
-              else {
-                action->readset.push_back(recordInfo);
-                action->shadowReadset.push_back(recordInfo);
-              }          
+                    if (flip < 0) {
+                            recordInfo.is_write = false;
+                            action->readset.push_back(recordInfo);
+                            action->shadowReadset.push_back(recordInfo);
+                    } else if (j < 5) {
+                            if (j < 2) {
+                                    recordInfo.is_write = true;
+                                    action->writeset.push_back(recordInfo);
+                                    action->shadowWriteset.push_back(recordInfo);
+                            }
+                            else {
+                                    recordInfo.is_write = false;
+                                    action->readset.push_back(recordInfo);
+                                    action->shadowReadset.push_back(recordInfo);
+                            }
+                    }
             }
             break;
           }

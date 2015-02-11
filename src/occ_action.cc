@@ -3,7 +3,7 @@
 occ_composite_key::occ_composite_key(uint32_t table_id, uint64_t key,
                                      bool is_rmw)
 {
-        this->tableId = tableId;
+        this->tableId = table_id;
         this->key = key;
         this->is_rmw = is_rmw;
 }
@@ -74,6 +74,11 @@ void RMWOCCAction::DoWrites()
                 field_ptr = writeset[i].GetValue();
                 memcpy(field_ptr, __accumulated, recordSize);
         }
+}
+
+void* RMWOCCAction::GetData()
+{
+        return __accumulated;
 }
 
 bool RMWOCCAction::Run()

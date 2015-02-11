@@ -36,20 +36,26 @@ OCCAction* gen_occ_rmw_mix(uint32_t num_writes, uint32_t num_rmws,
         uint64_t key;
         std::set<uint64_t> seen_keys;
         uint32_t i;
-        OCCAction *action = new RMWOCCAction();
+        RMWOCCAction *action = new RMWOCCAction();
+        gen_random_array(action->GetData(), 1000);
         for (i = 0; i < num_writes; ++i) {
                 key = GenUniqueKey(gen, &seen_keys);
                 action->AddWriteKey(0, key);
+                assert(action->writeset[i].tableId == 0);
         }
         for (i = 0; i < num_rmws; ++i) {
                 key = GenUniqueKey(gen, &seen_keys);
                 action->AddWriteKey(0, key);
                 action->AddReadKey(0, key, true);
+                assert(action->writeset[i+num_writes].tableId == 0);
+                assert(action->readset[i].tableId == 0);
         }
         for (i = 0; i < num_reads; ++i) {
                 key = GenUniqueKey(gen, &seen_keys);
-                action->AddReadKey(0, key, false);                
+                action->AddReadKey(0, key, false);       
+                assert(action->readset[i+num_rmws].tableId == 0);         
         }
+        return action;
 }
 
 OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
@@ -67,7 +73,7 @@ OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
                 num_rmws = config.txnSize;
         } else if (config.experiment == 1) {
                 assert(RMW_COUNT <= config.txnSize);
-                num_reads = RMW_COUNT - config.txnSize;
+                num_reads = config.txnSize - RMW_COUNT;
                 num_writes = 0;
                 num_rmws = RMW_COUNT;
         } else if (config.experiment == 2) {
@@ -131,9 +137,15 @@ OCCActionBatch** setup_occ_input(OCCConfig config, uint32_t iters)
 {
         OCCActionBatch **ret;
         uint32_t i;
-        ret = (OCCActionBatch**)malloc(sizeof(OCCActionBatch*)*iters);
+        uint32_t saved_num_txns;
+        saved_num_txns = config.numTxns;
+        config.numTxns = 1000000;
+        ret = (OCCActionBatch**)malloc(sizeof(OCCActionBatch*)*(iters+1));
+        ret[0] = setup_occ_single_input(config);
+        config.numTxns = saved_num_txns;
         for (i = 0; i < iters; ++i) 
-                ret[i] = setup_occ_single_input(config);
+                ret[i+1] = setup_occ_single_input(config);
+        std::cerr << "Done setting up occ input\n";
         return ret;
 }
 
@@ -205,6 +217,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                 };                
                 workers[i] = new OCCWorker(worker_config, buf_config);
         }
+        std::cerr << "Done setting up occ workers\n";
         return workers;
 }
 
@@ -298,6 +311,7 @@ Table** setup_occ_tables(OCCConfig config)
         } else if (config.experiment == 3) {
                 tables = setup_small_bank_occ_tables(config);
         }
+        std::cerr << "Done setting up occ tables...\n";
         return tables;
 }
 
@@ -352,10 +366,27 @@ uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
                             uint64_t threshold, OCCActionBatch *input_batches)
 {        
         uint32_t i;
-        for (i = 0; i < num_workers; ++i)
+        uint64_t num_completed = 0;
+        OCCActionBatch temp;
+        for (i = 0; i < num_workers; ++i) {
+                temp = output_queues[i]->DequeueBlocking();
+                num_completed += temp.batchSize;
+        }
+        return num_completed;
+}
+
+void dry_run(SimpleQueue<OCCActionBatch> **input_queues, 
+             SimpleQueue<OCCActionBatch> **output_queues,
+             OCCActionBatch *input_batches,
+             uint32_t num_workers)
+{
+        uint32_t i;
+        for (i = 0; i < num_workers; ++i) 
+                input_queues[i]->EnqueueBlocking(input_batches[i]);
+        barrier();
+        for (i = 0; i < num_workers; ++i) 
                 output_queues[i]->DequeueBlocking();
-        return 0;
- }
+}
 
 struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                                  SimpleQueue<OCCActionBatch> **outputQueues,
@@ -370,6 +401,8 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         struct occ_result result;
         for (i = 0; i < config.numThreads; ++i)
                 workers[i]->Run();
+        dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
+        std::cerr << "Done dry run\n";
         if (PROFILE)
                 ProfilerStart("occ.prof");
         barrier();
@@ -377,19 +410,19 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         barrier();
         for (i = 0; i < num_batches; ++i) 
                 for (j = 0; j < config.numThreads; ++j) 
-                        inputQueues[j]->EnqueueBlocking(inputBatches[i][j]);
+                        inputQueues[j]->EnqueueBlocking(inputBatches[i+1][j]);
         barrier();
         result.num_txns = wait_to_completion(outputQueues, workers,
                                              config.numThreads, config.numTxns,
-                                             inputBatches[0]);
+                                             inputBatches[1]);
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
         barrier();
-        std::cout << "Num completed: " << result.num_txns << "\n";
         if (PROFILE)
                 ProfilerStop();
         result.time_elapsed = diff_time(end_time, start_time);
-        result.num_txns = config.numTxns;
+        //        result.num_txns = config.numTxns;
+        std::cout << "Num completed: " << result.num_txns << "\n";
         return result;
 }
 
@@ -402,10 +435,12 @@ struct occ_result run_occ_workers(SimpleQueue<OCCActionBatch> **inputQueues,
 {
         int success;
         struct occ_result result;        
+
         success = pin_thread(79);
         assert(success == 0);
         result = do_measurement(inputQueues, outputQueues, workers,
                                 inputBatches, num_batches, config);
+        std::cerr << "Done experiment!\n";
         return result;
 }
 

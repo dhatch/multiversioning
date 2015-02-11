@@ -19,8 +19,9 @@ void OCCWorker::Init()
 void OCCWorker::StartWorking()
 {
         OCCActionBatch input, output;
-        config.num_completed = 0;
+
         while (true) {
+                config.num_completed = 0;
                 input = config.inputQueue->DequeueBlocking();
                 for (uint32_t i = 0; i < input.batchSize; ++i) {
                         RunSingle(input.batch[i]);
@@ -59,7 +60,11 @@ void OCCWorker::RunSingle(OCCAction *action)
         PrepareWrites(action);
         PrepareReads(action);
         barrier();
-        while (true) {
+
+
+        //       while (true) {
+
+
                 ObtainTIDs(action);
                 commit = action->Run();
                 AcquireWriteLocks(action);
@@ -73,13 +78,16 @@ void OCCWorker::RunSingle(OCCAction *action)
                         } else {                        
                                 ReleaseWriteLocks(action);
                         }
-                        RecycleBufs(action);
-                        break;
+
+                        fetch_and_increment(&config.num_completed);
+                        //      break;
                 } else {
                         ReleaseWriteLocks(action);
                 }
-        }
-        fetch_and_increment(&config.num_completed);
+        
+                RecycleBufs(action);
+                //        }
+
 }
 
 /*
@@ -325,12 +333,13 @@ void* RecordBuffers::AllocBufs(struct RecordBuffersConfig conf)
 {
         uint32_t i;
         uint64_t total_size, single_buf_sz;
+        total_size = 0;
         for (i = 0; i < conf.num_tables; ++i) {
                 single_buf_sz =
                         sizeof(struct RecordBuffy*)+conf.record_sizes[i];
                 total_size += conf.num_buffers * single_buf_sz;
         }
-        std::cout << "Total requested size:" << total_size << "\n";
+        //        std::cerr << "Record size: " << total_size << "\n";
         return alloc_mem(total_size, conf.cpu);
 }
 

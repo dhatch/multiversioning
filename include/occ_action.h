@@ -78,6 +78,7 @@ class RMWOCCAction : public OCCAction {
         void DoWrites();
  public:
         virtual bool Run();
+        virtual void* GetData();
 };
 
 

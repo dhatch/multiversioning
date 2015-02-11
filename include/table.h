@@ -37,7 +37,7 @@ class Table {
 
  public:
   void* operator new(std::size_t sz, int cpu) {
-    return alloc_mem(sz, cpu);
+          return malloc(sz);
   }
 
   void SetInit() {
@@ -49,16 +49,16 @@ class Table {
     this->conf = conf;    
     
     // Initialize hash buckets
-    buckets = (TableRecord**)alloc_interleaved(conf.numBuckets*sizeof(TableRecord*), 
+    buckets = (TableRecord**)alloc_interleaved(conf.numBuckets*sizeof(TableRecord*),
                                                conf.startCpu, 
                                                conf.endCpu);
     memset(buckets, 0x0, conf.numBuckets*sizeof(TableRecord*));
 
     // Initialize freelist
     uint32_t recordSz = sizeof(TableRecord)+conf.valueSz;
-    char *data = (char*)alloc_interleaved(conf.freeListSz*recordSz, 
-                                          conf.startCpu, 
-                                          conf.endCpu);
+    char *data = (char*)alloc_interleaved_all(conf.freeListSz*recordSz);
+    //                                          conf.startCpu, 
+    //                                          conf.endCpu);
     memset(data, 0x0, conf.freeListSz*recordSz);
     for (uint64_t i = 0; i < conf.freeListSz; ++i) {
       ((TableRecord*)(data + i*recordSz))->next = (TableRecord*)(data + (i+1)*recordSz);

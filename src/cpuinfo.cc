@@ -1,6 +1,7 @@
 #include <numa.h>
 #include <iostream>
 #include <cpuinfo.h>
+#include <cassert>
 
 struct cpuinfo {
   int num_cpus;
@@ -132,11 +133,12 @@ alloc_mem(size_t size, int cpu) {
           numa_set_strict(1);
           void *buf = numa_alloc_onnode(size, numa_node);
           //          void *buf = numa_alloc_interleaved(size);
-    
+          assert(buf != NULL);
+          /*
     if (buf == NULL) {
         return buf;
     }
-    
+          */
     if (mlock(buf, size) != 0) {
       numa_free(buf, size);
       std::cout << "mlock couldn't pin memory to RAM!\n";
