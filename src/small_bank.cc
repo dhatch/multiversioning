@@ -8,8 +8,9 @@ OCCSmallBank::Balance::Balance(uint64_t customer, char *meta_data)
         AddReadKey(SAVINGS, customer, false);
 }
 
-bool OCCSmallBank::Balance::Run()
+occ_txn_status OCCSmallBank::Balance::Run()
 {
+        occ_txn_status status;
         SmallBankRecord *checking = (SmallBankRecord*)readset[0].GetValue();
         SmallBankRecord *savings = (SmallBankRecord*)readset[1].GetValue();
         uint32_t num_ints = METADATA_SIZE/4;
@@ -20,8 +21,10 @@ bool OCCSmallBank::Balance::Run()
                 int_meta_data[i] = checking_meta[i];
                 int_meta_data[i] += savings_meta[i];
         }
-        this->totalBalance = checking->amount + savings->amount;        
-        return true;
+        this->totalBalance = checking->amount + savings->amount;
+        status.validation_pass = true;
+        status.commit = true;
+        return status;
 }
 
 OCCSmallBank::DepositChecking::DepositChecking(uint64_t customer, long amount,
@@ -33,15 +36,18 @@ OCCSmallBank::DepositChecking::DepositChecking(uint64_t customer, long amount,
         AddWriteKey(CHECKING, customer);
 }
 
-bool OCCSmallBank::DepositChecking::Run()
+occ_txn_status OCCSmallBank::DepositChecking::Run()
 {
+        occ_txn_status status;
         SmallBankRecord *checkingBalance =
                 (SmallBankRecord*)readset[0].GetValue();
         long oldBalance = checkingBalance->amount;
         SmallBankRecord *newBalance = (SmallBankRecord*)writeset[0].GetValue();
         newBalance->amount += this->amount;
         memcpy(newBalance->meta_data, meta_data, METADATA_SIZE);
-        return true;
+        status.validation_pass = true;
+        status.commit = true;
+        return status;
 }
 
 
@@ -54,13 +60,17 @@ OCCSmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount,
         AddWriteKey(SAVINGS, customer);
 }
 
-bool OCCSmallBank::TransactSaving::Run()
+occ_txn_status OCCSmallBank::TransactSaving::Run()
 {
+        occ_txn_status status;
         SmallBankRecord *read = (SmallBankRecord*)readset[0].GetValue();
         SmallBankRecord *write  = (SmallBankRecord*)writeset[0].GetValue();
         write->amount = read->amount + this->amount;
         memcpy(write->meta_data, meta_data, METADATA_SIZE);
-        return true;
+        status.validation_pass = true;
+        status.commit = true;
+        return status;
+
 }
 
 OCCSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer, uint64_t toCustomer,
@@ -75,8 +85,9 @@ OCCSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer, uint64_t toCustomer,
         AddWriteKey(CHECKING, toCustomer);
 }
 
-bool OCCSmallBank::Amalgamate::Run()
+occ_txn_status OCCSmallBank::Amalgamate::Run()
 {
+        occ_txn_status status;
         long sum = 0;
         SmallBankRecord *fromChecking, *fromSavings, *toChecking;
         sum += ((SmallBankRecord*)readset[0].GetValue())->amount;
@@ -91,7 +102,9 @@ bool OCCSmallBank::Amalgamate::Run()
         memcpy(fromSavings->meta_data, meta_data, METADATA_SIZE);
         toChecking->amount = sum;
         memcpy(toChecking->meta_data, meta_data, METADATA_SIZE);
-        return true;
+        status.validation_pass = true;
+        status.commit = true;
+        return status;
 }
 
 OCCSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount,
@@ -104,8 +117,9 @@ OCCSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount,
         AddWriteKey(CHECKING, customer);
 }
 
-bool OCCSmallBank::WriteCheck::Run()
+occ_txn_status OCCSmallBank::WriteCheck::Run()
 {
+        occ_txn_status status;
         SmallBankRecord *checking;
         long sum, balance;
         balance = ((SmallBankRecord*)readset[1].GetValue())->amount;
@@ -118,7 +132,9 @@ bool OCCSmallBank::WriteCheck::Run()
         checking = (SmallBankRecord*)writeset[0].GetValue();
         checking->amount = balance - amount;
         memcpy(checking->meta_data, meta_data, METADATA_SIZE);
-        return true;
+        status.validation_pass = true;
+        status.commit = true;
+        return status;
 }
 
 

@@ -27,7 +27,7 @@ namespace OCCSmallBank {
                 
         public:
                 Balance(uint64_t customerId, char *meta_data);
-                virtual bool Run();
+                virtual occ_txn_status Run();
         };
         
         class DepositChecking : public OCCAction {
@@ -38,7 +38,7 @@ namespace OCCSmallBank {
         public:
                 DepositChecking(uint64_t customer, long amount,
                                 char *meta_data);
-                virtual bool Run();
+                virtual occ_txn_status Run();
         };
 
         class TransactSaving : public OCCAction {    
@@ -47,7 +47,7 @@ namespace OCCSmallBank {
                 char *meta_data;
         public:
                 TransactSaving(uint64_t customer, long amount, char *meta_data);
-                virtual bool Run();
+                virtual occ_txn_status Run();
         };
 
         class Amalgamate : public OCCAction {
@@ -55,7 +55,7 @@ namespace OCCSmallBank {
         public:
                 Amalgamate(uint64_t fromCustomer, uint64_t toCustomer,
                            char *meta_data);
-                virtual bool Run();
+                virtual occ_txn_status Run();
         };
   
         class WriteCheck : public OCCAction {
@@ -64,7 +64,7 @@ namespace OCCSmallBank {
                 char *meta_data;
         public:
                 WriteCheck(uint64_t customer, long amount, char *meta_data);
-                virtual bool Run();
+                virtual occ_txn_status Run();
         };  
 };
 

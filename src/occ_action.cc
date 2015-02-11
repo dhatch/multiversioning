@@ -14,6 +14,32 @@ void* occ_composite_key::GetValue()
         return &temp[1];
 }
 
+void* occ_composite_key::StartRead()
+{
+        volatile uint64_t *tid_ptr, tid;
+        uint64_t *temp;
+        temp = (uint64_t*)value;
+        tid_ptr = (volatile uint64_t*)value;
+        while (true) {
+                tid = *tid_ptr;
+                if (!IS_LOCKED(tid))
+                        break;
+        }
+        this->old_tid = tid;
+        return &temp[1];
+}
+
+bool occ_composite_key::FinishRead()
+{
+        volatile uint64_t tid;
+        bool is_valid = false;
+        barrier();        
+        tid = *(volatile uint64_t*)value;
+        barrier();
+        is_valid = (tid == this->old_tid);
+        return is_valid;
+}
+
 uint64_t occ_composite_key::GetTimestamp()
 {
         return old_tid;
@@ -43,17 +69,21 @@ void OCCAction::AddWriteKey(uint32_t tableId, uint64_t key)
         writeset.push_back(k);
 }
 
-void RMWOCCAction::DoReads()
+bool RMWOCCAction::DoReads()
 {
+        bool success = true;
         uint32_t num_fields, num_reads, i, j;
         uint64_t *field_ptr;
         num_fields = recordSize/sizeof(uint64_t);
         num_reads = readset.size();
-        for (i = 0; i < num_reads; ++i) {
-                field_ptr = (uint64_t*)readset[i].GetValue();
+        for (i = 0; success == true && i < num_reads; ++i) {
+                field_ptr = (uint64_t*)readset[i].StartRead();
                 for (j = 0; j < num_fields; ++j) 
                         __accumulated[j] += field_ptr[j];
-        }        
+                success = readset[i].FinishRead();
+        }
+        return success;
+                
 }
 
 void RMWOCCAction::AccumulateValues()
@@ -81,11 +111,17 @@ void* RMWOCCAction::GetData()
         return __accumulated;
 }
 
-bool RMWOCCAction::Run()
+occ_txn_status RMWOCCAction::Run()
 {
         assert(recordSize == 1000);
-        DoReads();
+        occ_txn_status status;
+        status.validation_pass = false;
+        status.commit = true;
+        if (DoReads() == false) 
+                return status;
+        else
+                status.validation_pass = true;                
         AccumulateValues();
         DoWrites();
-        return true;
+        return status;
 }

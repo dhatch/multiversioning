@@ -12,6 +12,11 @@
 #define GET_COUNTER(tid) (GET_TIMESTAMP(tid) & ~EPOCH_MASK)
 #define IS_LOCKED(tid) ((tid & ~(TIMESTAMP_MASK)) == 1)
 
+struct occ_txn_status {
+        bool validation_pass;
+        bool commit;
+};
+
 class occ_composite_key {
  public:
         uint32_t tableId;
@@ -25,6 +30,9 @@ class occ_composite_key {
         uint64_t GetTimestamp();
         bool ValidateRead();
 
+        void* StartRead();
+        bool FinishRead();
+        
         bool operator==(const occ_composite_key &other) const {
                 return other.tableId == this->tableId && other.key == this->key;
         }
@@ -63,7 +71,7 @@ class OCCAction {
         // refs to records.
         // std::vector<void*> write_records; 
         
-        virtual bool Run() = 0;
+        virtual occ_txn_status Run() = 0;
         void AddReadKey(uint32_t table_id, uint64_t key, bool is_rmw);
         void AddWriteKey(uint32_t table_id, uint64_t key);
 }; 
@@ -73,11 +81,11 @@ class RMWOCCAction : public OCCAction {
         uint64_t __accumulated[1000/sizeof(uint64_t)];
         volatile uint64_t __total;
 
-        void DoReads();
+        bool DoReads();
         void AccumulateValues();
         void DoWrites();
  public:
-        virtual bool Run();
+        virtual occ_txn_status Run();
         virtual void* GetData();
 };
 

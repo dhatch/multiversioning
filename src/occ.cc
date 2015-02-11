@@ -54,40 +54,35 @@ uint64_t OCCWorker::NumCompleted()
 void OCCWorker::RunSingle(OCCAction *action)
 {
         uint64_t cur_tid;
-        bool commit, no_conflicts;
+        bool no_conflicts;
+        occ_txn_status status;
         volatile uint32_t epoch;
         barrier();
         PrepareWrites(action);
         PrepareReads(action);
         barrier();
-
-
-        //       while (true) {
-
-
-                ObtainTIDs(action);
-                commit = action->Run();
-                AcquireWriteLocks(action);
-                barrier();
-                epoch = *config.epoch_ptr;
-                barrier();
-                if (Validate(action)) {
-                        if (commit) {
-                                cur_tid = ComputeTID(action, epoch);
-                                InstallWrites(action, cur_tid);
-                        } else {                        
-                                ReleaseWriteLocks(action);
-                        }
-
-                        fetch_and_increment(&config.num_completed);
-                        //      break;
-                } else {
+        status = action->Run();
+        //        ObtainTIDs(action);
+        if (status.validation_pass == false) {
+                RecycleBufs(action);
+                return;
+        }                        
+        AcquireWriteLocks(action);
+        barrier();
+        epoch = *config.epoch_ptr;
+        barrier();
+        if (Validate(action)) {
+                if (status.commit) {
+                        cur_tid = ComputeTID(action, epoch);
+                        InstallWrites(action, cur_tid);
+                } else {                        
                         ReleaseWriteLocks(action);
                 }
-        
-                RecycleBufs(action);
-                //        }
-
+                fetch_and_increment(&config.num_completed);
+        } else {
+                ReleaseWriteLocks(action);
+        }        
+        RecycleBufs(action);
 }
 
 /*
