@@ -61,27 +61,28 @@ void OCCWorker::RunSingle(OCCAction *action)
         PrepareWrites(action);
         PrepareReads(action);
         barrier();
-        status = action->Run();
-        //        ObtainTIDs(action);
-        if (status.validation_pass == false) {
-                RecycleBufs(action);
-                return;
-        }                        
-        AcquireWriteLocks(action);
-        barrier();
-        epoch = *config.epoch_ptr;
-        barrier();
-        if (Validate(action)) {
-                if (status.commit) {
-                        cur_tid = ComputeTID(action, epoch);
-                        InstallWrites(action, cur_tid);
-                } else {                        
+        while (true) {
+                status = action->Run();
+                if (status.validation_pass == false) {
+                        continue;
+                }                        
+                AcquireWriteLocks(action);
+                barrier();
+                epoch = *config.epoch_ptr;
+                barrier();
+                if (Validate(action)) {
+                        if (status.commit) {
+                                cur_tid = ComputeTID(action, epoch);
+                                InstallWrites(action, cur_tid);
+                        } else {                        
+                                ReleaseWriteLocks(action);
+                        }
+                        fetch_and_increment(&config.num_completed);
+                        break;
+                } else {
                         ReleaseWriteLocks(action);
                 }
-                fetch_and_increment(&config.num_completed);
-        } else {
-                ReleaseWriteLocks(action);
-        }        
+        }
         RecycleBufs(action);
 }
 
