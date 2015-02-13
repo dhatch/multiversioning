@@ -21,7 +21,9 @@ void* occ_composite_key::StartRead()
         temp = (uint64_t*)value;
         tid_ptr = (volatile uint64_t*)value;
         while (true) {
+                barrier();
                 tid = *tid_ptr;
+                barrier();
                 if (!IS_LOCKED(tid))
                         break;
         }
@@ -46,7 +48,8 @@ uint64_t occ_composite_key::GetTimestamp()
 }
 
 bool occ_composite_key::ValidateRead()
-{        
+{
+        assert(!IS_LOCKED(old_tid));
         volatile uint64_t *version_ptr = (volatile uint64_t*)value;
         barrier();
         volatile uint64_t ver = *version_ptr;

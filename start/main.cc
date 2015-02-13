@@ -166,7 +166,7 @@ EagerActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads,
     gen = new UniformGenerator(numRecords);
   }
   else if (distribution == 1) {
-    gen = new ZipfGenerator(0, numRecords, theta);
+    gen = new ZipfGenerator(numRecords, theta);
   }
   EagerActionBatch *ret = 
     (EagerActionBatch*)malloc(sizeof(EagerActionBatch)*numThreads);

@@ -24,8 +24,9 @@ OCCAction** create_single_occ_action_batch(uint32_t batch_size,
                 else if (config.experiment == 4)
                         ret[i] = generate_small_bank_occ_action(config.numRecords,
                                                                 true);
-                else if (config.experiment < 3) 
+                else if (config.experiment < 3) {
                         ret[i] = generate_occ_rmw_action(config, gen);
+                }
         }
         return ret;
 }
@@ -49,11 +50,13 @@ OCCAction* gen_occ_rmw_mix(uint32_t num_writes, uint32_t num_rmws,
                 action->AddReadKey(0, key, true);
                 assert(action->writeset[i+num_writes].tableId == 0);
                 assert(action->readset[i].tableId == 0);
+                assert(action->readset[i].is_rmw == true);
         }
         for (i = 0; i < num_reads; ++i) {
                 key = GenUniqueKey(gen, &seen_keys);
                 action->AddReadKey(0, key, false);       
-                assert(action->readset[i+num_rmws].tableId == 0);         
+                assert(action->readset[i+num_rmws].tableId == 0);
+                assert(action->readset[i+num_rmws].is_rmw == false);         
         }
         return action;
 }
@@ -160,7 +163,7 @@ OCCActionBatch* setup_occ_single_input(OCCConfig config)
         if (config.distribution == 0) 
                 gen = new UniformGenerator(config.numRecords);
         else if (config.distribution == 1) 
-                gen = new ZipfGenerator(0, config.numRecords, config.theta);
+                gen = new ZipfGenerator(config.numRecords, config.theta);
         ret = (OCCActionBatch*)malloc(sizeof(OCCActionBatch)*config.numThreads);
         txns_per_thread = (config.numTxns)/config.numThreads;
         remainder = (config.numTxns) % config.numThreads;
@@ -376,6 +379,22 @@ uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
         }
         return num_completed;
 }
+
+/*
+static uint64_t wait_to_completion_2(SimpleQueue<OCCActionBatch> **output_queues,
+                                     OCCWorker **workers,
+                                     uint32_t num_workers)
+{
+        uint32_t i;
+        uint64_t num_completed = 0;
+        //        OCCActionBatch temp;
+        for (i = 0; i < num_workers; ++i) {
+                output_queues[i]->DequeueBlocking();
+                num_completed += workers[i]->NumCompleted();
+        }
+        return num_completed;        
+}
+*/
 
 void dry_run(SimpleQueue<OCCActionBatch> **input_queues, 
              SimpleQueue<OCCActionBatch> **output_queues,

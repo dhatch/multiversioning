@@ -73,9 +73,9 @@ class OCCWorker : public Runnable {
         virtual void RecycleBufs(OCCAction *action);
         virtual void UpdateEpoch();
         
-        static void AcquireSingleLock(volatile uint64_t *version_ptr);
+        static bool AcquireSingleLock(volatile uint64_t *version_ptr);
         static bool TryAcquireLock(volatile uint64_t *version_ptr);
-        void AcquireWriteLocks(OCCAction *action);
+        bool AcquireWriteLocks(OCCAction *action);
         void ReleaseWriteLocks(OCCAction *action);
         
  protected:

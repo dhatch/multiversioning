@@ -20,8 +20,10 @@ void OCCWorker::StartWorking()
 {
         OCCActionBatch input;
         while (true) {
-                config.num_completed = 0;
                 input = config.inputQueue->DequeueBlocking();
+                barrier();
+                config.num_completed = 0;
+                barrier();
                 for (uint32_t i = 0; i < input.batchSize; ++i) {
                         RunSingle(input.batch[i]);
                         if ((config.cpu == 0))
@@ -55,33 +57,40 @@ void OCCWorker::RunSingle(OCCAction *action)
         uint64_t cur_tid;
         occ_txn_status status;
         volatile uint32_t epoch;
+        bool waited;
         
         barrier();
         PrepareWrites(action);
         PrepareReads(action);
         barrier();
-        while (true) {
+        //        while (true) {
+        barrier();
                 status = action->Run();
+                barrier();
                 if (status.validation_pass == false) {
-                        continue;
-                }                        
-                AcquireWriteLocks(action);
+                        RecycleBufs(action);
+                        return;
+                }
+                barrier();
+                waited = AcquireWriteLocks(action);
                 barrier();
                 epoch = *config.epoch_ptr;
                 barrier();
                 if (Validate(action)) {
+                        assert(!waited);
                         if (status.commit) {
                                 cur_tid = ComputeTID(action, epoch);
                                 InstallWrites(action, cur_tid);
-                        } else {                        
+                        } else {
+                                assert(false);
                                 ReleaseWriteLocks(action);
                         }
                         fetch_and_increment(&config.num_completed);
-                        break;
+                        //              break;
                 } else {
                         ReleaseWriteLocks(action);
                 }
-        }
+                //        }
         RecycleBufs(action);
 }
 
@@ -231,7 +240,10 @@ bool OCCWorker::Validate(OCCAction *action)
 inline bool OCCWorker::TryAcquireLock(volatile uint64_t *version_ptr)
 {
         volatile uint64_t cmp_tid, locked_tid;
-        cmp_tid = GET_TIMESTAMP(*version_ptr);
+        barrier();
+        cmp_tid = *version_ptr;
+        barrier();
+        cmp_tid = GET_TIMESTAMP(cmp_tid);
         assert(!IS_LOCKED(cmp_tid));
         locked_tid = (cmp_tid | 1);
         if (!IS_LOCKED(*version_ptr) && cmp_and_swap(version_ptr, cmp_tid, locked_tid))
@@ -243,8 +255,9 @@ inline bool OCCWorker::TryAcquireLock(volatile uint64_t *version_ptr)
  * Acquire write lock for a single record. Exponential back-off under 
  * contention.
  */
-void OCCWorker::AcquireSingleLock(volatile uint64_t *version_ptr)
+bool OCCWorker::AcquireSingleLock(volatile uint64_t *version_ptr)
 {
+        bool waited = false;
         uint32_t backoff, temp;
         if (USE_BACKOFF) 
                 backoff = 1;
@@ -259,14 +272,17 @@ void OCCWorker::AcquireSingleLock(volatile uint64_t *version_ptr)
                                 single_work();
                         backoff = backoff*2;
                 }
+                waited = true;
         }
+        return waited;
 }
 
 /*
  * Acquire a lock for every record in the transaction's writeset.
  */
-void OCCWorker::AcquireWriteLocks(OCCAction *action)
+bool OCCWorker::AcquireWriteLocks(OCCAction *action)
 {
+        bool waited = false;
         uint32_t num_writes, i, table_id;
         uint64_t key;
         volatile uint64_t *tid_ptr;
@@ -276,9 +292,10 @@ void OCCWorker::AcquireWriteLocks(OCCAction *action)
                 table_id = action->writeset[i].tableId;
                 key = action->writeset[i].key;
                 tid_ptr = (volatile uint64_t*)config.tables[table_id]->Get(key);
-                AcquireSingleLock(tid_ptr);
+                waited |= AcquireSingleLock(tid_ptr);
                 assert(IS_LOCKED(*tid_ptr));
         }
+        return waited;
 }
 
 /*

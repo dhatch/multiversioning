@@ -24,10 +24,10 @@ class ZipfGenerator : public RecordGenerator {
   double zetan;  
 
   static double ZetaPartition(ZetaParams *zetaParams);
-  static double GenZeta(uint64_t numThreads, uint64_t numElems, double theta);
+  static double GenZeta(uint64_t numElems, double theta);
 
  public:
-  ZipfGenerator(uint64_t zetaThreads, uint64_t numElems, double theta);
+  ZipfGenerator(uint64_t numElems, double theta);
   
   virtual uint64_t GenNext();
 };

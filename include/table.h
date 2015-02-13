@@ -57,9 +57,9 @@ class Table {
 
     // Initialize freelist
     uint32_t recordSz = sizeof(TableRecord)+conf.valueSz;
-    char *data = (char*)alloc_interleaved_all(conf.freeListSz*recordSz);
-    //                                          conf.startCpu, 
-    //                                          conf.endCpu);
+    char *data = (char*)alloc_interleaved(conf.freeListSz*recordSz,
+                                          conf.startCpu, 
+                                          conf.endCpu);
     memset(data, 0x0, conf.freeListSz*recordSz);
     for (uint64_t i = 0; i < conf.freeListSz; ++i) {
       ((TableRecord*)(data + i*recordSz))->next = (TableRecord*)(data + (i+1)*recordSz);

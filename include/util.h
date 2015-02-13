@@ -1,22 +1,21 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-#include <stdio.h>
 #include <stdint.h>
 
-static inline void
+inline void
 do_pause()
 {
   asm volatile("pause;":::);
 }
 
-static inline void
+inline void
 barrier() {
   asm volatile("":::"memory");
 }
 
 
-static inline bool
+inline bool
 cmp_and_swap(volatile uint64_t *to_write,
              uint64_t to_cmp,
              uint64_t new_value) {
@@ -27,7 +26,7 @@ cmp_and_swap(volatile uint64_t *to_write,
   return out == to_cmp;
 }
 
-static inline uint64_t
+inline uint64_t
 xchgq(volatile uint64_t *addr, uint64_t new_val)
 {
   uint64_t result;
@@ -40,9 +39,9 @@ xchgq(volatile uint64_t *addr, uint64_t new_val)
   return result;
 }
 
-static inline void
+inline void
 reentrant_lock(volatile uint64_t *word, uint32_t threadId) {
-  static uint64_t mask = 0xFFFFFFFF00000000;
+  uint64_t mask = 0xFFFFFFFF00000000;
   barrier();
   if (((*word & mask) >> 32) != threadId) {
     barrier();
@@ -58,9 +57,9 @@ reentrant_lock(volatile uint64_t *word, uint32_t threadId) {
   }
 }
 
-static inline void
+inline void
 reentrant_unlock(volatile uint64_t *word) {
-  static uint64_t mask = 0x00000000FFFFFFFF;
+  uint64_t mask = 0x00000000FFFFFFFF;
   *word -= 1;
   if ((*word & mask) == 0) {
     xchgq(word, 0);
@@ -68,7 +67,7 @@ reentrant_unlock(volatile uint64_t *word) {
 }
 
 // Spin lock implementation. XXX: Is test-n-test-n-set better?
-static inline void
+inline void
 lock(volatile uint64_t *word) {
   while (true) {
     if ((*word == 0) && (xchgq(word, 1) == 0)) {
@@ -78,12 +77,12 @@ lock(volatile uint64_t *word) {
   }
 }
 
-static inline void
+inline void
 unlock(volatile uint64_t *word) {
   xchgq(word, 0);
 }
 
-static inline uint32_t
+inline uint32_t
 fetch_and_increment_32(volatile uint32_t *variable)
 {
         int counter_value = 1;
@@ -94,7 +93,7 @@ fetch_and_increment_32(volatile uint32_t *variable)
         return counter_value + 1;
 }
 
-static inline uint64_t
+inline uint64_t
 fetch_and_increment(volatile uint64_t *variable)
 {
   long counter_value = 1;
@@ -105,7 +104,7 @@ fetch_and_increment(volatile uint64_t *variable)
   return counter_value + 1;
 }
 
-static inline long
+inline long
 fetch_and_decrement(volatile uint64_t *variable) 
 {
   long counter_value = -1;
@@ -118,7 +117,7 @@ fetch_and_decrement(volatile uint64_t *variable)
 
 
 // An indivisible unit of work. 
-static inline void
+inline void
 single_work() 
 {
   asm volatile("nop;":::"memory");
@@ -127,7 +126,7 @@ single_work()
 // Use this function to read the timestamp counter. 
 // Don't bother with using serializing instructions like cpuid and others,
 // found that it works well without them. 
-static inline uint64_t
+inline uint64_t
 rdtsc()
 {
   uint32_t cyclesHigh, cyclesLow;
@@ -142,7 +141,7 @@ rdtsc()
 // Check the amount of time (in cycles) required to perform an indivisible
 // unit of work. 
 // Measured 2 cycles on morz and smorz. 
-static inline double
+inline double
 check_pause()
 {
   int i;
@@ -156,7 +155,7 @@ check_pause()
 }
 
 // Measure rdtsc overhead. 
-static inline double
+inline double
 check_rdtsc()
 {
   int i;

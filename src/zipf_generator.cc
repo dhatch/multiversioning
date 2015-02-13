@@ -10,8 +10,8 @@ double ZipfGenerator::ZetaPartition(ZetaParams* zetaParams) {
   return sum;
 }
 
-double ZipfGenerator::GenZeta(uint64_t numThreads, uint64_t numElems, 
-                              double theta) {
+double ZipfGenerator::GenZeta(uint64_t numElems, double theta)
+{
   ZetaParams params;
   params.start = 1;
   params.end = numElems;
@@ -19,11 +19,10 @@ double ZipfGenerator::GenZeta(uint64_t numThreads, uint64_t numElems,
   return ZetaPartition(&params);
 }
 
-ZipfGenerator::ZipfGenerator(uint64_t zetaThreads, uint64_t numElems, 
-                             double theta) {
+ZipfGenerator::ZipfGenerator(uint64_t numElems, double theta) {
   this->theta = theta;
   this->numElems = numElems;
-  this->zetan = GenZeta(zetaThreads, numElems, theta);  
+  this->zetan = GenZeta(numElems, theta);  
 }
 
 uint64_t ZipfGenerator::GenNext() {

@@ -590,7 +590,7 @@ static void mv_setup_input_array(std::vector<ActionBatch> *input,
         if (config.distribution == 0) {
                 gen = new UniformGenerator((uint32_t)config.numRecords);
         } else if (config.distribution == 1) {
-                gen = new ZipfGenerator(1, (uint64_t)config.numRecords,
+                gen = new ZipfGenerator((uint64_t)config.numRecords,
                                         config.theta);
         }
         num_epochs = get_num_epochs(config);
