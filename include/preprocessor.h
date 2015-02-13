@@ -1,6 +1,7 @@
 #ifndef         PREPROCESSOR_H_
 #define         PREPROCESSOR_H_
 
+#include <mv_action.h>
 #include <runnable.hh>
 #include <concurrent_queue.h>
 #include <numa.h>
@@ -13,10 +14,6 @@ class Action;
 class MVRecordAllocator;
 class MVTablePartition;
 
-struct ActionBatch {
-    Action **actionBuf;
-    uint32_t numActions;
-};
 
 /*
  * An MVActionHasher is the first stage of the transaction processing pipleline.

@@ -275,14 +275,9 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
   }
 }
 
-static uint32_t GetEpoch(Action *action) {
-  static uint64_t mask = 0xFFFFFFFF00000000;
-  return ((action->version & mask) >> 32);
-}
-
 // Returns the epoch of the oldest pending record.
 uint32_t Executor::DoPendingGC() {
-  static uint64_t mask = 0xFFFFFFFF00000000;
+        static uint64_t mask = 0xFFFFFFFF00000000;
   pendingGC->ResetCursor();
   for (ActionListNode *node = pendingGC->GetNext(); node != NULL; 
        node = pendingGC->GetNext()) {
@@ -299,36 +294,36 @@ uint32_t Executor::DoPendingGC() {
     pendingGC->ResetCursor();
     ActionListNode *node = pendingGC->GetNext();
     assert(node != NULL && node->action != NULL);
-    return ((node->action->version & mask) >> 32);
+    return ((node->action->__version & mask) >> 32);
   }
 }
 
 bool Executor::ProcessSingleGC(Action *action) {
-  assert(action->state == SUBSTANTIATED);
-  uint32_t numWrites = action->writeset.size();
+  assert(action->__state == SUBSTANTIATED);
+  uint32_t numWrites = action->__writeset.size();
   bool ret = true;
 
   // Garbage collect the previous versions
   for (uint32_t i = 0; i < numWrites; ++i) {
-    MVRecord *previous = action->writeset[i].value->recordLink;
+    MVRecord *previous = action->__writeset[i].value->recordLink;
     if (previous != NULL) {
       ret &= (previous->writer == NULL || 
-              previous->writer->state == SUBSTANTIATED);
+              previous->writer->__state == SUBSTANTIATED);
     }
   }
   
   if (ret) {
     for (uint32_t i = 0; i < numWrites; ++i) {
-      MVRecord *previous = action->writeset[i].value->recordLink;
+      MVRecord *previous = action->__writeset[i].value->recordLink;
       if (previous != NULL) {
         
         // Since the previous txn has been substantiated, the record's value 
         // shouldn't be NULL.
         assert(previous->value != NULL);
         garbageBin->AddRecord(previous->writingThread, 
-                              action->writeset[i].tableId,
+                              action->__writeset[i].tableId,
                               previous->value);
-        //        garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
+        //        garbageBin->AddMVRecord(action->__writeset[i].threadId, previous);
       }
     }
   }
@@ -338,14 +333,14 @@ bool Executor::ProcessSingleGC(Action *action) {
 
 bool Executor::ProcessSingle(Action *action) {
   assert(action != NULL);
-  if (action->state != SUBSTANTIATED) {
-    if (cmp_and_swap(&action->state, STICKY, PROCESSING)) {
+  if (action->__state != SUBSTANTIATED) {
+    if (cmp_and_swap(&action->__state, STICKY, PROCESSING)) {
       if (ProcessTxn(action)) {
         return true;
       }
       else {
         barrier();
-        action->state = STICKY;
+        action->__state = STICKY;
         barrier();
         return false;
       }
@@ -360,28 +355,28 @@ bool Executor::ProcessSingle(Action *action) {
 }
 
 bool Executor::ProcessTxn(Action *action) {
-  assert(action != NULL && action->state == PROCESSING);
-  if (action->readonly == true) {
-          assert(action->writeset.size() == 0);
-          //          uint32_t num_reads = action->readset.size();
+  assert(action != NULL && action->__state == PROCESSING);
+  if (action->__readonly == true) {
+          assert(action->__writeset.size() == 0);
+          //          uint32_t num_reads = action->__readset.size();
           action->Run();
           barrier();
-          action->state = SUBSTANTIATED;
+          action->__state = SUBSTANTIATED;
           barrier();
           //          xchgq(&action->state, SUBSTANTIATED);
           return true;
   }
   bool ready = true;
   bool abort = false;
-  uint32_t numReads = action->readset.size();
-  uint32_t numWrites = action->writeset.size();
+  uint32_t numReads = action->__readset.size();
+  uint32_t numWrites = action->__writeset.size();
 
   // First ensure that all transactions on which the current one depends on have
   // been processed.
   for (size_t i = 0; i < numReads; ++i) {
     /*
-    if (action->readset[i].value == NULL) {
-      CompositeKey curKey = action->readset[i];
+    if (action->__readset[i].value == NULL) {
+      CompositeKey curKey = action->__readset[i];
       MVRecord *record = 
         DB.GetTable(curKey.tableId)->GetMVRecord(curKey.threadId, curKey, 
                                                  action->version);
@@ -399,17 +394,17 @@ bool Executor::ProcessTxn(Action *action) {
         }
       }
       // Keep a reference to the record
-      action->readset[i].value = record;
+      action->__readset[i].value = record;
     }
     */
 
-    if (action->readset[i].value != NULL) {
+    if (action->__readset[i].value != NULL) {
       // Check that the txn which is supposed to have produced the value of the 
       // record has been executed.
 
-            Action *dependAction = action->readset[i].value->writer;
+            Action *dependAction = action->__readset[i].value->writer;
             /*
-            while ((dependAction = action->readset[i].value->writer) != NULL &&
+            while ((dependAction = action->__readset[i].value->writer) != NULL &&
                    !ProcessSingle(dependAction))
                     ;
             */
@@ -417,7 +412,7 @@ bool Executor::ProcessTxn(Action *action) {
         //        assert(false);
         ready = false;
       }
-      else if (action->readset[i].value->value == NULL) {
+      else if (action->__readset[i].value->value == NULL) {
         abort = true;
       }
 
@@ -426,21 +421,21 @@ bool Executor::ProcessTxn(Action *action) {
 
   for (size_t i = 0; i < numWrites; ++i) {
     // Keep a reference to the sticky we need to evaluate. 
-    if (action->writeset[i].value == NULL) {
+    if (action->__writeset[i].value == NULL) {
       
       // Find the sticky
-      CompositeKey curKey = action->writeset[i];
+      CompositeKey curKey = action->__writeset[i];
       MVRecord *record = 
         DB.GetTable(curKey.tableId)->GetMVRecord(curKey.threadId, curKey, 
-                                                 action->version);
+                                                 action->__version);
 
       // Sticky better exist
       assert(record != NULL);
-      action->writeset[i].value = record;      
+      action->__writeset[i].value = record;      
     }
     
-    if (action->writeset[i].is_rmw) {
-            MVRecord *prev = action->writeset[i].value->recordLink;
+    if (action->__writeset[i].is_rmw) {
+            MVRecord *prev = action->__writeset[i].value->recordLink;
             if (prev != NULL) {
                     // There exists a previous version
                     /*
@@ -458,7 +453,7 @@ bool Executor::ProcessTxn(Action *action) {
     
     // Ensure that the previous version of this record has been written
     /*
-    MVRecord *prev = action->writeset[i].value->recordLink;
+    MVRecord *prev = action->__writeset[i].value->recordLink;
     if (prev != NULL) {
       // There exists a previous version
       Action *dependAction = prev->writer;
@@ -477,9 +472,9 @@ bool Executor::ProcessTxn(Action *action) {
 
   /*
   for (uint32_t i = 0; i < numWrites; ++i) {
-    uint32_t tbl = action->writeset[i].tableId;
-    Record **valuePtr = &action->writeset[i].value->value;
-    action->writeset[i].value->writingThread = config.threadId;
+    uint32_t tbl = action->__writeset[i].tableId;
+    Record **valuePtr = &action->__writeset[i].value->value;
+    action->__writeset[i].value->writingThread = config.threadId;
     bool success = allocators[tbl]->GetRecord(valuePtr);
     assert(success);
   }
@@ -489,11 +484,11 @@ bool Executor::ProcessTxn(Action *action) {
   if (abort || !action->Run()) {
     assert(false);
     for (uint32_t i = 0; i < numWrites; ++i) {
-      uint32_t tbl = action->writeset[i].tableId;
+      uint32_t tbl = action->__writeset[i].tableId;
       uint32_t recSize = config.recordSizes[tbl];
-      Record *curValuePtr = action->writeset[i].value->value;
+      Record *curValuePtr = action->__writeset[i].value->value;
       Record *prevValuePtr = NULL;
-      MVRecord *predecessor = action->writeset[i].value->recordLink;
+      MVRecord *predecessor = action->__writeset[i].value->recordLink;
       if (predecessor != NULL) {
         prevValuePtr = predecessor->value;
       }
@@ -506,11 +501,11 @@ bool Executor::ProcessTxn(Action *action) {
 
   barrier();
   //  xchgq(&action->state, SUBSTANTIATED);
-  action->state = SUBSTANTIATED;
+  action->__state = SUBSTANTIATED;
   barrier();
   for (uint32_t i = 0; i < numWrites; ++i) {
-    action->writeset[i].value->writer = NULL;        
-    MVRecord *previous = action->writeset[i].value->recordLink;
+    action->__writeset[i].value->writer = NULL;        
+    MVRecord *previous = action->__writeset[i].value->recordLink;
     if (previous != NULL) {
         
       // Since the previous txn has been substantiated, the record's value 
@@ -518,17 +513,17 @@ bool Executor::ProcessTxn(Action *action) {
       assert(previous->value != NULL);
       /*
       garbageBin->AddRecord(previous->writingThread, 
-                            action->writeset[i].tableId,
+                            action->__writeset[i].tableId,
                             previous->value);
       */
-      garbageBin->AddMVRecord(action->writeset[i].threadId, previous);
+      garbageBin->AddMVRecord(action->__writeset[i].threadId, previous);
     }
   }
   //  bool gcSuccess = ProcessSingleGC(action);
   //  assert(gcSuccess);
   /*
   for (uint32_t i = 0; i < numWrites; ++i) {
-    action->writeset[i].value->writer = NULL;        
+    action->__writeset[i].value->writer = NULL;        
   }
   */
   assert(ready);

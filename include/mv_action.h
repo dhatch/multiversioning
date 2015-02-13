@@ -3,8 +3,15 @@
 
 #include <action.h>
 
+#define RECYCLE_QUEUE_SIZE 64 
 #define MV_EPOCH_MASK 0xFFFFFFFF00000000
 #define GET_MV_EPOCH(timestamp) (timestamp & MV_EPOCH_MASK)
+#define CREATE_MV_TIMESTAMP(epoch, timestamp) ((((uint64_t)epoch)<<32) | timestamp)
+
+struct ActionBatch {
+    Action **actionBuf;
+    uint32_t numActions;
+};
 
 enum ActionState {
         STICKY,
@@ -30,7 +37,11 @@ class CompositeKey {
         uint32_t threadId;
         bool is_rmw;
         MVRecord *value;
-  
+
+        CompositeKey() {
+                this->value = 0;
+        }
+        
         CompositeKey(bool isRmw, uint32_t table, uint64_t key) {
                 this->is_rmw = isRmw;
                 this->tableId = table;
@@ -83,7 +94,7 @@ class CompositeKey {
 
 class Action {
  protected:
-        CompositeKey GenerateKey(uint32_t tableId, uint64_t key);
+        CompositeKey GenerateKey(bool is_rmw, uint32_t tableId, uint64_t key);
         void* Read(uint32_t index);
         void* GetWriteRef(uint32_t index);
         void* ReadWrite(uint32_t index);
@@ -100,7 +111,6 @@ class Action {
         
         virtual bool Run() = 0;
         virtual void AddReadKey(uint32_t tableId, uint64_t key);
-        virtual void AddWriteKey(uint32_t tableId, uint64_t key);
         virtual void AddWriteKey(uint32_t tableId, uint64_t key, bool is_rmw);
 };
 

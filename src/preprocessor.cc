@@ -55,19 +55,19 @@ void MVActionHasher::StartWorking() {
 
 void MVActionHasher::ProcessAction(Action *action, uint32_t epoch,
                                    uint32_t txnCounter) {
-  action->combinedHash =  0;
-  action->version = (((uint64_t)epoch << 32) | txnCounter);
-  size_t numWrites = action->writeset.size();  
+  action->__combinedHash =  0;
+  action->__version = (((uint64_t)epoch << 32) | txnCounter);
+  size_t numWrites = action->__writeset.size();  
   for (uint32_t i = 0; i < numWrites; ++i) {
     
     // Find which concurrency control thread is in charge of this key. Write out
     // the threadId and change the combinedHash bitmask appropriately.
-      action->writeset[i].threadId = 0;
+      action->__writeset[i].threadId = 0;
     uint32_t threadId = 
-      CompositeKey::HashKey(&action->writeset[i]) % 
+      CompositeKey::HashKey(&action->__writeset[i]) % 
       MVScheduler::NUM_CC_THREADS;
-    action->writeset[i].threadId = threadId;
-    action->combinedHash |= (((uint64_t)1)<<threadId);
+    action->__writeset[i].threadId = threadId;
+    action->__combinedHash |= (((uint64_t)1)<<threadId);
   }
 }
 
@@ -250,27 +250,27 @@ void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
     Recycle();
   }
 
-  size_t numReads = action->readset.size();
+  size_t numReads = action->__readset.size();
   for (uint32_t i = 0; i < numReads; ++i) {
-    if (action->readset[i].threadId == threadId) {
-      MVRecord *ref = this->partitions[action->readset[i].tableId]->
-        GetMVRecord(action->readset[i], action->version);
-      action->readset[i].value = ref;
+    if (action->__readset[i].threadId == threadId) {
+      MVRecord *ref = this->partitions[action->__readset[i].tableId]->
+        GetMVRecord(action->__readset[i], action->__version);
+      action->__readset[i].value = ref;
     }
   }
 
-  size_t numWrites = action->writeset.size();
+  size_t numWrites = action->__writeset.size();
   for (uint32_t i = 0; i < numWrites; ++i) {
-    if (action->writeset[i].threadId == threadId) {
-      this->partitions[action->writeset[i].tableId]->
-        WriteNewVersion(action->writeset[i], action, action->version);
+    if (action->__writeset[i].threadId == threadId) {
+      this->partitions[action->__writeset[i].tableId]->
+        WriteNewVersion(action->__writeset[i], action, action->__version);
     }
   }
 }
 
 
 inline void MVScheduler::ScheduleTransaction(Action *action, uint64_t version) {
-  if ((action->combinedHash & txnMask) != 0) {
+  if ((action->__combinedHash & txnMask) != 0) {
     ProcessWriteset(action, version);
   }
 }

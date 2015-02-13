@@ -2,7 +2,7 @@
 #define         MV_TABLE_H_
 
 #include <mv_record.h>
-#include <action.h>
+#include <mv_action.h>
 
 
 /*

@@ -248,8 +248,8 @@ MVSmallBank::LoadCustomerRange::LoadCustomerRange(uint64_t start, uint64_t end)
     balances.push_back(savings);
     balances.push_back(checking);
 
-    AddWriteKey(SAVINGS, i);
-    AddWriteKey(CHECKING, i);
+    AddWriteKey(SAVINGS, i, false);
+    AddWriteKey(CHECKING, i, false);
   }
 }
 
@@ -314,7 +314,7 @@ MVSmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount,
 }
 
 bool MVSmallBank::TransactSaving::Run() {
-  assert(writeset.size() == 1);
+  assert(__writeset.size() == 1);
   SmallBankRecord *oldSavings = (SmallBankRecord*)ReadWrite(0);
   SmallBankRecord *savings = (SmallBankRecord*)GetWriteRef(0);
   savings->amount = oldSavings->amount + this->amount;
@@ -332,7 +332,7 @@ MVSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer, uint64_t toCustomer,
 }
 
 bool MVSmallBank::Amalgamate::Run() {
-  assert(writeset.size() == 3);
+  assert(__writeset.size() == 3);
   SmallBankRecord *fromChecking, *fromSavings, *toChecking;
   long sum = 0;
   sum += ((SmallBankRecord*)ReadWrite(0))->amount;
@@ -359,8 +359,8 @@ MVSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount,
 }
 
 bool MVSmallBank::WriteCheck::Run() {
-  assert(readset.size() == 2);
-  assert(writeset.size() == 1);
+  assert(__readset.size() == 2);
+  assert(__writeset.size() == 1);
   long sum = 0;
   sum += ((SmallBankRecord*)Read(0))->amount;
   sum += ((SmallBankRecord*)ReadWrite(0))->amount;

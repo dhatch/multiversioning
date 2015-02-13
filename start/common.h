@@ -2,7 +2,9 @@
 #define COMMON_H_
 
 #include <set>
-#include <small_bank.h>
+#include <concurrent_queue.h>
+#include <table.h>
+#include <record_generator.h>
 
 #define RMW_COUNT 2
 #define PROFILE 0
@@ -46,10 +48,10 @@ static uint64_t GenUniqueKey(RecordGenerator *gen,
         }
 }
 
-static void GenRandomSmallBank(char *rec)
-{
-        int len = METADATA_SIZE/4;
+static void GenRandomSmallBank(char *rec, int len)
+{        
         int *temp = (int*)rec;
+        len = len/4;
         for (int i = 0; i < len; ++i) {
                 temp[i] = rand();
         }

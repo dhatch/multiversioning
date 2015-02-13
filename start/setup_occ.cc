@@ -99,7 +99,7 @@ OCCAction* generate_small_bank_occ_action(uint64_t numRecords, bool read_only)
         else 
                 mod = 5;        
         temp_buf = (char*)malloc(METADATA_SIZE);        
-        GenRandomSmallBank(temp_buf);
+        GenRandomSmallBank(temp_buf, METADATA_SIZE);
         txn_type = rand() % mod;
         if (txn_type == 0) {             // Balance
                 customer = (uint64_t)(rand() % numRecords);

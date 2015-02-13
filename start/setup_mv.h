@@ -1,11 +1,8 @@
 #ifndef SETUP_MV_H_
 #define SETUP_MV_H_
 
-#include <mv_action.h>
 #include <config.h>
-#include <common.h>
 
-
-
+extern void do_mv_experiment(MVConfig config);
 
 #endif // SETUP_MV_H_
