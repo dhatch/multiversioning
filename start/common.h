@@ -26,7 +26,7 @@ static TableConfig create_table_config(uint64_t table_id, uint64_t num_buckets,
                                        int start_cpu, int end_cpu,
                                        uint64_t free_list_sz, uint64_t value_sz)
 {
-        TableConfig config{};
+        TableConfig config;
         config.tableId = table_id;
         config.numBuckets = num_buckets;
         config.startCpu = start_cpu;

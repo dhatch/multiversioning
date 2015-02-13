@@ -73,10 +73,10 @@ namespace LockingSmallBank {
   class Balance : public EagerAction {
   private:
     long totalBalance;
-    //    char timestamp[248];
+    char *meta_data;
   
   public:
-    Balance(uint64_t customerId, uint64_t numAccounts, char *time);
+    Balance(uint64_t customerId, uint64_t numAccounts, char *meta);
 
     virtual bool Run();
   };
@@ -84,44 +84,44 @@ namespace LockingSmallBank {
   class DepositChecking : public EagerAction {
   private:
     long amount;
-    //    char timestamp[248];
+    char *meta_data;
 
   public:
     DepositChecking(uint64_t customer, long amount, uint64_t numAccounts, 
-                    char *time);
+                    char *meta);
     virtual bool Run();
   };
 
   class TransactSaving : public EagerAction {    
   private:
     long amount;
-    //    char timestamp[248];
+    char *meta_data;
 
   public:
     TransactSaving(uint64_t customer, long amount, uint64_t numAccounts, 
-                   char *time);
+                   char *meta);
     virtual bool Run();
   };
 
   class Amalgamate : public EagerAction {
   private:
-    //    char timestamp[248];
+          char *meta_data;
 
   public:
     Amalgamate(uint64_t fromCustomer, uint64_t toCustomer, 
                uint64_t numAccounts,
-               char *time);
+               char *meta);
     virtual bool Run();
   };
   
   class WriteCheck : public EagerAction {
   private:
     long amount;
-    //    char timestamp[248];
+    char *meta_data;
     
   public:
     WriteCheck(uint64_t customer, long amount, uint64_t numAccounts, 
-               char *time);
+               char *meta);
     virtual bool Run();
   };  
 };

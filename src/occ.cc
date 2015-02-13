@@ -18,8 +18,7 @@ void OCCWorker::Init()
  */
 void OCCWorker::StartWorking()
 {
-        OCCActionBatch input, output;
-
+        OCCActionBatch input;
         while (true) {
                 config.num_completed = 0;
                 input = config.inputQueue->DequeueBlocking();
@@ -54,9 +53,9 @@ uint64_t OCCWorker::NumCompleted()
 void OCCWorker::RunSingle(OCCAction *action)
 {
         uint64_t cur_tid;
-        bool no_conflicts;
         occ_txn_status status;
         volatile uint32_t epoch;
+        
         barrier();
         PrepareWrites(action);
         PrepareReads(action);
@@ -150,8 +149,8 @@ void OCCWorker::PrepareReads(OCCAction *action)
 {
         uint32_t num_reads, table_id;
         uint64_t key;
-        volatile uint64_t old_tid;
         void *value;
+        
         num_reads = action->readset.size();
         for (uint32_t i = 0; i < num_reads; ++i) {
                 table_id = action->readset[i].tableId;
@@ -188,13 +187,11 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
 void OCCWorker::PrepareWrites(OCCAction *action)
 {
         uint32_t num_writes, table_id;
-        uint64_t key;
         void *rec;
-        void *value;
+                
         num_writes = action->writeset.size();
         for (uint32_t i = 0; i < num_writes; ++i) {
                 table_id = action->writeset[i].tableId;
-                key = action->writeset[i].key;
                 rec = bufs->GetRecord(table_id);
                 action->writeset[i].value = rec;
         }
@@ -315,6 +312,8 @@ void RecordBuffers::LinkBufs(struct RecordBuffy *start, uint32_t buf_size,
         uint32_t offset, i;
         char *cur;
         struct RecordBuffy *temp;
+
+        assert(num_bufs > 0);
         offset = sizeof(struct RecordBuffy*) + buf_size;
         cur = (char*)start;
         for (i = 0; i < num_bufs; ++i) {
@@ -345,7 +344,6 @@ void* RecordBuffers::AllocBufs(struct RecordBuffersConfig conf)
 RecordBuffers::RecordBuffers(struct RecordBuffersConfig conf)
 {
         uint32_t i;
-        uint64_t total_size;
         char *temp;
         temp = (char *)alloc_mem(conf.num_tables*sizeof(struct RecordBuffy*),
                                  conf.cpu);

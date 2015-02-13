@@ -101,13 +101,15 @@ void RMWOCCAction::AccumulateValues()
 void RMWOCCAction::DoWrites()
 {
         uint64_t counter;
-        uint32_t i, num_writes;
+        uint32_t i, j, num_writes, num_fields;
         uint64_t *field_ptr;
+        num_fields = recordSize/sizeof(uint64_t);
         counter = __total;
         num_writes = writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 field_ptr = (uint64_t*)writeset[i].GetValue();
-                field_ptr[i] = counter+i;
+                for (j = 0; j < num_fields; ++j) 
+                        field_ptr[j] = counter+j;
         }
 }
 

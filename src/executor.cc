@@ -20,7 +20,6 @@ inline void PendingActionList::EnqueuePending(Action *action) {
 
   assert(freeList != NULL);
   assert(action != NULL);
-  assert(size >= 0);
 
   assert(this->seen.find(action) == this->seen.end());
   this->seen.insert(action);
@@ -120,7 +119,7 @@ inline uint32_t PendingActionList::Size() {
   return this->size;
 }
 
-Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) {
+Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) {        
   this->config = cfg;
 }
 
@@ -174,7 +173,7 @@ void Executor::LeaderFunction() {
 
 void Executor::StartWorking() {
   uint32_t epoch = 1;
-  ActionBatch dummy;
+  //  ActionBatch dummy;
   while (true) {
     // Process the new batch of transactions
     

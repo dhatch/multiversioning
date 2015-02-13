@@ -43,7 +43,7 @@ occ_txn_status OCCSmallBank::DepositChecking::Run()
                 (SmallBankRecord*)readset[0].GetValue();
         long oldBalance = checkingBalance->amount;
         SmallBankRecord *newBalance = (SmallBankRecord*)writeset[0].GetValue();
-        newBalance->amount += this->amount;
+        newBalance->amount = oldBalance + this->amount;
         memcpy(newBalance->meta_data, meta_data, METADATA_SIZE);
         status.validation_pass = true;
         status.commit = true;
@@ -139,9 +139,10 @@ occ_txn_status OCCSmallBank::WriteCheck::Run()
 
 
 LockingSmallBank::Balance::Balance(uint64_t customer, uint64_t numAccounts, 
-                                   char *time) {
+                                   char *meta)
+{
   this->totalBalance = 0;
-  // memcpy(this->timestamp, time, 248);
+  this->meta_data = meta;
   AddReadKey(CHECKING, customer, numAccounts);
   AddReadKey(SAVINGS, customer, numAccounts);
 }
@@ -156,10 +157,10 @@ bool LockingSmallBank::Balance::Run() {
 LockingSmallBank::DepositChecking::DepositChecking(uint64_t customer,
                                                    long amount,
                                                    uint64_t numAccounts,
-                                                   char *time) {
-  // memcpy(this->timestamp, time, 248);
-  this->amount = amount;
-  AddWriteKey(CHECKING, customer,numAccounts);
+                                                   char *meta) {
+        this->meta_data = meta;
+        this->amount = amount;
+        AddWriteKey(CHECKING, customer,numAccounts);
 }
 
 bool LockingSmallBank::DepositChecking::Run() {
@@ -172,27 +173,26 @@ bool LockingSmallBank::DepositChecking::Run() {
 LockingSmallBank::TransactSaving::TransactSaving(uint64_t customer,
                                                  long amount,
                                                  uint64_t numAccounts,
-                                                 char *time) {
-  this->amount = 0;
-  // memcpy(this->timestamp, time, 248);
-  AddWriteKey(SAVINGS, customer, numAccounts);
+                                                 char *meta) {
+        this->meta_data = meta;
+        this->amount = amount;
+        AddWriteKey(SAVINGS, customer, numAccounts);
 }
 
 bool LockingSmallBank::TransactSaving::Run() {
   SmallBankRecord *savings = (SmallBankRecord*)(WriteRef(0));
   savings->amount += this->amount;
-  //  // memcpy(savings->timestamp, this->timestamp, 248);
   return true;
 }
 
 LockingSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer,
                                          uint64_t toCustomer,
                                          uint64_t numAccounts,
-                                         char *time) {
-  // // memcpy(this->timestamp, time, 248);
-  AddWriteKey(CHECKING, fromCustomer, numAccounts);
-  AddWriteKey(SAVINGS, fromCustomer, numAccounts);
-  AddWriteKey(CHECKING, toCustomer, numAccounts);
+                                         char *meta) {
+        this->meta_data = meta;
+        AddWriteKey(CHECKING, fromCustomer, numAccounts);
+        AddWriteKey(SAVINGS, fromCustomer, numAccounts);
+        AddWriteKey(CHECKING, toCustomer, numAccounts);
 }
 
 bool LockingSmallBank::Amalgamate::Run() {
@@ -216,25 +216,25 @@ bool LockingSmallBank::Amalgamate::Run() {
 
 LockingSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount,
                                          uint64_t numAccounts,
-                                         char *time) {
-  this->amount = amount;
-  // // memcpy(this->timestamp, time, 248);
-  AddReadKey(SAVINGS, customer, numAccounts);
-  AddWriteKey(CHECKING, customer, numAccounts);
+                                         char *meta) {
+        this->amount = amount;
+        this->meta_data = meta;
+        AddReadKey(SAVINGS, customer, numAccounts);
+        AddWriteKey(CHECKING, customer, numAccounts);
 }
 
 bool LockingSmallBank::WriteCheck::Run() {
-  long sum = 0;
-  sum += ((SmallBankRecord*)WriteRef(0))->amount;
-  sum += ((SmallBankRecord*)ReadRef(0))->amount;
-  sum -= amount;
+        long sum = 0;
+        sum += ((SmallBankRecord*)WriteRef(0))->amount;
+        sum += ((SmallBankRecord*)ReadRef(0))->amount;
+        sum -= amount;
  
-  if (sum < 0) {
-    amount += 1;
-  }
-  ((SmallBankRecord*)WriteRef(0))->amount -= amount;
-  // // memcpy(((SmallBankRecord*)WriteRef(0))->timestamp, this->timestamp, 248);
-  return true;
+        if (sum < 0) {
+                amount += 1;
+        }
+        ((SmallBankRecord*)WriteRef(0))->amount -= amount;
+        // // memcpy(((SmallBankRecord*)WriteRef(0))->timestamp, this->timestamp, 248);
+        return true;
 }
 
 MVSmallBank::LoadCustomerRange::LoadCustomerRange(uint64_t start, uint64_t end)
@@ -308,9 +308,9 @@ bool MVSmallBank::DepositChecking::Run() {
 MVSmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount, 
                                             char *meta_data)
   : Action() {
-  this->amount = 0;
-  this->meta_data = meta_data;
-  AddWriteKey(SAVINGS, customer, true);
+        this->amount = amount;
+        this->meta_data = meta_data;
+        AddWriteKey(SAVINGS, customer, true);
 }
 
 bool MVSmallBank::TransactSaving::Run() {

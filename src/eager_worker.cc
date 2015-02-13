@@ -174,11 +174,11 @@ EagerWorker::WorkerFunction() {
     for (uint32_t i = 0; i < batch.batchSize; ++i) {
       // Ensure we haven't exceeded threshold of max deferred txns. If we have, 
       // exec pending txns so we get below the threshold.
-      if (m_num_elems < config.maxPending) {
+            if ((uint32_t)m_num_elems < config.maxPending) {
         TryExec(batch.batch[i]);
       }
       else {
-        while (m_num_elems >= config.maxPending) {
+              while ((uint32_t)m_num_elems >= config.maxPending) {
           CheckReady();
         }
       }

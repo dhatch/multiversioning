@@ -51,11 +51,11 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu, int worker_start, i
   char *recordData = (char*)alloc_interleaved_all(recordDataSize);
   //char *recordData = (char*)alloc_mem(recordDataSize, recordCpu);
 
-  //  char *recordData = (char*)alloc_interleaved_cpu(recordDataSize, worker_start, worker_end);
+  //  char *recordData = (char*)alloc_interleaved(recordDataSize, worker_start, worker_end);
   assert(recordData != NULL);
   memset(recordData, 0xA3, recordDataSize);
   std::cout << "Done initializing record data\n";
-  uint64_t endIndex = numRecords-1;
+  //  uint64_t endIndex = numRecords-1;
   for (uint64_t i = 0; i < numRecords; ++i) {
     data[i].allocLink = &data[i+1];
     data[i].value = (Record*)(&recordData[i*recordSize]);

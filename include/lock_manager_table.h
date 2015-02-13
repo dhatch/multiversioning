@@ -387,10 +387,6 @@ class LockManagerTable {
     unlock(latch);
   }
   */
-  
-  uint64_t TableSize(uint32_t tableId) {
-    uint64_t tblSz = tableSizes[tableId];
-  }
 };
 
 #endif          // LOCK_MANAGER_TABLE_H_

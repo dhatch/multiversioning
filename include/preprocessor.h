@@ -123,8 +123,8 @@ class MVScheduler : public Runnable {
 
  protected:
         virtual void StartWorking();
-        void ProcessWriteset(Action *action, uint64_t timestamp);
-        void ScheduleTransaction(Action *action, uint64_t version);     
+        void ProcessWriteset(Action *action);
+        void ScheduleTransaction(Action *action);
         //    void Leader(uint32_t epoch);
         //    void Subordinate(uint32_t epoch);
     virtual void Init();
@@ -132,6 +132,8 @@ class MVScheduler : public Runnable {
  public:
     
     void* operator new (std::size_t sz, int cpu) {
+            return alloc_mem(sz, cpu);
+            /*
       int numa_node = numa_node_of_cpu(cpu);
       numa_set_strict(1);
       void *buf = numa_alloc_onnode(sz, numa_node);
@@ -146,6 +148,7 @@ class MVScheduler : public Runnable {
       else {
         return buf;
       }
+            */
     }
 
         static uint32_t NUM_CC_THREADS;

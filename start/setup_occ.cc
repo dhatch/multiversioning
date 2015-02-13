@@ -62,8 +62,9 @@ OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
 {
         uint32_t num_reads, num_writes, num_rmws;
         int flip;
-        flip = rand() % 100;
-        if (flip > config.read_pct) {
+        flip = (uint32_t)rand() % 100;
+        assert(flip >= 0 && flip < 100);
+        if (flip < config.read_pct) {
                 num_reads = config.read_txn_size;
                 num_writes = 0;
                 num_rmws = 0;
@@ -84,7 +85,7 @@ OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
                 std::cerr << "Invalid experiment!\n";
                 assert(false);
         }
-        return gen_occ_rmw_mix(num_reads, num_writes, num_rmws, gen);
+        return gen_occ_rmw_mix(num_writes, num_rmws, num_reads, gen);
 }
 
 OCCAction* generate_small_bank_occ_action(uint64_t numRecords, bool read_only)
@@ -116,7 +117,6 @@ OCCAction* generate_small_bank_occ_action(uint64_t numRecords, bool read_only)
                                                        temp_buf);
         } else if (txn_type == 3) {        // Amalgamate
                 from_customer = (uint64_t)(rand() % numRecords);
-                to_customer;
                 do {
                         to_customer = (uint64_t)(rand() % numRecords);
                 } while (to_customer == from_customer);
@@ -151,10 +151,12 @@ OCCActionBatch** setup_occ_input(OCCConfig config, uint32_t iters)
 
 OCCActionBatch* setup_occ_single_input(OCCConfig config)
 {
-        RecordGenerator *gen = NULL;
+        RecordGenerator *gen;
         OCCActionBatch *ret;
-        uint32_t txns_per_thread, remainder, i, j;
+        uint32_t txns_per_thread, remainder, i;
         OCCAction **actions;
+
+        gen = NULL;
         if (config.distribution == 0) 
                 gen = new UniformGenerator(config.numRecords);
         else if (config.distribution == 1) 
@@ -206,6 +208,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                         tables,
                         is_leader,
                         epoch_ptr,
+                        0,
                         epoch_threshold,
                         false,
                 };
@@ -287,7 +290,7 @@ Table** setup_small_bank_occ_tables(OCCConfig config)
                 create_table_config(CHECKING, 1000000, 0,
                                     (int)(config.numThreads-1), 1000000,
                                     OCC_RECORD_SIZE(sizeof(SmallBankRecord)));
-        tables = (Table**)malloc(sizeof(Table*)*2);    
+        tables = (Table**)malloc(sizeof(Table*)*num_tables);    
         tables[SAVINGS] = new(0) Table(savings_config);
         tables[CHECKING] = new(0) Table(checking_config);
         memset(temp, 0, OCC_RECORD_SIZE(sizeof(SmallBankRecord)));
@@ -362,8 +365,7 @@ uint64_t get_completed_count(OCCWorker **workers, uint32_t num_workers,
 }
 
 uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
-                            OCCWorker **workers, uint32_t num_workers,
-                            uint64_t threshold, OCCActionBatch *input_batches)
+                            uint32_t num_workers)
 {        
         uint32_t i;
         uint64_t num_completed = 0;
@@ -395,9 +397,8 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                                  uint32_t num_batches,
                                  OCCConfig config)
 {
-        timespec start_time, end_time, elapsed_time;
+        timespec start_time, end_time;
         uint32_t i, j;
-        uint64_t num_completed;
         struct occ_result result;
         for (i = 0; i < config.numThreads; ++i)
                 workers[i]->Run();
@@ -412,9 +413,7 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                 for (j = 0; j < config.numThreads; ++j) 
                         inputQueues[j]->EnqueueBlocking(inputBatches[i+1][j]);
         barrier();
-        result.num_txns = wait_to_completion(outputQueues, workers,
-                                             config.numThreads, config.numTxns,
-                                             inputBatches[1]);
+        result.num_txns = wait_to_completion(outputQueues, config.numThreads);
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
         barrier();

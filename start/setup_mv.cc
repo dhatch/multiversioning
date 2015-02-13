@@ -74,7 +74,9 @@ static MVSchedulerConfig SetupSched(int cpuNumber,
                                     uint32_t numRecycles,
                                     SimpleQueue<ActionBatch> *inputQueue,
                                     uint32_t numOutputs,
-                                    SimpleQueue<ActionBatch> *outputQueues) {
+                                    SimpleQueue<ActionBatch> *outputQueues,
+                                    int worker_start,
+                                    int worker_end) {
         assert(inputQueue != NULL && outputQueues != NULL);
         uint32_t subCount;
         SimpleQueue<ActionBatch> **pubQueues, **subQueues;
@@ -141,6 +143,8 @@ static MVSchedulerConfig SetupSched(int cpuNumber,
                 pubQueues,
                 subQueues,
                 queueArray,
+                worker_start,
+                worker_end,
         };
         return cfg;
 }
@@ -197,7 +201,7 @@ static SimpleQueue<RecordList>* SetupGCQueues(uint32_t cpuNumber,
         char *data = (char*)blob + metaDataSz;
 
         // Use for computing appropriate offsets
-        uint32_t qSz = sizeof(SimpleQueue<RecordList>);
+        //        uint32_t qSz = sizeof(SimpleQueue<RecordList>);
         uint32_t singleDataSz = CACHE_LINE*RECYCLE_QUEUE_SIZE;
   
         // Initialize queues
@@ -206,8 +210,7 @@ static SimpleQueue<RecordList>* SetupGCQueues(uint32_t cpuNumber,
       
                         uint32_t queueOffset = (i*queuesPerTable + j);
                         uint32_t dataOffset = queueOffset*singleDataSz;
-
-                        SimpleQueue<RecordList> *temp = new (&queueData[queueOffset]) 
+                        new (&queueData[queueOffset]) 
                                 SimpleQueue<RecordList>(data + dataOffset, RECYCLE_QUEUE_SIZE);        
                 }
         }
@@ -324,6 +327,7 @@ static SimpleQueue<T>* SetupQueuesMany(uint32_t numEntries, uint32_t numQueues, 
   size_t metaDataSz = sizeof(SimpleQueue<T>)*numQueues; // SimpleQueue structs
   size_t queueDataSz = CACHE_LINE*numEntries*numQueues; // queue data
   size_t totalSz = metaDataSz+queueDataSz;
+  //SimpleQueue<T> *queue_array = alloc_mem(sizeof(SimpleQueue<T>)*numQueues);
   void *data = alloc_mem(totalSz, cpu);
   memset(data, 0x00, totalSz);
 
@@ -333,7 +337,6 @@ static SimpleQueue<T>* SetupQueuesMany(uint32_t numEntries, uint32_t numQueues, 
 
   // Initialize queue structs
   for (uint32_t i = 0; i < numQueues; ++i) {
-    SimpleQueue<T> *temp = 
       new (&queues[i]) SimpleQueue<T>(&queueData[dataDelta*i], numEntries);
   }
   return queues;
@@ -346,7 +349,8 @@ static MVScheduler** SetupSchedulers(int numProcs,
                                      size_t allocatorSize, 
                                      uint32_t numTables,
                                      size_t tableSize, 
-                                     SimpleQueue<MVRecordList> ***gcRefs_OUT) {  
+                                     SimpleQueue<MVRecordList> ***gcRefs_OUT,
+                                     int worker_start, int worker_end) {  
         
   size_t partitionChunk = tableSize/numProcs;
   size_t *tblPartitionSizes = (size_t*)malloc(numTables*sizeof(size_t));
@@ -372,7 +376,8 @@ static MVScheduler** SetupSchedulers(int numProcs,
                                                     numOutputs,
                                                     leaderInputQueue,
                                                     numOutputs,
-                                                    leaderOutputQueues);
+                                                    leaderOutputQueues,
+                                                    worker_start, worker_end);
 
   schedArray[0] = 
     new (globalLeaderConfig.cpuNumber) MVScheduler(globalLeaderConfig);
@@ -391,7 +396,8 @@ static MVScheduler** SetupSchedulers(int numProcs,
                                             numOutputs,
                                             inputQueue, 
                                             1,
-                                            outputQueue);
+                                            outputQueue, worker_start,
+                                            worker_end);
       schedArray[i] = new (config.cpuNumber) MVScheduler(config);
       gcRefs_OUT[i] = config.recycleQueues;
       localLeaderConfig = config;
@@ -406,7 +412,8 @@ static MVScheduler** SetupSchedulers(int numProcs,
                                                numOutputs,
                                                inputQueue, 
                                                1,
-                                               outputQueue);
+                                               outputQueue, worker_start,
+                                               worker_end);
       schedArray[i] = new (subConfig.cpuNumber) MVScheduler(subConfig);
       gcRefs_OUT[i] = subConfig.recycleQueues;
     }
@@ -456,7 +463,6 @@ static Action* generate_small_bank_action(uint32_t num_records, bool read_only)
                                                       temp_buf);
         } else if (txn_type == 3) {
                 from_customer = (uint64_t)(rand() % num_records);
-                to_customer;
                 do {
                         to_customer = (uint64_t)(rand() % num_records);
                 } while (to_customer == from_customer);
@@ -486,7 +492,7 @@ static Action* generate_single_rmw_action(RecordGenerator *generator,
         uint64_t key;
         CompositeKey mv_key(true);
         std::set<uint64_t> seen_keys;
-        action = new RMWAction();
+        action = new RMWAction((uint64_t)rand());
         for (i = 0; i < num_writes; ++i) {
                 key = GenUniqueKey(generator, &seen_keys);
                 mv_key = create_mv_key(0, key, false);
@@ -513,8 +519,9 @@ static Action* generate_rmw_action(RecordGenerator *gen, MVConfig config)
         uint32_t num_reads, num_rmws, num_writes;
         int flip;
         assert(RMW_COUNT <= config.txnSize);
-        flip = rand() % 100;
-        if (flip > config.read_pct) {
+        flip = (uint32_t)rand() % 100;
+        assert(flip >= 0 && flip < 100);
+        if (flip < config.read_pct) {
                 num_writes = 0;
                 num_rmws = 0;
                 num_reads = config.read_txn_size;
@@ -529,7 +536,7 @@ static Action* generate_rmw_action(RecordGenerator *gen, MVConfig config)
         } else if (config.experiment == 2) {
                 num_writes = config.txnSize;
                 num_rmws = 0;
-                num_reads = 0;               
+                num_reads = 0;
         }
         return generate_single_rmw_action(gen, num_writes, num_rmws, num_reads);
 }
@@ -689,8 +696,10 @@ static void write_results(MVConfig config, timespec elapsed_time)
         } else if (config.experiment == 1) {
                 result_file << "8r2rmw ";
         } else if (config.experiment == 2) {
+                result_file << "5w ";
+        } else if (config.experiment < 5) {
                 result_file << "small_bank ";
-        }
+        }        
         if (config.distribution == 0) {
                 result_file << "uniform";
         } else if (config.distribution == 1) {
@@ -775,7 +784,10 @@ static MVScheduler** setup_scheduler_threads(MVConfig config,
         uint64_t stickies_per_thread;
         uint32_t num_tables;
         MVScheduler **schedulers;
-        
+        int worker_start, worker_end;
+
+        worker_start = (int)config.numCCThreads;
+        worker_end = worker_start + config.numWorkerThreads - 1;
         if (config.experiment < 3) {
                 stickies_per_thread = (((uint64_t)1)<<28);
                 num_tables = 1;
@@ -788,7 +800,9 @@ static MVScheduler** setup_scheduler_threads(MVConfig config,
         schedulers = SetupSchedulers(config.numCCThreads, sched_input,
                                      sched_output, config.numWorkerThreads,
                                      stickies_per_thread, num_tables,
-                                     config.numRecords, gc_queues);
+                                     config.numRecords, gc_queues,
+                                     worker_start,
+                                     worker_end);
         assert(schedulers != NULL);
         assert(*sched_input != NULL);
         assert(*sched_output != NULL);
@@ -807,11 +821,13 @@ static Executor** setup_executors(MVConfig config,
         Executor **execs;
         start_cpu = config.numCCThreads;
         queues_per_table = config.numWorkerThreads;
-        execs = SetupExecutors(config.numCCThreads, config.numWorkerThreads,
+        queues_per_cc_thread = config.numWorkerThreads;
+        execs = SetupExecutors(start_cpu, config.numWorkerThreads,
                                config.numCCThreads, queues_per_table,
                                sched_outputs, output_queue,
                                queues_per_cc_thread, gc_queues);
         std::cerr << "Done setting up executors!\n";
+        return execs;
 }
 
 void do_mv_experiment(MVConfig config)
@@ -836,7 +852,7 @@ void do_mv_experiment(MVConfig config)
         execThreads = setup_executors(config, schedOutputQueues, outputQueue,
                                       schedGCQueues);
         init_database(config, schedInputQueue, outputQueue, schedThreads,
-                         execThreads);
+                      execThreads);
         elapsed_time = run_experiment(schedInputQueue, outputQueue,
                                       input_placeholder);
         write_results(config, elapsed_time);

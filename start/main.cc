@@ -186,7 +186,6 @@ EagerActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads,
 
 EagerWorker** SetupLockThreads(SimpleQueue<EagerActionBatch> **inputQueue, 
                                SimpleQueue<EagerActionBatch> **outputQueue, 
-                               uint32_t allocatorSize, 
                                LockManager *mgr, 
                                int numThreads,
                                Table **tables) {
@@ -228,7 +227,6 @@ void LockingExperiment(LockingConfig config) {
   }
 
   // Setup the lock manager
-  LockManagerConfig cfg;
   LockManager *mgr = NULL;
   Table **tables = NULL;
   if (config.experiment < 2) {
@@ -236,7 +234,7 @@ void LockingExperiment(LockingConfig config) {
     *tableSizes = (uint64_t)config.numRecords;
     uint32_t numTables = 1;
     LockManagerConfig cfg = {
-      1,
+            numTables,
       tableSizes,
       0,
       (int)(config.numThreads-1),
@@ -336,7 +334,7 @@ void LockingExperiment(LockingConfig config) {
   std::cout << "Finished table init. \n";
 
   // Setup worker threads
-  EagerWorker **threads = SetupLockThreads(inputs, outputs, 256, mgr, 
+  EagerWorker **threads = SetupLockThreads(inputs, outputs, mgr, 
                                            config.numThreads,
                                            tables);
 

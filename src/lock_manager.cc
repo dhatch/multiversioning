@@ -16,8 +16,8 @@ LockManager::CheckWrite(struct TxnQueue *queue, struct EagerRecordInfo *dep) {
 }
 
 bool
-LockManager::CheckRead(struct TxnQueue *queue, struct EagerRecordInfo *dep) {
-    struct EagerRecordInfo *prev = dep->prev;
+LockManager::CheckRead(struct EagerRecordInfo *dep) {
+        //    struct EagerRecordInfo *prev = dep->prev;
     if (dep->prev != NULL && (dep->prev->is_write || 
                               !dep->prev->is_held)) {
         return false;
@@ -248,8 +248,8 @@ LockManager::Kill(EagerAction *txn, int cpu) {
 void
 LockManager::Unlock(EagerAction *txn, uint32_t cpu) {
 
-  struct EagerRecordInfo *prev;
-  struct EagerRecordInfo *next;
+        //  struct EagerRecordInfo *prev;
+        //  struct EagerRecordInfo *next;
     
   for (size_t i = 0; i < txn->writeset.size(); ++i) {
     table->Unlock(&txn->writeset[i], cpu);

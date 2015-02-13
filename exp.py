@@ -8,7 +8,7 @@ import clean
 
 fmt_locking = "build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --read_pct 0 --read_txn_size 10"
 
-fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size 10 --experiment {4} --record_size {7} --distribution {5} --theta {6} --read_pct 0 --read_txn_size 10"
+fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size 5 --experiment {4} --record_size {7} --distribution {5} --theta {6} --read_pct 0 --read_txn_size 10"
 
 fmt_occ = "build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 5 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 0 --read_txn_size 10"
 
@@ -282,12 +282,48 @@ def write_contended():
     result_dir = "results/rec_1000/write_only"
 #    locking_expt(result_dir, "locking_2r8w.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
     occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
-    mv_expt(result_dir, "mv_2r8w.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.9, 1000)
+
 
 def exp_0():
-    result_dir = "results/final/ycsb/1/"
-#    occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
-    occ_expt(result_dir, "mv_2r8w.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+    result_dir = "results/final/ycsb/0_0/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.0, 1000)
+    
+    result_dir = "results/final/ycsb/0_1/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
+
+    result_dir = "results/final/ycsb/0_2/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.0, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 2, 1, 0.0, 1000)
+
+    result_dir = "results/final/ycsb/7_0/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 0, 1, 0.7, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.7, 1000)
+    
+    result_dir = "results/final/ycsb/7_1/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 1, 1, 0.7, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.7, 1000)
+
+    result_dir = "results/final/ycsb/7_2/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.7, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 2, 1, 0.7, 1000)
+
+    result_dir = "results/final/ycsb/9_0/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.9, 1000)
+    
+    result_dir = "results/final/ycsb/9_1/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.9, 1000)
+
+    result_dir = "results/final/ycsb/9_2/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.9, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 2, 1, 0.9, 1000)
+
+
+
+    
 
 def write_uncontended():
     result_dir = "results/rec_1000/writes_uncontended"

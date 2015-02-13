@@ -37,7 +37,8 @@ class Table {
 
  public:
   void* operator new(std::size_t sz, int cpu) {
-          return malloc(sz);
+          return alloc_mem(sz, cpu);
+          //          return malloc(sz);
   }
 
   void SetInit() {

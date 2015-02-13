@@ -115,7 +115,7 @@ static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
 
 void MVScheduler::StartWorking() {
   std::cout << config.numRecycleQueues << "\n";
-  uint32_t epoch = 0;
+  uint32_t epoch = 1;
   while (true) {
     
     // Take an input batch
@@ -133,7 +133,8 @@ void MVScheduler::StartWorking() {
     uint32_t txnCounter = 0;
     for (uint32_t i = 0; i < curBatch.numActions; ++i) {
       uint64_t version = compute_version(epoch, txnCounter);
-      ScheduleTransaction(curBatch.actionBuf[i], version);
+      assert(version == curBatch.actionBuf[i]->__version);
+      ScheduleTransaction(curBatch.actionBuf[i]);
       txnCounter += 1;
       /*
       if (i % 1024 == 0) {
@@ -243,8 +244,8 @@ uint32_t MVScheduler::GetCCThread(CompositeKey key) {
  * to track the version of each record written by the transaction. The version
  * is equal to the transaction's timestamp.
  */
-void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
-
+void MVScheduler::ProcessWriteset(Action *action)
+{        
   while (alloc->Warning()) {
     //    std::cout << "Warning...\n";
     Recycle();
@@ -269,8 +270,8 @@ void MVScheduler::ProcessWriteset(Action *action, uint64_t timestamp) {
 }
 
 
-inline void MVScheduler::ScheduleTransaction(Action *action, uint64_t version) {
+inline void MVScheduler::ScheduleTransaction(Action *action) {
   if ((action->__combinedHash & txnMask) != 0) {
-    ProcessWriteset(action, version);
+    ProcessWriteset(action);
   }
 }

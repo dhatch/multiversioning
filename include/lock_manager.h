@@ -19,7 +19,7 @@ private:
     CheckWrite(struct TxnQueue *queue, struct EagerRecordInfo *dep);
 
     bool
-    CheckRead(struct TxnQueue *queue, struct EagerRecordInfo *dep);
+    CheckRead(struct EagerRecordInfo *dep);
 
     void
     AddTxn(struct TxnQueue *queue, struct EagerRecordInfo *dep);
