@@ -17,8 +17,6 @@ void* occ_composite_key::GetValue()
 void* occ_composite_key::StartRead()
 {
         volatile uint64_t *tid_ptr, tid;
-        uint64_t *temp;
-        temp = (uint64_t*)value;
         tid_ptr = (volatile uint64_t*)value;
         while (true) {
                 barrier();
@@ -28,7 +26,7 @@ void* occ_composite_key::StartRead()
                         break;
         }
         this->old_tid = tid;
-        return &temp[1];
+        return (void*)&tid_ptr[1];
 }
 
 bool occ_composite_key::FinishRead()
@@ -39,23 +37,26 @@ bool occ_composite_key::FinishRead()
         tid = *(volatile uint64_t*)value;
         barrier();
         is_valid = (tid == this->old_tid);
+        assert(!is_valid || !IS_LOCKED(tid));
         return is_valid;
 }
 
 uint64_t occ_composite_key::GetTimestamp()
 {
-        return old_tid;
+        return old_tid;        
 }
 
 bool occ_composite_key::ValidateRead()
 {
         assert(!IS_LOCKED(old_tid));
-        volatile uint64_t *version_ptr = (volatile uint64_t*)value;
+        volatile uint64_t *version_ptr;
+        volatile uint64_t cur_tid;
+        version_ptr = (volatile uint64_t*)value;
         barrier();
-        volatile uint64_t ver = *version_ptr;
+        cur_tid = *version_ptr;
         barrier();
-        if ((GET_TIMESTAMP(ver) != GET_TIMESTAMP(old_tid)) ||
-            (IS_LOCKED(ver) && !is_rmw))
+        if ((GET_TIMESTAMP(cur_tid) != old_tid) ||
+            (IS_LOCKED(cur_tid) && !is_rmw))
                 return false;
         return true;
 }
@@ -74,20 +75,20 @@ void OCCAction::AddWriteKey(uint32_t tableId, uint64_t key)
 
 bool RMWOCCAction::DoReads()
 {
-        bool success = true;
         uint32_t num_fields, num_reads, i, j;
         uint64_t *field_ptr, counter;
         counter = 0;
         num_fields = recordSize/sizeof(uint64_t);
         num_reads = readset.size();
-        for (i = 0; success == true && i < num_reads; ++i) {
+        for (i = 0; i < num_reads; ++i) {
                 field_ptr = (uint64_t*)readset[i].StartRead();
                 for (j = 0; j < num_fields; ++j)
                         counter += field_ptr[j];
-                success = readset[i].FinishRead();
+                if (readset[i].FinishRead() == false) 
+                        return false;
         }
         __total = counter;
-        return success;                
+        return true;                
 }
 
 void RMWOCCAction::AccumulateValues()

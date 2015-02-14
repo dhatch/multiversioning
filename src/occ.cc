@@ -57,40 +57,29 @@ void OCCWorker::RunSingle(OCCAction *action)
         uint64_t cur_tid;
         occ_txn_status status;
         volatile uint32_t epoch;
-        bool waited;
-        
+                
         barrier();
         PrepareWrites(action);
         PrepareReads(action);
         barrier();
-        //        while (true) {
-        barrier();
+        while (true) {
                 status = action->Run();
-                barrier();
                 if (status.validation_pass == false) {
-                        RecycleBufs(action);
-                        return;
+                        continue;
                 }
-                barrier();
-                waited = AcquireWriteLocks(action);
+                AcquireWriteLocks(action);
                 barrier();
                 epoch = *config.epoch_ptr;
                 barrier();
                 if (Validate(action)) {
-                        assert(!waited);
-                        if (status.commit) {
-                                cur_tid = ComputeTID(action, epoch);
-                                InstallWrites(action, cur_tid);
-                        } else {
-                                assert(false);
-                                ReleaseWriteLocks(action);
-                        }
+                        cur_tid = ComputeTID(action, epoch);
+                        InstallWrites(action, cur_tid);
                         fetch_and_increment(&config.num_completed);
-                        //              break;
+                        break;
                 } else {
                         ReleaseWriteLocks(action);
                 }
-                //        }
+        }
         RecycleBufs(action);
 }
 
@@ -103,13 +92,9 @@ uint64_t OCCWorker::ComputeTID(OCCAction *action, uint32_t epoch)
         uint64_t max_tid, cur_tid, key;
         uint32_t num_reads, num_writes, i, table_id;
         volatile uint64_t *value;
-        if (last_epoch < epoch) {
-                txn_counter = 1;
-                last_epoch = epoch;
-        } else {
-                txn_counter += 1;
-        }
-        max_tid = CREATE_TID(epoch, txn_counter);
+        max_tid = CREATE_TID(epoch, 0);
+        if (max_tid <  last_tid)
+                max_tid = last_tid;
         assert(!IS_LOCKED(max_tid));
         num_reads = action->readset.size();
         num_writes = action->writeset.size();
@@ -121,15 +106,18 @@ uint64_t OCCWorker::ComputeTID(OCCAction *action, uint32_t epoch)
         }
         for (i = 0; i < num_writes; ++i) {
                 table_id = action->writeset[i].tableId;
-                key = action->writeset[i].key;
+                key = action->writeset[i].key;                
                 value = (volatile uint64_t*)config.tables[table_id]->Get(key);
                 assert(IS_LOCKED(*value));
+                barrier();
                 cur_tid = GET_TIMESTAMP(*value);
+                barrier();
                 assert(!IS_LOCKED(cur_tid));
                 if (cur_tid > max_tid)
                         max_tid = cur_tid;
         }
         max_tid += 0x10;
+        last_tid = max_tid;
         assert(!IS_LOCKED(max_tid));
         return max_tid;
 }
@@ -183,6 +171,8 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
                 table_id = action->writeset[i].tableId;
                 key = action->writeset[i].key;
                 value = (void*)config.tables[table_id]->Get(key);
+                assert(IS_LOCKED(*(uint64_t*)value) == true);
+                assert(GET_TIMESTAMP(*(uint64_t*)value) < tid);
                 record_size = config.tables[table_id]->RecordSize() - sizeof(uint64_t);
                 memcpy(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
                        record_size);
@@ -243,12 +233,10 @@ inline bool OCCWorker::TryAcquireLock(volatile uint64_t *version_ptr)
         barrier();
         cmp_tid = *version_ptr;
         barrier();
-        cmp_tid = GET_TIMESTAMP(cmp_tid);
-        assert(!IS_LOCKED(cmp_tid));
+        if (IS_LOCKED(cmp_tid))
+                return false;        
         locked_tid = (cmp_tid | 1);
-        if (!IS_LOCKED(*version_ptr) && cmp_and_swap(version_ptr, cmp_tid, locked_tid))
-                return true;
-        return false;
+        return cmp_and_swap(version_ptr, cmp_tid, locked_tid);
 }
 
 /*
@@ -282,10 +270,11 @@ bool OCCWorker::AcquireSingleLock(volatile uint64_t *version_ptr)
  */
 bool OCCWorker::AcquireWriteLocks(OCCAction *action)
 {
-        bool waited = false;
+        bool waited;
         uint32_t num_writes, i, table_id;
         uint64_t key;
         volatile uint64_t *tid_ptr;
+        waited = false;
         num_writes = action->writeset.size();
         std::sort(action->writeset.begin(), action->writeset.end());
         for (i = 0; i < num_writes; ++i) {
@@ -311,10 +300,13 @@ void OCCWorker::ReleaseWriteLocks(OCCAction *action)
                 table_id = action->writeset[i].tableId;
                 key = action->writeset[i].key;
                 tid_ptr = (volatile uint64_t*)config.tables[table_id]->Get(key);
-                assert(IS_LOCKED(*tid_ptr));
-                old_tid = *tid_ptr & TIMESTAMP_MASK;
+                barrier();
+                old_tid = *tid_ptr;
+                barrier();
+                assert(IS_LOCKED(old_tid));
+                old_tid = GET_TIMESTAMP(old_tid);
                 assert(!IS_LOCKED(old_tid));
-                assert(GET_TIMESTAMP(old_tid) == GET_TIMESTAMP(*tid_ptr));
+                //                assert(GET_TIMESTAMP(old_tid) == GET_TIMESTAMP(*tid_ptr));
                 xchgq(tid_ptr, old_tid);
         }
 }

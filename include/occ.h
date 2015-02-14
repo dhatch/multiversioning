@@ -60,6 +60,7 @@ class OCCWorker : public Runnable {
  private:        
         OCCWorkerConfig config;
         uint64_t incr_timestamp;
+        uint64_t last_tid;
         uint32_t last_epoch;
         uint32_t txn_counter;
         RecordBuffers *bufs;

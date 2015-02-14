@@ -50,16 +50,16 @@ class Table {
     this->conf = conf;    
     
     // Initialize hash buckets
-    buckets = (TableRecord**)alloc_interleaved(conf.numBuckets*sizeof(TableRecord*),
-                                               conf.startCpu, 
-                                               conf.endCpu);
+    buckets = (TableRecord**)alloc_interleaved_all(conf.numBuckets*sizeof(TableRecord*));
+    //                                               conf.startCpu, 
+    //                                               conf.endCpu);
     memset(buckets, 0x0, conf.numBuckets*sizeof(TableRecord*));
 
     // Initialize freelist
     uint32_t recordSz = sizeof(TableRecord)+conf.valueSz;
-    char *data = (char*)alloc_interleaved(conf.freeListSz*recordSz,
-                                          conf.startCpu, 
-                                          conf.endCpu);
+    char *data = (char*)alloc_interleaved_all(conf.freeListSz*recordSz);
+                                          //                                        conf.startCpu, 
+                                          //                                          conf.endCpu);
     memset(data, 0x0, conf.freeListSz*recordSz);
     for (uint64_t i = 0; i < conf.freeListSz; ++i) {
       ((TableRecord*)(data + i*recordSz))->next = (TableRecord*)(data + (i+1)*recordSz);
@@ -68,7 +68,8 @@ class Table {
     freeList = (TableRecord*)data;
   }
 
-  virtual void Put(uint64_t key, void *value) {
+  virtual void Put(uint64_t key, void *value)
+  {
     uint64_t index = 
       Hash128to64(std::make_pair(conf.tableId, key)) % conf.numBuckets;
     TableRecord *rec = GetRecord();
