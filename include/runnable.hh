@@ -27,6 +27,8 @@ public:
     
   void
   Run();
+
+        void WaitInit();
 };
 
 #endif          //  RUNNABLE_HH_

@@ -57,11 +57,8 @@ void OCCWorker::RunSingle(OCCAction *action)
         uint64_t cur_tid;
         occ_txn_status status;
         volatile uint32_t epoch;
-                
-        barrier();
         PrepareWrites(action);
         PrepareReads(action);
-        barrier();
         while (true) {
                 status = action->Run();
                 if (status.validation_pass == false) {
@@ -174,6 +171,7 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
                 assert(IS_LOCKED(*(uint64_t*)value) == true);
                 assert(GET_TIMESTAMP(*(uint64_t*)value) < tid);
                 record_size = config.tables[table_id]->RecordSize() - sizeof(uint64_t);
+                assert(record_size == 1000);
                 memcpy(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
                        record_size);
                 xchgq(RECORD_TID_PTR(value), tid);

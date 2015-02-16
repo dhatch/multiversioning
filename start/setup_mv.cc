@@ -514,6 +514,23 @@ static Action* generate_single_rmw_action(RecordGenerator *generator,
         return action;
 }
 
+static Action* generate_readonly(RecordGenerator *gen, MVConfig config)
+{
+        mv_readonly *act;
+        int i;
+        uint64_t key;
+        CompositeKey mv_key;
+        std::set<uint64_t> seen_keys;
+        act = new mv_readonly();
+        for (i = 0; i < config.read_txn_size; ++i) {
+                key = GenUniqueKey(gen, &seen_keys);
+                mv_key = create_mv_key(0, key, false);
+                act->__readset.push_back(mv_key);
+                act->__combinedHash |= (((uint64_t)1)<<mv_key.threadId);
+        }
+        return act;
+}
+
 static Action* generate_rmw_action(RecordGenerator *gen, MVConfig config)
 {
         uint32_t num_reads, num_rmws, num_writes;
@@ -522,9 +539,7 @@ static Action* generate_rmw_action(RecordGenerator *gen, MVConfig config)
         flip = (uint32_t)rand() % 100;
         assert(flip >= 0 && flip < 100);
         if (flip < config.read_pct) {
-                num_writes = 0;
-                num_rmws = 0;
-                num_reads = config.read_txn_size;
+                return generate_readonly(gen, config);
         } else if (config.experiment == 0) {
                 num_writes = 0;
                 num_rmws = config.txnSize;
@@ -765,10 +780,14 @@ static void init_database(MVConfig config,
         pin_success = pin_thread(79);
         assert(pin_success == 0);
         init_batch = setup_loader_txns(config);
-        for (i = 0; i < config.numCCThreads; ++i)
+        for (i = 0; i < config.numCCThreads; ++i) {
                 sched_threads[i]->Run();
-        for (i = 0; i < config.numWorkerThreads; ++i)
+                sched_threads[i]->WaitInit();
+        }
+        for (i = 0; i < config.numWorkerThreads; ++i) {
                 exec_threads[i]->Run();
+                exec_threads[i]->WaitInit();                
+        }
         input_queue->EnqueueBlocking(init_batch);
         output_queue->DequeueBlocking();
         barrier();

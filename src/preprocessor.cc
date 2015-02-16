@@ -72,7 +72,7 @@ void MVActionHasher::ProcessAction(Action *action, uint32_t epoch,
 }
 
 void MVScheduler::Init() {
-  std::cout << "Called init on core: " << m_cpu_number << "\n";
+        //  std::cout << "Called init on core: " << m_cpu_number << "\n";
 
   this->partitions = 
     (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
@@ -103,8 +103,8 @@ MVScheduler::MVScheduler(MVSchedulerConfig config) :
   this->txnCounter = 0;
   this->txnMask = ((uint64_t)1<<config.threadId);
 
-  std::cout << "Thread id: " << config.threadId << "\n";
-  std::cout << "Mask: " << txnMask << "\n";
+  //  std::cout << "Thread id: " << config.threadId << "\n";
+  //  std::cout << "Mask: " << txnMask << "\n";
 
   //    this->alloc = NULL;
 }
@@ -114,7 +114,7 @@ static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
 }
 
 void MVScheduler::StartWorking() {
-  std::cout << config.numRecycleQueues << "\n";
+        //  std::cout << config.numRecycleQueues << "\n";
   uint32_t epoch = 1;
   while (true) {
     

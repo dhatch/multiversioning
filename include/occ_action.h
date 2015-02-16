@@ -17,6 +17,7 @@ struct occ_txn_status {
         bool commit;
 };
 
+
 class occ_composite_key {
  public:
         uint32_t tableId;
@@ -75,6 +76,15 @@ class OCCAction {
         void AddReadKey(uint32_t table_id, uint64_t key, bool is_rmw);
         void AddWriteKey(uint32_t table_id, uint64_t key);
 }; 
+
+class readonly_action : public OCCAction {
+ private:
+        char __reads[1000];
+                
+ public:
+        readonly_action();
+        virtual occ_txn_status Run();
+};
 
 class RMWOCCAction : public OCCAction {
  private:

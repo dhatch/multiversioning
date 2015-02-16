@@ -6,8 +6,9 @@
 uint64_t _MVRecord_::INFINITY = 0xFFFFFFFFFFFFFFFF;
 
 MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu, int worker_start, int worker_end) {
-  std::cout << "NUMA node: " << numa_node_of_cpu(cpu) << "\n";
-  
+        //  std::cout << "NUMA node: " << numa_node_of_cpu(cpu) << "\n";
+        worker_start += 1;
+        worker_end += 1;
   if (size < 1) {
     size = 1;
   }
@@ -35,9 +36,9 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu, int worker_start, i
   uint64_t numRecords = size/sizeof(MVRecord);
   
   uint64_t recordDataSize = recordSize*numRecords;
-  std::cout << "Record size: " << recordSize << "\nRecord data size: " << recordDataSize << "\n";
-  std::cout << "Worker start:" << worker_start << " Worker end: " << worker_end << "\n";
-  std::cout << "Cpus: " << numa_num_configured_cpus() << "\n";
+  //  std::cout << "Record size: " << recordSize << "\nRecord data size: " << recordDataSize << "\n";
+  //  std::cout << "Worker start:" << worker_start << " Worker end: " << worker_end << "\n";
+  //  std::cout << "Cpus: " << numa_num_configured_cpus() << "\n";
   //  char *recordData = NULL;
   //  int cntr = 0;
   //  while (recordData == NULL) {
@@ -54,7 +55,7 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu, int worker_start, i
   //  char *recordData = (char*)alloc_interleaved(recordDataSize, worker_start, worker_end);
   assert(recordData != NULL);
   memset(recordData, 0xA3, recordDataSize);
-  std::cout << "Done initializing record data\n";
+  //  std::cout << "Done initializing record data\n";
   //  uint64_t endIndex = numRecords-1;
   for (uint64_t i = 0; i < numRecords; ++i) {
     data[i].allocLink = &data[i+1];

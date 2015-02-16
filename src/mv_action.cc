@@ -84,6 +84,26 @@ bool InsertAction::Run()
         return true;
 }
 
+mv_readonly::mv_readonly()
+{
+        __readonly = true;
+}
+
+bool mv_readonly::Run()
+{
+        uint32_t i, j, num_reads;
+        assert(__readonly == true);
+        num_reads = __readset.size();
+        for (i = 0; i < num_reads; ++i) {
+                char *read_ptr = (char*)Read(i);
+                for (j = 0; j < 10; ++j) {
+                        uint32_t *write_p = (uint32_t*)&__reads[j*100];
+                        *write_p += *((uint32_t*)&read_ptr[j*100]);
+                }                
+        }
+        return true;
+}
+
 RMWAction::RMWAction(uint64_t seed)
 {
         __total = seed;

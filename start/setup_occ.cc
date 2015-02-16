@@ -61,6 +61,20 @@ OCCAction* gen_occ_rmw_mix(uint32_t num_writes, uint32_t num_rmws,
         return action;
 }
 
+readonly_action* generate_readonly(OCCConfig config, RecordGenerator *gen)
+{
+        readonly_action *act;
+        int i;
+        uint64_t key;
+        std::set<uint64_t> seen_keys;
+        act = new readonly_action();
+        for (i = 0; i < config.read_txn_size; ++i) {
+                key = GenUniqueKey(gen, &seen_keys);
+                act->AddReadKey(0, key, false);
+        }
+        return act;
+}
+
 OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
 {
         uint32_t num_reads, num_writes, num_rmws;
@@ -68,9 +82,7 @@ OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
         flip = (uint32_t)rand() % 100;
         assert(flip >= 0 && flip < 100);
         if (flip < config.read_pct) {
-                num_reads = config.read_txn_size;
-                num_writes = 0;
-                num_rmws = 0;
+                return generate_readonly(config, gen);
         } else if (config.experiment == 0) {
                 num_reads = 0;
                 num_writes = 0;
@@ -421,7 +433,10 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         struct occ_result result;
         for (i = 0; i < config.numThreads; ++i)
                 workers[i]->Run();
+        for (i = 0; i < config.numThreads; ++i) 
+                workers[i]->WaitInit();                
         dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
+        std::cerr << "Num batches " << num_batches << "\n";
         std::cerr << "Done dry run\n";
         if (PROFILE)
                 ProfilerStart("occ.prof");

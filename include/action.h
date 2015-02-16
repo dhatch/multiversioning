@@ -15,6 +15,11 @@
 extern uint32_t NUM_CC_THREADS;
 extern uint64_t recordSize;
 
+struct ycsb_record {
+        char value[1000];
+};
+
+
 /*
 struct Record {
   Record *next;

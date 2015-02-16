@@ -47,8 +47,8 @@ MVTablePartition::MVTablePartition(uint64_t size,
   this->tableSlots = (MVRecord**)alloc_mem(sizeof(MVRecord*)*size, cpu);
   assert(this->tableSlots != NULL);
   memset(this->tableSlots, 0x0, sizeof(MVRecord*)*size); 
-  std::cout << "AHAHA\n";
-  std::cout << "asldkjfasdf\n";
+  //  std::cout << "AHAHA\n";
+  //  std::cout << "asldkjfasdf\n";
 }
 
 MVRecord* MVTablePartition::GetMVRecord(const CompositeKey &pkey, 

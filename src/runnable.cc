@@ -14,11 +14,13 @@ Runnable::Run() {
     
     // Kickstart the worker thread
     pthread_create(&m_thread, NULL, Bootstrap, this);
-    
-    // Wait for the newly spawned thread to report that it has successfully
-    // initialized
-    while (!m_start_signal)
-        ;    
+} 
+
+void Runnable::WaitInit()
+{
+           while (!m_start_signal)
+            ;
+
 }
 
 void*

@@ -2,7 +2,7 @@
 #define SETUP_OCC_H_
 
 #define OCC_WAIT_INTERVAL 1000
-#define OCC_TXN_BUFFER 1
+#define OCC_TXN_BUFFER 6
 
 #include <occ_action.h>
 #include <config.h>

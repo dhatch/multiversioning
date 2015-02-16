@@ -119,6 +119,14 @@ class InsertAction : public Action {
         virtual bool Run();
 };
 
+class mv_readonly : public Action {
+ private:
+        char __reads[1000];
+ public:
+        mv_readonly();
+        bool Run();
+};
+
 class RMWAction : public Action {
         volatile uint64_t __total;
         uint64_t __accumulated[1000/sizeof(uint64_t)];

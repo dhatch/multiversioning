@@ -353,11 +353,28 @@ bool Executor::ProcessSingle(Action *action) {
   }
 }
 
+
+
 bool Executor::ProcessTxn(Action *action) {
   assert(action != NULL && action->__state == PROCESSING);
   if (action->__readonly == true) {
           assert(action->__writeset.size() == 0);
-          //          uint32_t num_reads = action->__readset.size();
+          uint32_t num_reads = action->__readset.size();
+          uint64_t action_epoch = GET_MV_EPOCH(action->__version);
+          for (uint32_t i = 0; i < num_reads; ++i) {
+                  MVRecord *rec = action->__readset[i].value;
+                  MVRecord *snapshot;
+                  if (action_epoch == GET_MV_EPOCH(rec->createTimestamp)) {
+                          snapshot = rec->epoch_ancestor;
+                  } else {
+                          snapshot = rec;
+                  }
+                  barrier();
+                  void *value_ptr = snapshot->value;
+                  barrier();
+                  if (value_ptr == NULL)
+                          return false;
+          }
           action->Run();
           barrier();
           action->__state = SUBSTANTIATED;
@@ -499,8 +516,8 @@ bool Executor::ProcessTxn(Action *action) {
   }
 
   barrier();
-  //  xchgq(&action->state, SUBSTANTIATED);
-  action->__state = SUBSTANTIATED;
+  xchgq(&action->__state, SUBSTANTIATED);
+  //  action->__state = SUBSTANTIATED;
   barrier();
   for (uint32_t i = 0; i < numWrites; ++i) {
     action->__writeset[i].value->writer = NULL;        
