@@ -24,6 +24,7 @@ struct OCCWorkerConfig {
         volatile uint32_t *epoch_ptr;
         volatile uint64_t num_completed;
         uint64_t epoch_threshold;
+        uint64_t log_size;
         bool globalTimestamps;
 };
 
@@ -64,6 +65,9 @@ class OCCWorker : public Runnable {
         uint32_t last_epoch;
         uint32_t txn_counter;
         RecordBuffers *bufs;
+        char *log_head;
+        char *log_tail;
+        
         virtual void RunSingle(OCCAction *action);
         virtual bool Validate(OCCAction *action);
         virtual void PrepareWrites(OCCAction *action);
@@ -78,6 +82,10 @@ class OCCWorker : public Runnable {
         static bool TryAcquireLock(volatile uint64_t *version_ptr);
         bool AcquireWriteLocks(OCCAction *action);
         void ReleaseWriteLocks(OCCAction *action);
+
+        virtual void Serialize(OCCAction *action, uint64_t tid, bool reset_log);
+        virtual void SerializeSingle(occ_composite_key occ_key, uint64_t tid);
+
         
  protected:
         virtual void StartWorking();

@@ -309,17 +309,17 @@ def exp_0():
 #    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.7, 1000)
 #    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 2, 1, 0.7, 1000)
 
-    result_dir = "results/final/ycsb/abort/9_0/"
+    result_dir = "results/final/ycsb/new/9_0/"
     occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
     mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.9, 1000)
     
-    result_dir = "results/final/ycsb/abort/9_1/"
-    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
-    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.9, 1000)
+    result_dir = "results/final/ycsb/new/0_0/"
+    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
 
-    result_dir = "results/final/ycsb/abort/9_2/"
-    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.9, 1000)
-    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 2, 1, 0.9, 1000)
+#    result_dir = "results/final/ycsb/abort/9_2/"
+#    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.9, 1000)
+#    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 2, 1, 0.9, 1000)
 
 
 

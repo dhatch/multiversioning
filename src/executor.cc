@@ -248,17 +248,29 @@ void Executor::ExecPending() {
 }
 
 void Executor::ProcessBatch(const ActionBatch &batch) {
-  for (uint32_t i = batch.numActions-1-config.threadId; i < batch.numActions;
-       i -= config.numExecutors) {
-    while (pendingList->Size() > 100) {
-      ExecPending();
-    }
+        /*
+        uint32_t div = batch.numActions/(uint32_t)config.numExecutors;
+        uint32_t remainder = batch.numActions % (uint32_t)config.numExecutors;
+        uint32_t start = div*config.threadId;
+        uint32_t end = div*(config.threadId+1);
+        if (config.threadId == config.numExecutors-1) {
+                end += remainder;
+        }
+        for (uint32_t i = end; i >= start; --i) {
+                
+        }
+        */
+        for (int i = (int)batch.numActions-1-config.threadId; i > 0;
+             i -= config.numExecutors) {
+                while (pendingList->Size() > 100) {
+                        ExecPending();
+                }
 
-    Action *cur = batch.actionBuf[i];
-    if (!ProcessSingle(cur)) {
-      pendingList->EnqueuePending(cur);
-    }
-  }
+                Action *cur = batch.actionBuf[i];
+                if (!ProcessSingle(cur)) {
+                        pendingList->EnqueuePending(cur);
+                }
+        }
 
   // DEBUGGIN
   /*

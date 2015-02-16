@@ -8,7 +8,7 @@
 
 #define CREATE_TID(epoch, counter) ((((uint64_t)epoch)<<32) | (((uint64_t)counter)<<4))
 #define GET_TIMESTAMP(tid) (tid & TIMESTAMP_MASK)
-#define GET_EPOCH(tid) (tid & EPOCH_MASK)
+#define GET_EPOCH(tid) ((tid & EPOCH_MASK)>>32)
 #define GET_COUNTER(tid) (GET_TIMESTAMP(tid) & ~EPOCH_MASK)
 #define IS_LOCKED(tid) ((tid & ~(TIMESTAMP_MASK)) == 1)
 
@@ -78,13 +78,20 @@ class OCCAction {
 }; 
 
 class readonly_action : public OCCAction {
- private:
+ protected:
         char __reads[1000];
                 
  public:
         readonly_action();
         virtual occ_txn_status Run();
 };
+
+class mix_occ_action : public readonly_action {
+ public:
+        mix_occ_action();
+        virtual occ_txn_status Run();
+};
+
 
 class RMWOCCAction : public OCCAction {
  private:

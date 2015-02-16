@@ -531,6 +531,31 @@ static Action* generate_readonly(RecordGenerator *gen, MVConfig config)
         return act;
 }
 
+static Action* generate_mix(RecordGenerator *gen, MVConfig config, bool is_rmw)
+{
+        mv_mix_action *act;
+        uint32_t i;
+        uint64_t key;
+        CompositeKey mv_key;
+        std::set<uint64_t> seen_keys;
+        act = new mv_mix_action();
+        act->__readonly = false;
+        for (i = 0; i < RMW_COUNT; ++i) {
+                key = GenUniqueKey(gen, &seen_keys);
+                mv_key = create_mv_key(0, key, is_rmw);
+                act->__writeset.push_back(mv_key);
+                act->__combinedHash |= (((uint64_t)1)<<mv_key.threadId);
+        }
+        for (i = 0; i < config.txnSize - RMW_COUNT; ++i) {
+                key = GenUniqueKey(gen, &seen_keys);
+                mv_key = create_mv_key(0, key, false);
+                act->__readset.push_back(mv_key);
+                act->__combinedHash |= (((uint64_t)1)<<mv_key.threadId);
+        }
+        return act;
+        
+}
+
 static Action* generate_rmw_action(RecordGenerator *gen, MVConfig config)
 {
         uint32_t num_reads, num_rmws, num_writes;
@@ -545,13 +570,9 @@ static Action* generate_rmw_action(RecordGenerator *gen, MVConfig config)
                 num_rmws = config.txnSize;
                 num_reads = 0;
         } else if (config.experiment == 1) {
-                num_writes = 0;
-                num_rmws = RMW_COUNT;
-                num_reads = config.txnSize - RMW_COUNT;
+                return generate_mix(gen, config, true);
         } else if (config.experiment == 2) {
-                num_writes = config.txnSize;
-                num_rmws = 0;
-                num_reads = 0;
+                return generate_mix(gen, config, false);
         }
         return generate_single_rmw_action(gen, num_writes, num_rmws, num_reads);
 }

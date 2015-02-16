@@ -75,6 +75,27 @@ readonly_action* generate_readonly(OCCConfig config, RecordGenerator *gen)
         return act;
 }
 
+mix_occ_action* generate_mix(OCCConfig config, RecordGenerator *gen, bool rmw)
+{
+        mix_occ_action *act;
+        uint32_t i;
+        uint64_t key;
+        std::set<uint64_t> seen_keys;
+        act = new mix_occ_action();
+        for (i = 0; i < RMW_COUNT; ++i) {
+                key = GenUniqueKey(gen, &seen_keys);
+                if (rmw)
+                        act->AddReadKey(0, key, true);
+                act->AddWriteKey(0, key);
+        }
+        for (i = 0; i < config.txnSize - RMW_COUNT; ++i) {
+                key = GenUniqueKey(gen, &seen_keys);
+                act->AddReadKey(0, key, false);                
+        }
+        return act;
+        
+}
+
 OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
 {
         uint32_t num_reads, num_writes, num_rmws;
@@ -88,14 +109,9 @@ OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
                 num_writes = 0;
                 num_rmws = config.txnSize;
         } else if (config.experiment == 1) {
-                assert(RMW_COUNT <= config.txnSize);
-                num_reads = config.txnSize - RMW_COUNT;
-                num_writes = 0;
-                num_rmws = RMW_COUNT;
+                return generate_mix(config, gen, true);
         } else if (config.experiment == 2) {
-                num_reads = 0;
-                num_writes = config.txnSize;
-                num_rmws = 0;
+                return generate_mix(config, gen, false);
         } else {
                 std::cerr << "Invalid experiment!\n";
                 assert(false);
@@ -225,6 +241,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                         epoch_ptr,
                         0,
                         epoch_threshold,
+                        OCC_LOG_SIZE,
                         false,
                 };
                 buf_config = {

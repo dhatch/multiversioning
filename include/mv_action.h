@@ -120,10 +120,15 @@ class InsertAction : public Action {
 };
 
 class mv_readonly : public Action {
- private:
+ protected:
         char __reads[1000];
  public:
         mv_readonly();
+        bool Run();
+};
+
+class mv_mix_action : public mv_readonly {
+ public:
         bool Run();
 };
 

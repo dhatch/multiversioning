@@ -104,6 +104,40 @@ bool mv_readonly::Run()
         return true;
 }
 
+bool mv_mix_action::Run()
+{
+        uint32_t i, j, num_reads, num_writes;
+        num_writes = __writeset.size();
+        num_reads = __readset.size();
+        for (i = 0; i < num_reads; ++i) {
+                char *read_ptr = (char*)Read(i);
+                for (j = 0; j < 10; ++j) {
+                        uint32_t *write_p = (uint32_t*)&__reads[j*100];
+                        *write_p += *((uint32_t*)&read_ptr[j*100]);
+                }                
+        }
+        for (i = 0; i < num_writes; ++i) {
+                if (__writeset[i].is_rmw == true) {
+                        char *read_ptr = (char*)ReadWrite(i);
+                        for (j = 0; j < 10; ++j) {
+                                uint32_t *write_p = (uint32_t*)&__reads[j*100];
+                                *write_p += *((uint32_t*)&read_ptr[j*100]);
+                        }                
+                } else {
+                        break;
+                }
+        }
+        for (i = 0; i < num_writes; ++i) {
+                char *ptr = (char*)GetWriteRef(i);
+                memcpy(ptr, __reads, 1000);
+                for (j = 0; j < 10; ++j) {
+                        uint32_t *write_p = (uint32_t*)&ptr[j*100];
+                        *write_p += i+j;
+                }
+        }
+        return true;
+}
+
 RMWAction::RMWAction(uint64_t seed)
 {
         __total = seed;
