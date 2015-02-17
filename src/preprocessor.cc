@@ -247,8 +247,8 @@ uint32_t MVScheduler::GetCCThread(CompositeKey key) {
 void MVScheduler::ProcessWriteset(Action *action)
 {        
   while (alloc->Warning()) {
-    //    std::cout << "Warning...\n";
-    Recycle();
+          //          std::cerr << "[WARNING] CC thread low on versions\n";
+          Recycle();
   }
 
   size_t numReads = action->__readset.size();

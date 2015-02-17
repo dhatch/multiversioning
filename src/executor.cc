@@ -350,10 +350,9 @@ bool Executor::ProcessSingle(Action *action) {
         return true;
       }
       else {
-              xchgq(&action->__state, STICKY);
-//              barrier();
-//              action->__state = STICKY;
-//              barrier();
+              barrier();
+              action->__state = STICKY;
+              barrier();
               return false;
       }
     }
@@ -390,10 +389,10 @@ bool Executor::ProcessTxn(Action *action) {
           }
           action->Run();
           
-//          barrier();
-//          action->__state = SUBSTANTIATED;
-//          barrier();
-          xchgq(&action->__state, SUBSTANTIATED);
+          barrier();
+          action->__state = SUBSTANTIATED;
+          barrier();
+
           return true;
   }
   bool ready = true;
@@ -529,10 +528,10 @@ bool Executor::ProcessTxn(Action *action) {
     }    
   }
 
-  xchgq(&action->__state, SUBSTANTIATED);
-  //  barrier();  
-  //  action->__state = SUBSTANTIATED;
-  //  barrier();
+
+  barrier();  
+  action->__state = SUBSTANTIATED;
+  barrier();
   for (uint32_t i = 0; i < numWrites; ++i) {
     action->__writeset[i].value->writer = NULL;
     MVRecord *previous = action->__writeset[i].value->recordLink;
