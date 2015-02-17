@@ -344,16 +344,17 @@ bool Executor::ProcessSingleGC(Action *action) {
 
 bool Executor::ProcessSingle(Action *action) {
   assert(action != NULL);
-  if (action->__state != SUBSTANTIATED) {
+  if (action->__state == STICKY) {
     if (cmp_and_swap(&action->__state, STICKY, PROCESSING)) {
       if (ProcessTxn(action)) {
         return true;
       }
       else {
-        barrier();
-        action->__state = STICKY;
-        barrier();
-        return false;
+              xchgq(&action->__state, STICKY);
+//              barrier();
+//              action->__state = STICKY;
+//              barrier();
+              return false;
       }
     }
     else {      // cmp_and_swap failed
@@ -388,10 +389,11 @@ bool Executor::ProcessTxn(Action *action) {
                           return false;
           }
           action->Run();
-          barrier();
-          action->__state = SUBSTANTIATED;
-          barrier();
-          //          xchgq(&action->state, SUBSTANTIATED);
+          
+//          barrier();
+//          action->__state = SUBSTANTIATED;
+//          barrier();
+          xchgq(&action->__state, SUBSTANTIATED);
           return true;
   }
   bool ready = true;
@@ -527,23 +529,14 @@ bool Executor::ProcessTxn(Action *action) {
     }    
   }
 
-  barrier();
   xchgq(&action->__state, SUBSTANTIATED);
+  //  barrier();  
   //  action->__state = SUBSTANTIATED;
-  barrier();
+  //  barrier();
   for (uint32_t i = 0; i < numWrites; ++i) {
-    action->__writeset[i].value->writer = NULL;        
+    action->__writeset[i].value->writer = NULL;
     MVRecord *previous = action->__writeset[i].value->recordLink;
     if (previous != NULL) {
-        
-      // Since the previous txn has been substantiated, the record's value 
-      // shouldn't be NULL.
-      assert(previous->value != NULL);
-      /*
-      garbageBin->AddRecord(previous->writingThread, 
-                            action->__writeset[i].tableId,
-                            previous->value);
-      */
       garbageBin->AddMVRecord(action->__writeset[i].threadId, previous);
     }
   }
