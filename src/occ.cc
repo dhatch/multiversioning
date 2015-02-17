@@ -68,20 +68,20 @@ uint64_t OCCWorker::NumCompleted()
 void OCCWorker::RunSingle(OCCAction *action)
 {
         uint64_t cur_tid;
-        //        uint32_t tries = 0;
+        uint32_t tries = 0;
         occ_txn_status status;
         volatile uint32_t epoch;
         bool reset_log = false;
         PrepareWrites(action);
         PrepareReads(action);
         
-        //        while (true) {
-        //                if (config.cpu == 0 && tries % 16 == 0)
-        //                        UpdateEpoch();                
+        while (true) {
+                if (config.cpu == 0 && tries % 16 == 0)
+                        UpdateEpoch();                
                 status = action->Run();
                 if (status.validation_pass == false) {
-                        RecycleBufs(action);
-                        return;
+                        tries += 1;
+                        continue;
                 }
                 AcquireWriteLocks(action);
                 barrier();
@@ -94,41 +94,37 @@ void OCCWorker::RunSingle(OCCAction *action)
                         InstallWrites(action, cur_tid);
                         fetch_and_increment(&config.num_completed);
                         Serialize(action, cur_tid, reset_log);
-                        //                        break;
+                                                break;
                 } else {
+                        tries += 1;
                         ReleaseWriteLocks(action);
                 }
+        }
         RecycleBufs(action);
 }
 
-void OCCWorker::SerializeSingle(occ_composite_key occ_key, uint64_t tid)
+void OCCWorker::SerializeSingle(const occ_composite_key &occ_key, uint64_t tid)
 {
         uint32_t table_id, record_size;
         uint64_t key;
-
-        
+        uint64_t total_sz;
+        struct occ_log_header header;
+        assert(occ_key.GetValue() != NULL);
         table_id = occ_key.tableId;
         key = occ_key.key;
-        record_size = config.tables[table_id]->RecordSize();
-        uint64_t log_record_size = 2*(4+8) + record_size-8;
-        if ((uint64_t)(log_tail - log_head) + log_record_size >=
-            config.log_size) {
-                //                uint64_t log_size = (log_tail - log_head);
-                std::cerr << "[FATAL] Log is full!!!\n";
-                std::cerr << "Epoch: " << GET_EPOCH(tid) << "\n";
-        }
-        assert((uint64_t)(log_tail - log_head) + log_record_size <
-               config.log_size);
-        *((uint32_t*)log_tail) = table_id;
-        log_tail += sizeof(uint32_t);
-        *((uint64_t*)log_tail) = key;
-        log_tail += sizeof(uint64_t);
-        *((uint64_t*)log_tail) = tid;
-        log_tail += sizeof(uint64_t);
-        *((uint32_t*)log_tail) = record_size;
-        log_tail += sizeof(uint32_t);
-        memcpy(log_tail, occ_key.GetValue(), record_size-8);
-        log_tail += record_size-8;
+        record_size = config.tables[table_id]->RecordSize() - sizeof(uint64_t);
+        header = {
+                table_id,
+                key,
+                tid,
+                record_size,
+        };
+        total_sz = sizeof(struct occ_log_header) + record_size;
+        assert((uint64_t)(log_tail - log_head) + total_sz < config.log_size);
+        memcpy(log_tail, &header, sizeof(struct occ_log_header));
+        log_tail += sizeof(struct occ_log_header);
+        memcpy(log_tail, occ_key.GetValue(), record_size);
+        log_tail += record_size;
 }
 
 void OCCWorker::Serialize(OCCAction *action, uint64_t tid, bool reset)

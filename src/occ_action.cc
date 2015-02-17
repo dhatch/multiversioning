@@ -8,7 +8,7 @@ occ_composite_key::occ_composite_key(uint32_t table_id, uint64_t key,
         this->is_rmw = is_rmw;
 }
 
-void* occ_composite_key::GetValue()
+void* occ_composite_key::GetValue() const
 {
         uint64_t *temp = (uint64_t*)value;
         return &temp[1];

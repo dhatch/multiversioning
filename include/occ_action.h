@@ -27,7 +27,7 @@ class occ_composite_key {
         void *value;
 
         occ_composite_key(uint32_t tableId, uint64_t key, bool is_rmw);
-        void* GetValue();
+        void* GetValue() const ;
         uint64_t GetTimestamp();
         bool ValidateRead();
 

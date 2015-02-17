@@ -15,6 +15,13 @@ struct OCCActionBatch {
         OCCAction **batch;
 };
 
+struct occ_log_header {
+        uint32_t table_id;
+        uint64_t key;
+        uint64_t tid;
+        uint32_t record_len;
+};
+
 struct OCCWorkerConfig {
         SimpleQueue<OCCActionBatch> *inputQueue;
         SimpleQueue<OCCActionBatch> *outputQueue;
@@ -84,7 +91,8 @@ class OCCWorker : public Runnable {
         void ReleaseWriteLocks(OCCAction *action);
 
         virtual void Serialize(OCCAction *action, uint64_t tid, bool reset_log);
-        virtual void SerializeSingle(occ_composite_key occ_key, uint64_t tid);
+        virtual void SerializeSingle(const occ_composite_key &occ_key,
+                                     uint64_t tid);
 
         
  protected:
