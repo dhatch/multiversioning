@@ -66,6 +66,14 @@ reentrant_unlock(volatile uint64_t *word) {
   }
 }
 
+inline bool
+try_lock(volatile uint64_t *word)
+{
+        if (*word == 0)
+                return cmp_and_swap(word, 0, 1);
+        return false;
+}
+
 // Spin lock implementation. XXX: Is test-n-test-n-set better?
 inline void
 lock(volatile uint64_t *word) {
