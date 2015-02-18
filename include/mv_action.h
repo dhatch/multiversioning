@@ -39,7 +39,7 @@ class CompositeKey {
         MVRecord *value;
 
         CompositeKey() {
-                this->value = 0;
+                this->value = NULL;
         }
         
         CompositeKey(bool isRmw, uint32_t table, uint64_t key) {

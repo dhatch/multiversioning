@@ -232,6 +232,9 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
                 assert(record_size == 1000);
                 memcpy(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
                        record_size);
+//                barrier();
+//                *RECORD_TID_PTR(value) = tid;
+//                barrier();
                 xchgq(RECORD_TID_PTR(value), tid);
         }
 }
@@ -366,6 +369,9 @@ void OCCWorker::ReleaseWriteLocks(OCCAction *action)
                 assert(!IS_LOCKED(old_tid));
                 //                assert(GET_TIMESTAMP(old_tid) == GET_TIMESTAMP(*tid_ptr));
                 xchgq(tid_ptr, old_tid);
+//                barrier();
+//                *tid_ptr = old_tid;
+//                barrier();
         }
 }
 

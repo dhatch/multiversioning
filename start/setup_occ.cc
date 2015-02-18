@@ -111,7 +111,9 @@ OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
         } else if (config.experiment == 1) {
                 return generate_mix(config, gen, true);
         } else if (config.experiment == 2) {
-                return generate_mix(config, gen, false);
+                num_reads = 0;
+                num_writes = config.txnSize;
+                num_rmws = 0;
         } else {
                 std::cerr << "Invalid experiment!\n";
                 assert(false);
@@ -448,10 +450,11 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         timespec start_time, end_time;
         uint32_t i, j;
         struct occ_result result;
-        for (i = 0; i < config.numThreads; ++i)
+        for (i = 0; i < config.numThreads; ++i) {
                 workers[i]->Run();
-        for (i = 0; i < config.numThreads; ++i) 
-                workers[i]->WaitInit();                
+                workers[i]->WaitInit();
+        }
+
         dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
         std::cerr << "Num batches " << num_batches << "\n";
         std::cerr << "Done dry run\n";

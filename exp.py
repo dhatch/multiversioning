@@ -24,11 +24,14 @@ def main():
 #    vary_contention()
 
 #    occ_uncontended_1000()
+
+    search_best()
+#    combine_best()
 #    small_bank_contended()
 #    small_bank_uncontended()
 #    write_contended()
 #    write_uncontended()
-    exp_0()
+#    exp_0()
 #    exp_1()
 #    exp_2()
 
@@ -127,6 +130,21 @@ def locking_expt_records(outdir, filename, threads, txns, records, expt, distrib
 
 
 
+def mv_single(outdir, filename, ccThreads, txns, records, worker_threads, expt,
+              distribution, theta, rec_size):
+    outfile = os.path.join(outdir, filename)
+    os.system("mkdir -p " + outdir)
+    os.system("rm results.txt")
+    cmd = fmt_multi.format(str(ccThreads), str(txns), str(records),
+                           str(worker_threads), str(expt), str(distribution),
+                           str(theta), str(rec_size))
+    os.system(cmd)
+    os.system("cat results.txt >>" + outfile)
+    saved_dir = os.getcwd()
+    os.chdir(outdir)
+    os.chdir(saved_dir)
+    
+        
 def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads, expt, distribution, theta, rec_size, only_worker=False):
     outfile = os.path.join(outdir, filename)
     outdep = os.path.join(outdir, "." + filename)
@@ -136,7 +154,7 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
     os.system("mkdir -p outdir")
     if not os.path.exists(outdep):
 
-        val_range = gen_range(lowThreads, highThreads, 4)
+        val_range = gen_range(lowThreads, highThreads, 1)
 
         for i in val_range:
             os.system("rm results.txt")
@@ -283,35 +301,108 @@ def write_contended():
 #    locking_expt(result_dir, "locking_2r8w.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
     occ_expt(result_dir, "occ_2r8w.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
 
+def check_worse(input_file):
+    if os.path.exists(input_file):
+        times = clean.list_times(input_file)
+        if len(times) > 2:
+            l0 = times[len(times)-1]["time"]
+            l1 = times[len(times)-2]["time"]
+            l2 = times[len(times)-3]["time"]
+            if l0 > l1 and l1 > l2:
+                return True
+            else:
+                return False
+    return False
+        
+def compute_best_conf(input_file):
+    times = clean.list_times(input_file)
+    min_time = times[0]
+    for val in times:
+        if val["time"] < min_time["time"]:
+            min_time = val
+    return min_time
 
+def get_best(input_files):
+    ret = []
+    for f in input_files:
+        temp = compute_best_conf(f)
+        ret.append(temp["time"])
+    return ret
+
+def write_mv_output(input_list, output_file):
+    out = open(output_file, 'w')
+    for val in input_list:
+        out_line = str(val["threads"]) + " " + str(1000/val["time"]) + " " + str(1000000/val["time"]) + " " + str(1000000/val["time"]) + "\n"
+        out.write(out_line)
+    out.close()
+
+def combine_best():
+    result_dir = "results/final/search/0_9/temp"
+    core_list = [4,8,12,16,20,24,28,32,36,40]
+    files = []
+    for i in [4,8,12,16,20,24,28,32,36,40]:
+        files.append(os.path.join(result_dir, str(i)+".txt"))
+
+    times = get_best(files)
+    vals = []
+    i = 0
+    for t in times:
+        cur = {}
+        cur["time"] = t
+        cur["threads"] = core_list[i]
+        vals.append(cur)
+        i += 1
+    print vals
+    write_mv_output(vals, "mv_out.txt")
+        
+def search_best_inner():
+    result_dir = "results/final/search/2_9/"
+    prev_best = 1
+    for i in [4,8,12,16,20,24,28,32,36,40]:
+        if prev_best > 1:
+            cc_threads = prev_best-1
+        else:
+            cc_threads = prev_best
+        while cc_threads < i and not(check_worse(os.path.join(result_dir, str(i)+".txt"))):
+            worker_threads = i - cc_threads
+            mv_single(result_dir, str(i)+".txt", cc_threads,
+                      1000000, 1000000, worker_threads, 2, 1, 0.9, 1000)
+            cc_threads += 1
+        prev_best = compute_best_conf(os.path.join(result_dir, str(i)+".txt"))["threads"]
+
+
+def search_best():
+    for i in range(0, 5):
+        search_best_inner()
+            
 def exp_0():
-    for i in range(0, 5):
-        result_dir = "results/final/ycsb/0_0/"
-        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
-        mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.0, 1000)
 
-    for i in range(0, 5):
-        result_dir = "results/final/ycsb/0_1/"
-        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
-        mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
-    for i in range(0, 5):
-        result_dir = "results/final/ycsb/0_2/"
-        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.0, 1000)
-        mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 2, 1, 0.0, 1000)
-    for i in range(0, 5):
-        result_dir = "results/final/ycsb/9_0/"
-        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
-        mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.9, 1000)
-    for i in range(0, 5):
-        result_dir = "results/final/ycsb/9_1/"
-        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
-        mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.9, 1000)
-    for i in range(0, 5):
-        result_dir = "results/final/ycsb/9_2/"
-        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.9, 1000)
+#    result_dir = "results/final/ycsb/temp2/"
+#    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+#    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.0, 1000)
+#
+#    for i in range(0, 5):
+#        result_dir = "results/final/ycsb/0_1/"
+#        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+#        mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
+#    for i in range(0, 5):
+#        result_dir = "results/final/ycsb/0_2/"
+#        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.0, 1000)
+#        mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 2, 1, 0.0, 1000)
+#    for i in range(0, 5):
+#    result_dir = "results/final/ycsb/9_temp/"
+#    occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+#    mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.9, 1000)
+#    for i in range(0, 5):
+#        result_dir = "results/final/ycsb/9_1/"
+#        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
+#        mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.9, 1000)
+#    for i in range(0, 5):
+        result_dir = "results/final/ycsb/9_temp_2/"
+#        occ_expt(result_dir, "occ.txt", 4, 40, 1000000, 1000000, 2, 1, 0.9, 1000)
         mv_expt(result_dir, "mv.txt", 10, 1000000, 1000000, 2, 30, 2, 1, 0.9, 1000)
-
-
+#
+#
     
 
 def write_uncontended():

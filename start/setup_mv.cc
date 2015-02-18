@@ -15,6 +15,8 @@
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 
+#define MV_DRY_RUNS 5
+
 static uint64_t dbSize = ((uint64_t)1<<36);
 
 static void CreateQueues(int cpuNumber, uint32_t subCount, 
@@ -630,7 +632,7 @@ static void mv_setup_input_array(std::vector<ActionBatch> *input,
                                         config.theta);
         }
         num_epochs = get_num_epochs(config);
-        for (i = 0; i < num_epochs; ++i) {
+        for (i = 0; i < num_epochs + MV_DRY_RUNS; ++i) {
                 batch = mv_create_action_batch(gen, config, i+2);
                 input->push_back(batch);
         }
@@ -753,16 +755,24 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
         uint32_t num_batches, i;
         struct timespec elapsed_time, end_time, start_time;
         num_batches = inputs.size();
+
+        barrier();
+        for (i = 0; i < MV_DRY_RUNS; ++i)
+                input_queue->EnqueueBlocking(inputs[i]);
+        for (i = 0; i < MV_DRY_RUNS; ++i)
+                output_queue->DequeueBlocking();
+        barrier();
+
         if (PROFILE)
                 ProfilerStart("bohm.prof");
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
         barrier();                
-        for (i = 0; i < num_batches; ++i) {
+        for (i = MV_DRY_RUNS; i < num_batches; ++i) {
                 input_queue->EnqueueBlocking(inputs[i]);
         }
         barrier();
-        for (i = 0; i < num_batches; ++i) {
+        for (i = MV_DRY_RUNS; i < num_batches; ++i) {
                 output_queue->DequeueBlocking();
         }
         barrier();
@@ -802,7 +812,7 @@ static void init_database(MVConfig config,
         assert(pin_success == 0);
         init_batch = setup_loader_txns(config);
         for (i = 0; i < config.numCCThreads; ++i) {
-                sched_threads[i]->Run();
+                sched_threads[i]->Run();        
                 sched_threads[i]->WaitInit();
         }
         for (i = 0; i < config.numWorkerThreads; ++i) {

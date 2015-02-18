@@ -163,7 +163,6 @@ void RMWAction::DoReads()
                                 counter += field_ptr[j];
                 }
         }
-        __total += counter;
 }
 
 void RMWAction::AccumulateValues()
@@ -181,23 +180,24 @@ void RMWAction::AccumulateValues()
 void RMWAction::DoWrites()
 {
         uint32_t i, j, num_writes, num_fields;
-        uint64_t *field_ptr;
-        uint64_t counter;
-        num_fields = recordSize/sizeof(uint64_t);
-        counter = __total;
+        char *field_ptr;
+        num_fields = 10;
         num_writes = __writeset.size();
-        for (i = 0; i < num_writes; ++i) {                
-                field_ptr = (uint64_t*)GetWriteRef(i);
-                for (j = 0; j < num_fields; ++j)
-                        field_ptr[j] = counter+j;
+        for (i = 0; i < num_writes; ++i) {
+                assert(__writeset[i].is_rmw == true);
+                memcpy(GetWriteRef(i), ReadWrite(i), 1000);
+                field_ptr = (char*)GetWriteRef(i);
+                for (j = 0; j < num_fields; ++j) {
+                        *((uint32_t*)&field_ptr[j*100]) += j+1;
+                }
         }
 }
 
 bool RMWAction::Run()
 {
         assert(recordSize == 1000);
-        DoReads();
-        AccumulateValues();
+        //        DoReads();
+        //        AccumulateValues();
         DoWrites();
         return true;
 }

@@ -344,21 +344,21 @@ bool Executor::ProcessSingleGC(Action *action) {
 
 bool Executor::ProcessSingle(Action *action) {
   assert(action != NULL);
-  if (action->__state == STICKY) {
-    if (cmp_and_swap(&action->__state, STICKY, PROCESSING)) {
-      if (ProcessTxn(action)) {
-        return true;
-      }
-      else {
-              barrier();
-              action->__state = STICKY;
-              barrier();
-              return false;
-      }
-    }
-    else {      // cmp_and_swap failed
-      return false;
-    }
+  if (action->__state != SUBSTANTIATED) {
+          if (action->__state == STICKY &&
+              cmp_and_swap(&action->__state, STICKY, PROCESSING)) {
+                  if (ProcessTxn(action)) {
+                          return true;
+                  } else {
+                          barrier();
+                          action->__state = STICKY;
+                          barrier();
+//                          xchgq(&action->__state, STICKY);
+                          return false;
+                  }
+          } else {      // cmp_and_swap failed
+                  return false;
+          }
   }
   else {        // action->state == SUBSTANTIATED
     return true;
@@ -392,6 +392,7 @@ bool Executor::ProcessTxn(Action *action) {
           barrier();
           action->__state = SUBSTANTIATED;
           barrier();
+//          xchgq(&action->__state, SUBSTANTIATED);
 
           return true;
   }
@@ -403,82 +404,24 @@ bool Executor::ProcessTxn(Action *action) {
   // First ensure that all transactions on which the current one depends on have
   // been processed.
   for (size_t i = 0; i < numReads; ++i) {
-    /*
-    if (action->__readset[i].value == NULL) {
-      CompositeKey curKey = action->__readset[i];
-      MVRecord *record = 
-        DB.GetTable(curKey.tableId)->GetMVRecord(curKey.threadId, curKey, 
-                                                 action->version);
-      // If the record does not exist, abort.
-      if (record == NULL) {
-        abort = true;
-      }
-    
-      // If this read is part of an RMW, then we need to read the previous 
-      // version of the record
-      if (record->writer == action) {
-        record = record->recordLink;
-        if (record == NULL) {
-          abort = true;
-        }
-      }
-      // Keep a reference to the record
-      action->__readset[i].value = record;
-    }
-    */
-
-    if (action->__readset[i].value != NULL) {
-      // Check that the txn which is supposed to have produced the value of the 
-      // record has been executed.
-
-            Action *dependAction = action->__readset[i].value->writer;
-            /*
-            while ((dependAction = action->__readset[i].value->writer) != NULL &&
-                   !ProcessSingle(dependAction))
-                    ;
-            */
-      if (dependAction != NULL && !ProcessSingle(dependAction)) {
-        //        assert(false);
-        ready = false;
-      }
-      else if (action->__readset[i].value->value == NULL) {
-        abort = true;
-      }
-
-    }
+          assert(action->__readset[i].value != NULL);
+          Action *dependAction = action->__readset[i].value->writer;
+          if (dependAction != NULL && !ProcessSingle(dependAction))
+                    ready = false;
+          else if (action->__readset[i].value->value == NULL)
+                  abort = true;
   }    
 
   for (size_t i = 0; i < numWrites; ++i) {
-    // Keep a reference to the sticky we need to evaluate. 
-    if (action->__writeset[i].value == NULL) {
-      
-      // Find the sticky
-      CompositeKey curKey = action->__writeset[i];
-      MVRecord *record = 
-        DB.GetTable(curKey.tableId)->GetMVRecord(curKey.threadId, curKey, 
-                                                 action->__version);
-
-      // Sticky better exist
-      assert(record != NULL);
-      action->__writeset[i].value = record;      
-    }
-    
-    if (action->__writeset[i].is_rmw) {
-            MVRecord *prev = action->__writeset[i].value->recordLink;
-            if (prev != NULL) {
-                    // There exists a previous version
-                    /*
-                    Action *dependAction;
-                    while ((dependAction = prev->writer) != NULL &&
-                           !ProcessSingle(dependAction))
-                            ;
-                    */
-                    Action *dependAction = prev->writer;
-                    if (dependAction != NULL && !ProcessSingle(dependAction)) {
-                            ready = false;
-                    }
-            }
-    }
+          assert(action->__writeset[i].value != NULL);
+          if (action->__writeset[i].is_rmw) {
+                  MVRecord *prev = action->__writeset[i].value->recordLink;
+                  if (prev != NULL) {
+                          Action *dependAction = prev->writer;
+                          if (dependAction != NULL && !ProcessSingle(dependAction))
+                                  ready = false;
+                  }
+          }
     
     // Ensure that the previous version of this record has been written
     /*
@@ -532,6 +475,7 @@ bool Executor::ProcessTxn(Action *action) {
   barrier();  
   action->__state = SUBSTANTIATED;
   barrier();
+//  xchgq(&action->__state, SUBSTANTIATED);
   for (uint32_t i = 0; i < numWrites; ++i) {
     action->__writeset[i].value->writer = NULL;
     MVRecord *previous = action->__writeset[i].value->recordLink;
