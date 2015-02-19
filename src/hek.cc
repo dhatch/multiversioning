@@ -1,4 +1,7 @@
 #include <hek.h>
+#include <hek_table.h>
+#include <hek_action.h>
+#include <hek_record.h>
 
 hek_queue::hek_queue()
 {

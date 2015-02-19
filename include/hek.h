@@ -2,6 +2,7 @@
 #define HEK_H_
 
 #include <concurrent_queue.h>
+#include <hek_action.h>
 
 #define HEK_INF		0xFFFFFFFFFFFFFFF0
 #define HEK_MASK	0x000000000000000F
