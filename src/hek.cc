@@ -38,7 +38,23 @@ hek_action* hek_queue::dequeue_batch()
 
 void hek_worker::check_dependents()
 {
-        
+        hek_action *aborted, *committed;
+        aborted = config.abort_queue->dequeue_batch();
+        barrier();
+        while (aborted != NULL) {
+                assert(aborted->flag == ABORT);
+                aborted->state = ABORT;
+                do_abort(aborted);
+                aborted = aborted->next;
+        }
+        committed = config.commit_queue->dequeue_batch();
+        barrier();
+        while (committed != NULL) {
+                assert(committed->flag == COMMIT && committed->count == 0);
+                committed->state = COMMIT;
+                do_commit(committed);
+                committed = committed->next;
+        }
 }
 
 void hek_worker::StartWorking()
@@ -189,7 +205,8 @@ void hek_worker::install_writes(hek_action *txn)
 void hek_worker::run_txn(hek_action *txn)
 {
         hek_status status;
-
+        bool validated;
+        
         transition_begin(txn);
         txn->begin = fetch_and_increment(config.global_time);
         get_reads(txn);        
@@ -197,10 +214,12 @@ void hek_worker::run_txn(hek_action *txn)
         if (status.validation == false)
                 goto abort;
         transition_preparing(txn);
-        if (validate_reads(txn)) {
-                transition_commit(txn);
-                do_commit(txn);
-                return true;
+        validated = validate_reads(txn);
+        if (validated == true) {
+                if (txn->dependent == false) {
+                        transition_commit(txn);
+                        do_commit(txn);
+                }
         } 
  abort:
         transition_abort(txn);
@@ -247,6 +266,7 @@ void hek_worker::do_abort(hek_action *txn)
         assert(HEK_STATE(txn->end) == ABORT);
         remove_writes(txn);
         kill_waiters(txn);
+        num_done += 1;
 }
 
 void hek_worker::do_commit(hek_action *txn)
@@ -254,6 +274,8 @@ void hek_worker::do_commit(hek_action *txn)
         assert(HEK_STATE(txn->end) == COMMIT);
         install_writes(txn);
         commit_waiters(txn);
+        num_committed += 1;
+        num_done += 1;
 }
 
 void hek_worker::install_writes(hek_action *txn)
