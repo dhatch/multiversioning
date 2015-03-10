@@ -12,22 +12,7 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu, int worker_start, i
   if (size < 1) {
     size = 1;
   }
-  MVRecord *data;// = (MVRecord*)alloc_mem(size, cpu);
-  int numa_node = numa_node_of_cpu(cpu);
-  numa_set_strict(1);
-  void *buf = numa_alloc_onnode(size, numa_node);
-  if (buf == NULL) {
-    assert(false);
-  }
-  if (mlock(buf, size) != 0) {
-    numa_free(buf, size);
-    std::cout << "mlock couldn't pin memory to RAM!\n";
-    assert(false);
-  } 
-  else {
-    data = (MVRecord*)buf;
-  }
-
+  MVRecord *data = (MVRecord*)alloc_mem(size, cpu);
   assert(data != NULL);
   memset(data, 0xA3, size);
         
@@ -59,19 +44,11 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu, int worker_start, i
   //  uint64_t endIndex = numRecords-1;
   for (uint64_t i = 0; i < numRecords; ++i) {
     data[i].allocLink = &data[i+1];
+    //data[i].value = NULL;
     data[i].value = (Record*)(&recordData[i*recordSize]);
     this->count += 1;
   }
   data[numRecords-1].allocLink = NULL;
-  /*
-  for (uint64_t i = 0; i < numRecords/2; ++i) {
-    data[i].recordLink = &data[endIndex-i];
-    data[endIndex-i].recordLink = &data[i+1];
-    count += 2;
-  }
-  data[numRecords/2].recordLink = NULL;
-  */
-
   freeList = data;
 }
 

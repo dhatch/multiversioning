@@ -8,6 +8,8 @@
 #define GET_MV_EPOCH(timestamp) (timestamp & MV_EPOCH_MASK)
 #define CREATE_MV_TIMESTAMP(epoch, timestamp) ((((uint64_t)epoch)<<32) | timestamp)
 
+extern uint32_t NUM_CC_THREADS;
+
 struct ActionBatch {
     Action **actionBuf;
     uint32_t numActions;
@@ -37,9 +39,11 @@ class CompositeKey {
         uint32_t threadId;
         bool is_rmw;
         MVRecord *value;
-
+        int next;
+        
         CompositeKey() {
                 this->value = 0;
+                this->next = -1;
         }
         
         CompositeKey(bool isRmw, uint32_t table, uint64_t key) {
@@ -47,6 +51,7 @@ class CompositeKey {
                 this->tableId = table;
                 this->key = key;
                 this->value = NULL;
+                this->next = -1;
         }
   
         CompositeKey(bool isRmw) {
@@ -54,6 +59,7 @@ class CompositeKey {
                 this->tableId = 0;
                 this->key = 0;
                 this->value = NULL;
+                this->next = -1;
         }
 
         bool operator==(const CompositeKey &other) const {
@@ -103,6 +109,8 @@ class Action {
         uint64_t __version;
         uint64_t __combinedHash;
         bool __readonly;
+        std::vector<int> __write_starts;
+        std::vector<int> __read_starts;
         std::vector<CompositeKey> __readset;
         std::vector<CompositeKey> __writeset;
         volatile uint64_t __attribute__((aligned(CACHE_LINE))) __state;

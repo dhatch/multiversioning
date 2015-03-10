@@ -65,22 +65,6 @@ class MVRecordAllocator {
 
   void* operator new(std::size_t sz, int cpu) {
           return alloc_mem(sz, cpu);
-          /*
-    int numa_node = numa_node_of_cpu(cpu);
-    numa_set_strict(1);
-    void *buf = numa_alloc_onnode(sz, numa_node);
-    if (buf == NULL) {
-      return buf;
-    }
-    if (mlock(buf, sz) != 0) {
-      numa_free(buf, sz);
-      std::cout << "mlock couldn't pin memory to RAM!\n";
-      return NULL;
-    } 
-    else {
-      return buf;
-    }
-          */
   };
         
   // Constructor takes a size parameter, which is the total number of bytes 

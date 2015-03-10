@@ -430,6 +430,7 @@ static CompositeKey create_mv_key(uint32_t table_id, uint64_t key, bool is_rmw)
         mv_key.threadId =
                 CompositeKey::HashKey(&mv_key) % MVScheduler::NUM_CC_THREADS;
         mv_key.value = NULL;
+        mv_key.next = -1;
         return mv_key;
 }
 
@@ -492,24 +493,58 @@ static Action* generate_single_rmw_action(RecordGenerator *generator,
         uint64_t key;
         CompositeKey mv_key(true);
         std::set<uint64_t> seen_keys;
+        int indices[NUM_CC_THREADS];
+        int index;
+        int *ptr;
+                
         action = new RMWAction((uint64_t)rand());
+        for(i = 0; i < NUM_CC_THREADS; ++i)
+                indices[i] = -1;
+        assert(action->__combinedHash == 0);
         for (i = 0; i < num_writes; ++i) {
                 key = GenUniqueKey(generator, &seen_keys);
                 mv_key = create_mv_key(0, key, false);
                 action->__writeset.push_back(mv_key);
                 action->__combinedHash |= (((uint64_t)1)<<mv_key.threadId);
+                if (indices[mv_key.threadId] != -1) {
+                        index = indices[mv_key.threadId];
+                        ptr = &action->__writeset[index].next;
+                } else {
+                        ptr = &action->__write_starts[mv_key.threadId];
+                }
+                indices[mv_key.threadId] = i;
+                *ptr = i;
         }
         for (i = 0; i < num_rmws; ++i) {
                 key = GenUniqueKey(generator, &seen_keys);
                 mv_key = create_mv_key(0, key, true);
                 action->__writeset.push_back(mv_key);
                 action->__combinedHash |= (((uint64_t)1)<<mv_key.threadId);
+                if (indices[mv_key.threadId] != -1) {
+                        index = indices[mv_key.threadId];
+                        ptr = &action->__writeset[index].next;
+                } else {
+                        ptr = &action->__write_starts[mv_key.threadId];
+                }
+                indices[mv_key.threadId] = i;
+                *ptr = i;
         }
+        for (i = 0; i < NUM_CC_THREADS; ++i)
+                indices[i] = -1;
+        
         for (i = 0; i < num_reads; ++i) {
                 key = GenUniqueKey(generator, &seen_keys);
                 mv_key = create_mv_key(0, key, false);
                 action->__readset.push_back(mv_key);
                 action->__combinedHash |= (((uint64_t)1)<<mv_key.threadId);
+                if (indices[mv_key.threadId] != -1) {
+                        index = indices[mv_key.threadId];
+                        ptr = &action->__readset[index].next;
+                } else {
+                        ptr = &action->__read_starts[mv_key.threadId];
+                }
+                indices[mv_key.threadId] = i;
+                *ptr = i;
         }
         return action;
 }
@@ -570,7 +605,9 @@ static Action* generate_rmw_action(RecordGenerator *gen, MVConfig config)
                 num_rmws = config.txnSize;
                 num_reads = 0;
         } else if (config.experiment == 1) {
-                return generate_mix(gen, config, true);
+                num_writes = 0;
+                num_rmws = RMW_COUNT;
+                num_reads = config.txnSize - RMW_COUNT;
         } else if (config.experiment == 2) {
                 return generate_mix(gen, config, false);
         }
@@ -631,7 +668,7 @@ static void mv_setup_input_array(std::vector<ActionBatch> *input,
         }
         num_epochs = get_num_epochs(config);
         for (i = 0; i < num_epochs; ++i) {
-                batch = mv_create_action_batch(gen, config, i+2);
+                batch = mv_create_action_batch(gen, config, i+1);
                 input->push_back(batch);
         }
         std::cerr << "Done setting up mv input!\n";
@@ -723,7 +760,7 @@ static void write_results(MVConfig config, timespec elapsed_time)
         result_file.open("results.txt", std::ios::app | std::ios::out);
         result_file << "mv ";
         result_file << "time:" << elapsed_milli << " ";
-        result_file << "txns:" << num_epochs*config.epochSize << " ";
+        result_file << "txns:" << (num_epochs-5)*config.epochSize << " ";
         result_file << "ccthreads:" << config.numCCThreads << " ";
         result_file << "workerthreads:" << config.numWorkerThreads << " ";
         result_file << "records:" << config.numRecords << " ";
@@ -758,11 +795,11 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
         barrier();                
-        for (i = 0; i < num_batches; ++i) {
+        for (i = 0; i < num_batches-5; ++i) {
                 input_queue->EnqueueBlocking(inputs[i]);
         }
         barrier();
-        for (i = 0; i < num_batches; ++i) {
+        for (i = 0; i < num_batches-5; ++i) {
                 output_queue->DequeueBlocking();
         }
         barrier();
@@ -791,9 +828,11 @@ static ActionBatch setup_loader_txns(MVConfig config)
 }
 
 static void init_database(MVConfig config,
-                          SimpleQueue<ActionBatch> *input_queue,
-                          SimpleQueue<ActionBatch> *output_queue,
-                          MVScheduler **sched_threads, Executor **exec_threads)
+                          //                          SimpleQueue<ActionBatch> *input_queue,
+                          //                          SimpleQueue<ActionBatch> *output_queue,
+                          MVScheduler **sched_threads
+                          //Executor **exec_threads)
+                          )
 {
         uint32_t i;
         ActionBatch init_batch;
@@ -805,12 +844,12 @@ static void init_database(MVConfig config,
                 sched_threads[i]->Run();
                 sched_threads[i]->WaitInit();
         }
-        for (i = 0; i < config.numWorkerThreads; ++i) {
-                exec_threads[i]->Run();
-                exec_threads[i]->WaitInit();                
-        }
-        input_queue->EnqueueBlocking(init_batch);
-        output_queue->DequeueBlocking();
+        //        for (i = 0; i < config.numWorkerThreads; ++i) {
+                //                exec_threads[i]->Run();
+                //                exec_threads[i]->WaitInit();                
+        //        }
+        //        input_queue->EnqueueBlocking(init_batch);
+        //        output_queue->DequeueBlocking();
         barrier();
         std::cerr << "Done loading the database!\n";
         return;
@@ -838,7 +877,7 @@ static MVScheduler** setup_scheduler_threads(MVConfig config,
                 assert(false);
         }
         schedulers = SetupSchedulers(config.numCCThreads, sched_input,
-                                     sched_output, config.numWorkerThreads,
+                                     sched_output, config.numWorkerThreads+1,
                                      stickies_per_thread, num_tables,
                                      config.numRecords, gc_queues,
                                      worker_start,
@@ -873,27 +912,29 @@ static Executor** setup_executors(MVConfig config,
 void do_mv_experiment(MVConfig config)
 {
         MVScheduler **schedThreads;
-        Executor **execThreads;
+        //        Executor **execThreads;
         SimpleQueue<ActionBatch> *schedInputQueue;
         SimpleQueue<ActionBatch> *schedOutputQueues;
         SimpleQueue<MVRecordList> **schedGCQueues[config.numCCThreads];
-        SimpleQueue<ActionBatch> *outputQueue;
+        //        SimpleQueue<ActionBatch> *outputQueue;
         std::vector<ActionBatch> input_placeholder;
         timespec elapsed_time;
 
         MVScheduler::NUM_CC_THREADS = (uint32_t)config.numCCThreads;
         NUM_CC_THREADS = (uint32_t)config.numCCThreads;
         assert(config.distribution < 2);
-        outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE, 1, 71);
+        //        outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE, 1, 71);
         schedThreads = setup_scheduler_threads(config, &schedInputQueue,
                                                &schedOutputQueues,
                                                schedGCQueues);
         mv_setup_input_array(&input_placeholder, config);
-        execThreads = setup_executors(config, schedOutputQueues, outputQueue,
-                                      schedGCQueues);
-        init_database(config, schedInputQueue, outputQueue, schedThreads,
-                      execThreads);
-        elapsed_time = run_experiment(schedInputQueue, outputQueue,
+        //        execThreads = setup_executors(config, schedOutputQueues, outputQueue,
+        //                                      schedGCQueues);
+        //        init_database(config, schedInputQueue, outputQueue, schedThreads,
+        //                      execThreads);
+        init_database(config, schedThreads);
+        elapsed_time = run_experiment(schedInputQueue, 
+                                      &schedOutputQueues[config.numWorkerThreads],//outputQueue,
                                       input_placeholder);
         write_results(config, elapsed_time);
 }
@@ -905,7 +946,7 @@ void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs,
   SimpleQueue<ActionBatch> *inputQueue = 
     new SimpleQueue<ActionBatch>(inputArray, INPUT_SIZE);
   char *outputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 71);
-  SimpleQueue<ActionBatch> *outputQueue = 
+  SimpleQueue<ActionBatch> *outputQueue = esswriteset
     new SimpleQueue<ActionBatch>(outputArray, INPUT_SIZE);
   SetupInput(inputQueue, numEpochs, epochSize, numRecords, txnSize);  
 

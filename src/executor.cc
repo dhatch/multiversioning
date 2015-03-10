@@ -171,8 +171,16 @@ void Executor::LeaderFunction() {
   }
 }
 
+static void wait() 
+{
+        volatile uint64_t temp = 1;
+        while (temp == 1)
+                ;
+}
+
 void Executor::StartWorking() {
   uint32_t epoch = 1;
+  wait();
   //  ActionBatch dummy;
   while (true) {
     // Process the new batch of transactions
@@ -218,6 +226,7 @@ void Executor::StartWorking() {
 
     epoch += 1;
   }
+
 }
 
 // Check if other worker threads have returned data to be recycled.
@@ -344,12 +353,19 @@ bool Executor::ProcessSingleGC(Action *action) {
 
 bool Executor::ProcessSingle(Action *action) {
   assert(action != NULL);
-  if (action->__state == STICKY) {
-    if (cmp_and_swap(&action->__state, STICKY, PROCESSING)) {
+  volatile uint64_t state;
+  barrier();
+  state = action->__state;
+  barrier();
+  if (state != SUBSTANTIATED) {
+    if (state == STICKY && 
+        cmp_and_swap(&action->__state, STICKY, PROCESSING)) {
       if (ProcessTxn(action)) {
         return true;
       }
       else {
+              assert(action->__state == PROCESSING);
+              // xchgq(&action->__state, STICKY);
               barrier();
               action->__state = STICKY;
               barrier();
@@ -388,7 +404,7 @@ bool Executor::ProcessTxn(Action *action) {
                           return false;
           }
           action->Run();
-          
+          //          xchgq(&action->__state, SUBSTANTIATED);
           barrier();
           action->__state = SUBSTANTIATED;
           barrier();
@@ -528,16 +544,18 @@ bool Executor::ProcessTxn(Action *action) {
     }    
   }
 
-
+  //  xchgq(&action->__state, SUBSTANTIATED);
   barrier();  
   action->__state = SUBSTANTIATED;
   barrier();
   for (uint32_t i = 0; i < numWrites; ++i) {
     action->__writeset[i].value->writer = NULL;
+    /*
     MVRecord *previous = action->__writeset[i].value->recordLink;
     if (previous != NULL) {
       garbageBin->AddMVRecord(action->__writeset[i].threadId, previous);
     }
+    */
   }
   //  bool gcSuccess = ProcessSingleGC(action);
   //  assert(gcSuccess);

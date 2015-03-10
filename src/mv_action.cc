@@ -6,6 +6,10 @@ Action::Action()
         this->__combinedHash = 0;
         this->__readonly = false;
         this->__state = STICKY;
+        for (uint32_t i = 0; i < NUM_CC_THREADS; ++i) {
+                this->__write_starts.push_back(-1);
+                this->__read_starts.push_back(-1);
+        }
 }
 
 CompositeKey Action::GenerateKey(bool is_rmw, uint32_t tableId, uint64_t key)
@@ -138,7 +142,7 @@ bool mv_mix_action::Run()
         return true;
 }
 
-RMWAction::RMWAction(uint64_t seed)
+RMWAction::RMWAction(uint64_t seed) : Action()
 {
         __total = seed;
 }
@@ -195,9 +199,24 @@ void RMWAction::DoWrites()
 
 bool RMWAction::Run()
 {
+        uint32_t i, j, num_reads, num_writes;
         assert(recordSize == 1000);
-        DoReads();
-        AccumulateValues();
-        DoWrites();
+        num_reads = __readset.size();
+        num_writes = __writeset.size();
+        uint64_t counter = 0;
+        for (i = 0; i < num_reads; ++i) {
+                char *field_ptr = (char*)Read(i);
+                for (j = 0; j < 10; ++j) 
+                        counter += *((uint64_t*)&field_ptr[j*100]);
+                
+        }
+        for (i = 0; i < num_writes; ++i) {
+                assert(__writeset[i].is_rmw);
+                char *read_ptr = (char*)ReadWrite(i);
+                char *write_ptr = (char*)GetWriteRef(i);
+                memcpy(write_ptr, read_ptr, recordSize);
+                for (j = 0; j < 10; ++j)
+                        *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
+        }
         return true;
 }

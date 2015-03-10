@@ -1,4 +1,4 @@
-CFLAGS=-O3 -g -Wall -Wextra -Werror -std=c++0x -DPROFILE=1
+CFLAGS=-O3 -g -Wall -Wextra -Werror -std=c++0x -DPROFILE=0 -Wno-unused-function
 LIBS=-lnuma -lpthread -lrt -lcityhash -lprofiler
 CXX=g++
 
