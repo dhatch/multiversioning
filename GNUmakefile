@@ -4,13 +4,17 @@ CXX=g++
 
 INCLUDE=include
 SRC=src
-SOURCES=$(wildcard $(SRC)/*.cc $(SRC)/*.c)
-OBJECTS=$(patsubst $(SRC)/%.cc,build/%.o,$(SOURCES))
-START=$(wildcard start/*.cc start/*.c)
-START_OBJECTS=$(patsubst start/%.cc,start/%.o,$(START))
-TEST=test
-TESTSOURCES=$(wildcard $(TEST)/*.cc)
-TESTOBJECTS=$(patsubst test/%.cc,test/%.o,$(TESTSOURCES))
+SOURCES:=$(wildcard $(SRC)/*.cc $(SRC)/*.c)
+HEKATON:=$(wildcard $(SRC)/hek*.cc $(SRC)/hek*.c)
+HEK_OBJ:=$(patsubst $(SRC)/%.cc,build/%.o,$(HEKATON))
+OBJECTS:=$(patsubst $(SRC)/%.cc,build/%.o,$(SOURCES))
+START:=$(wildcard start/*.cc start/*.c)
+START_OBJECTS:=$(patsubst start/%.cc,start/%.o,$(START))
+TEST:=test
+TESTSOURCES:=$(wildcard $(TEST)/*.cc)
+TESTOBJECTS:=$(patsubst test/%.cc,test/%.o,$(TESTSOURCES))
+NON_HEK_OBJECTS:=$(filter-out $(HEK_OBJ),$(OBJECTS))
+
 
 DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
@@ -39,7 +43,7 @@ start/%.o: start/%.cc $(DEPSDIR)/stamp
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -Istart -c -o $@ $<
 
-build/db:$(START_OBJECTS) $(OBJECTS)
+build/db:$(START_OBJECTS) $(NON_HEK_OBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS)
