@@ -33,6 +33,7 @@ struct OCCWorkerConfig {
         uint64_t epoch_threshold;
         uint64_t log_size;
         bool globalTimestamps;
+        uint32_t num_tables;
 };
 
 struct RecordBuffersConfig {
@@ -72,8 +73,9 @@ class OCCWorker : public Runnable {
         uint32_t last_epoch;
         uint32_t txn_counter;
         RecordBuffers *bufs;
-        char *log_head;
+        char *logs[2];
         char *log_tail;
+        int cur_log;
         
         virtual void RunSingle(OCCAction *action);
         virtual bool Validate(OCCAction *action);
@@ -99,6 +101,11 @@ class OCCWorker : public Runnable {
         virtual void StartWorking();
         virtual void Init();
  public:
+        void* operator new(std::size_t sz, int cpu)
+        {
+                return alloc_mem(sz, cpu);
+        }
+        
         OCCWorker(OCCWorkerConfig conf, RecordBuffersConfig rb_conf);
 
         virtual uint64_t NumCompleted();

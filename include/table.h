@@ -80,15 +80,14 @@ class Table {
   }
   
   virtual void* Get(uint64_t key) {
-    uint64_t index = 
-      Hash128to64(std::make_pair(conf.tableId, key)) % conf.numBuckets;
-    TableRecord *rec = buckets[index];
-    while (rec != NULL && rec->key != key) {
-      rec = rec->next;
-    }
-    
-    assert(rec != NULL);
-    return (void*)(rec->value);
+          uint64_t index = 
+                  Hash128to64(std::make_pair(conf.tableId, key)) % conf.numBuckets;
+          TableRecord *rec = buckets[index];
+          while (rec != NULL && rec->key != key) {
+                  rec = rec->next;
+          }
+          assert(rec != NULL);
+          return (void*)(rec->value);
   }
 
   uint32_t RecordSize()

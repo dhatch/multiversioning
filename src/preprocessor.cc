@@ -76,19 +76,20 @@ void MVScheduler::Init() {
 
   this->partitions = 
     (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
-                                  m_cpu_number);
+                                  config.cpuNumber);
   assert(this->partitions != NULL);
 
   // Initialize the allocator and the partitions.
-  this->alloc = new (m_cpu_number) MVRecordAllocator(config.allocatorSize, 
-                                                     m_cpu_number,
-                                                     config.worker_start,
-                                                     config.worker_end);
+  this->alloc = new (config.cpuNumber) MVRecordAllocator(config.allocatorSize, 
+                                                         config.cpuNumber,
+                                                         config.worker_start,
+                                                         config.worker_end);
   for (uint32_t i = 0; i < this->config.numTables; ++i) {
 
     // Track the partition locally and add it to the database's catalog.
-    this->partitions[i] = new MVTablePartition(config.tblPartitionSizes[i],
-                                               m_cpu_number, alloc);
+          this->partitions[i] =
+                  new (config.cpuNumber) MVTablePartition(config.tblPartitionSizes[i],
+                                                          config.cpuNumber, alloc);
     assert(this->partitions[i] != NULL);
     //    DB.PutPartition(i, config.threadId, this->partitions[i]);
   }
@@ -115,57 +116,17 @@ static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
 
 void MVScheduler::StartWorking() {
         //  std::cout << config.numRecycleQueues << "\n";
-  uint32_t epoch = 1;
   while (true) {
-    
-    // Take an input batch
-    ActionBatch curBatch;// = config.inputQueue->DequeueBlocking();
-    while (!config.inputQueue->Dequeue(&curBatch)) {
-      Recycle();
-    }
-
-    // Signal subordinates
-    for (uint32_t i = 0; i < config.numSubords; ++i) {
+    ActionBatch curBatch = config.inputQueue->DequeueBlocking();
+    for (uint32_t i = 0; i < config.numSubords; ++i) 
       config.pubQueues[i]->EnqueueBlocking(curBatch);
-    }
-
-    // Process batch of txns
-    uint32_t txnCounter = 0;
-    for (uint32_t i = 0; i < curBatch.numActions; ++i) {
-      uint64_t version = compute_version(epoch, txnCounter);
-      assert(version == curBatch.actionBuf[i]->__version);
-      ScheduleTransaction(curBatch.actionBuf[i]);
-      txnCounter += 1;
-      /*
-      if (i % 1024 == 0) {
-        Recycle();
-      }
-      */
-    }
-
-
-    // Wait for subordinates
-    for (uint32_t i = 0; i < config.numSubords; ++i) {
+    for (uint32_t i = 0; i < curBatch.numActions; ++i) 
+            ScheduleTransaction(curBatch.actionBuf[i]);
+    for (uint32_t i = 0; i < config.numSubords; ++i) 
       config.subQueues[i]->DequeueBlocking();
-    }    
-    
-    // Signal that we're done
-    for (uint32_t i = 0; i < config.numOutputs; ++i) {
+    for (uint32_t i = 0; i < config.numOutputs; ++i) 
       config.outputQueues[i].EnqueueBlocking(curBatch);
-    }
-    
-    // Check for recycled MVRecords
-    /*
-    for (uint32_t i = 0; i < config.numRecycleQueues; ++i) {
-      MVRecordList recycled;
-      while (config.recycleQueues[i]->Dequeue(&recycled)) {
-        std::cout << "Recycled!\n";
-        this->alloc->ReturnMVRecords(recycled);
-      }
-    }
-    */
-    //    std::cout << "Done epoch";
-    epoch += 1;
+    Recycle();
   }
 }
 
@@ -180,52 +141,6 @@ void MVScheduler::Recycle() {
   }  
 }
 
-/*
-void MVScheduler::Subordinate(uint32_t epoch) {
-  assert(config.threadId != 0 && config.threadId < NUM_CC_THREADS);
-
-  // Take a batch of tranasctions from the leader.
-  ActionBatch curBatch = config.subordInputQueue->DequeueBlocking();
-    
-  // Maintain dependencies for the current batch.
-  uint32_t txnCounter = 0;
-  for (uint32_t i = 0; i < curBatch.numActions; ++i) {      
-      uint64_t version = compute_version(epoch, txnCounter);
-      ScheduleTransaction(curBatch.actionBuf[i], version);
-      txnCounter += 1;
-  }
-
-  // Signal that we're done with the current batch.
-  config.subordOutputQueue->EnqueueBlocking(curBatch);
-}
-
-void MVScheduler::Leader(uint32_t epoch) {
-  assert(config.threadId == 0);
-
-  // Take a batch of transactions from the input queue.
-  ActionBatch curBatch = config.leaderInputQueue->DequeueBlocking();
-
-  // Signal every other concurrency control thread to start.
-  for (uint32_t i = 0; i < NUM_CC_THREADS-1; ++i) {
-    config.leaderEpochStartQueues[i]->EnqueueBlocking(curBatch);
-  }
-    
-  // Maintain dependencies for the current batch of transactions
-  uint32_t txnCounter = 0;
-  for (uint32_t i = 0; i < curBatch.numActions; ++i) {
-    uint64_t version = compute_version(epoch, txnCounter);
-    ScheduleTransaction(curBatch.actionBuf[i], version);
-    txnCounter += 1;
-  }
-
-  // Wait for all concurrency control threads to finish.    
-  for (uint32_t i = 0; i < NUM_CC_THREADS-1; ++i) {
-    config.leaderEpochStopQueues[i]->DequeueBlocking();
-  }
-    
-  config.leaderOutputQueue->EnqueueBlocking(curBatch);
-}
-*/
 
 
 /*
@@ -245,33 +160,36 @@ uint32_t MVScheduler::GetCCThread(CompositeKey key) {
  * is equal to the transaction's timestamp.
  */
 void MVScheduler::ProcessWriteset(Action *action)
-{        
-  while (alloc->Warning()) {
-          //          std::cerr << "[WARNING] CC thread low on versions\n";
-          Recycle();
-  }
+{
 
-  size_t numReads = action->__readset.size();
-  for (uint32_t i = 0; i < numReads; ++i) {
-    if (action->__readset[i].threadId == threadId) {
-      MVRecord *ref = this->partitions[action->__readset[i].tableId]->
-        GetMVRecord(action->__readset[i], action->__version);
-      action->__readset[i].value = ref;
-    }
-  }
+        while (alloc->Warning()) {
+                //          std::cerr << "[WARNING] CC thread low on versions\n";
+                Recycle();
+        }
 
-  size_t numWrites = action->__writeset.size();
-  for (uint32_t i = 0; i < numWrites; ++i) {
-    if (action->__writeset[i].threadId == threadId) {
-      this->partitions[action->__writeset[i].tableId]->
-        WriteNewVersion(action->__writeset[i], action, action->__version);
-    }
-  }
+        int r_index = action->__read_starts[threadId];
+        int w_index = action->__write_starts[threadId];
+        int i;
+        while (r_index != -1) {
+                i = r_index;
+                MVRecord *ref = this->partitions[action->__readset[i].tableId]->
+                        GetMVRecord(action->__readset[i], action->__version);
+                action->__readset[i].value = ref;
+                r_index = action->__readset[i].next;
+                
+        }
+
+        while (w_index != -1) {
+                i = w_index;
+                this->partitions[action->__writeset[i].tableId]->
+                        WriteNewVersion(action->__writeset[i], action, action->__version);
+                w_index = action->__writeset[i].next;
+        }
 }
 
 
 inline void MVScheduler::ScheduleTransaction(Action *action) {
   if ((action->__combinedHash & txnMask) != 0) {
-    ProcessWriteset(action);
+          ProcessWriteset(action);
   }
 }

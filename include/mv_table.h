@@ -17,7 +17,10 @@ class MVTablePartition {
   MVRecord **tableSlots;
         
  public:
-        
+
+      void* operator new (std::size_t sz, int cpu) {
+            return alloc_mem(sz, cpu);
+      }
   // Constructor. 
   //
   // param size: Number of slots in the hash table.

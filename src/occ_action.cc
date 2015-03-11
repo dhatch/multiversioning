@@ -148,14 +148,14 @@ bool RMWOCCAction::DoReads()
                 barrier();
                 write_ptr = (char*)writeset[i].GetValue();
                 memcpy(write_ptr, read_ptr, 1000);
-                for (j = 0; j < num_fields; ++j) {
-                        uint32_t *temp_ptr = (uint32_t*)&write_ptr[j*field_sz];
-                        *temp_ptr += j+1;
-                }
                 barrier();
                 if (readset[i].FinishRead() == false) 
                         return false;
                 barrier();
+                for (j = 0; j < num_fields; ++j) {
+                        uint64_t *temp_ptr = (uint64_t*)&write_ptr[j*field_sz];
+                        *temp_ptr += j+1;
+                }         
         }
         //        __total = counter;
         return true;                

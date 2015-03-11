@@ -60,6 +60,7 @@ void hek_worker::check_dependents()
         }
 }
 
+// Hekaton worker threads's "main" function.
 void hek_worker::StartWorking()
 {
         uint32_t i, batch_size;
@@ -124,6 +125,7 @@ void hek_worker::get_reads(hek_action *txn)
         uint32_t num_reads, i, table_id;
         uint64_t key, ts;        
         struct hek_record *read_record;
+        
         ts = txn->begin;
         num_reads = txn->readset.size();
         for (i = 0; i < num_reads; ++i) {
@@ -205,6 +207,11 @@ void hek_worker::install_writes(hek_action *txn)
         }
 }
 
+// 1. Run txn logic (may abort due to write-write conflicts)
+// 2. Validate reads
+// 3. Check if the txn depends on others. If yes, wait for commit dependencies,
+// otherwise, abort.
+// 
 void hek_worker::run_txn(hek_action *txn)
 {
         hek_status status;

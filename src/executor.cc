@@ -1,4 +1,5 @@
 #include <executor.h>
+#include <algorithm>
 
 PendingActionList::PendingActionList(uint32_t freeListSize) {
   freeList = (ActionListNode*)malloc(sizeof(ActionListNode)*freeListSize);
@@ -139,6 +140,22 @@ void Executor::Init() {
   this->pendingList = new (config.cpu) PendingActionList(1000);
   this->garbageBin = new (config.cpu) GarbageBin(config.garbageConfig);
   //  this->pendingGC = new (config.cpu) PendingActionList(20000);
+  /*
+  char *temp_bufs = (char*)alloc_mem(1000*250000, config.cpu);
+  memset(temp_bufs, 0x0, 1000*250000);
+  this->bufs = (void**)alloc_mem(sizeof(void*)*250000, config.cpu);
+  for (uint32_t i = 0; i < 250000; ++i)
+          this->bufs[i] = &temp_bufs[1000*i];
+  std::random_shuffle(&this->bufs[0], &this->bufs[250000-1]);
+  this->buf_ptr = 0;
+  */
+}
+
+uint64_t Executor::next_ptr()
+{
+        uint64_t ret = buf_ptr;
+        buf_ptr = (buf_ptr + 1) % 250000;
+        return ret;
 }
 
 void Executor::LeaderFunction() {
@@ -170,9 +187,17 @@ void Executor::LeaderFunction() {
     config.outputQueue->EnqueueBlocking(dummy);
   }
 }
-
+/*
+static void wait() 
+{
+        volatile uint64_t temp = 1;
+        while (temp == 1)
+                ;
+}
+*/
 void Executor::StartWorking() {
   uint32_t epoch = 1;
+
   //  ActionBatch dummy;
   while (true) {
     // Process the new batch of transactions
@@ -218,8 +243,14 @@ void Executor::StartWorking() {
 
     epoch += 1;
   }
-}
 
+}
+/*
+uint64_t GetEpoch()
+{
+        return *config.epochPtr;
+}
+*/
 // Check if other worker threads have returned data to be recycled.
 void Executor::RecycleData() {
   uint32_t numTables = config.numTables;
@@ -260,9 +291,9 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
                 
         }
         */
-        for (int i = (int)batch.numActions-1-config.threadId; i > 0;
-             i -= config.numExecutors) {
-                while (pendingList->Size() > 100) {
+        for (int i = config.threadId; i < (int)batch.numActions;
+             i += config.numExecutors) {
+                while (pendingList->Size() > 1000) {
                         ExecPending();
                 }
 
@@ -343,39 +374,77 @@ bool Executor::ProcessSingleGC(Action *action) {
 }
 
 bool Executor::ProcessSingle(Action *action) {
-  assert(action != NULL);
-  if (action->__state != SUBSTANTIATED) {
-          if (action->__state == STICKY &&
-              cmp_and_swap(&action->__state, STICKY, PROCESSING)) {
-                  if (ProcessTxn(action)) {
-                          return true;
-                  } else {
-                          barrier();
-                          action->__state = STICKY;
-                          barrier();
-//                          xchgq(&action->__state, STICKY);
-                          return false;
-                  }
-          } else {      // cmp_and_swap failed
-                  return false;
-          }
-  }
-  else {        // action->state == SUBSTANTIATED
-    return true;
-  }
+        assert(action != NULL);
+        volatile uint64_t state;
+        barrier();
+        state = action->__state;
+        barrier();
+        if (state != SUBSTANTIATED) {
+                if (state == STICKY &&
+                    cmp_and_swap(&action->__state, STICKY, PROCESSING)) {
+                        if (ProcessTxn(action)) {
+                                return true;
+                        } else {
+                                xchgq(&action->__state, STICKY);
+                                return false;
+                        }
+                } else {      // cmp_and_swap failed
+                        return false;
+                }
+        }
+        else {        // action->state == SUBSTANTIATED
+                return true;
+        }
 }
 
-
+bool Executor::check_ready(Action *action)
+{
+        uint32_t num_reads, num_writes, i;
+        bool ready;
+        Action *depend_action;
+        MVRecord *prev;
+        
+        ready = true;
+        num_reads = action->__readset.size();
+        num_writes = action->__writeset.size();
+        for (i = 0; i < num_reads; ++i) {
+                assert(action->__readset[i].value != NULL);
+                // barrier();
+                depend_action = action->__readset[i].value->writer;
+                // barrier();
+                if (depend_action != NULL &&
+                    depend_action->__state != SUBSTANTIATED &&
+                    !ProcessSingle(depend_action)) {
+                        ready = false;
+                }
+        }
+        for (i = 0; i < num_writes; ++i) {
+                assert(action->__writeset[i].value != NULL);
+                if (action->__writeset[i].is_rmw) {
+                        prev = action->__writeset[i].value->recordLink;
+                        assert(prev != NULL);
+                        // barrier();
+                        depend_action = prev->writer;
+                        // barrier();
+                        if (depend_action != NULL &&
+                            depend_action->__state != SUBSTANTIATED &&
+                            !ProcessSingle(depend_action)) {
+                                ready = false;
+                        }
+                }
+        }
+        return ready;
+}
 
 bool Executor::ProcessTxn(Action *action) {
-  assert(action != NULL && action->__state == PROCESSING);
-  if (action->__readonly == true) {
-          assert(action->__writeset.size() == 0);
-          uint32_t num_reads = action->__readset.size();
-          uint64_t action_epoch = GET_MV_EPOCH(action->__version);
-          for (uint32_t i = 0; i < num_reads; ++i) {
-                  MVRecord *rec = action->__readset[i].value;
-                  MVRecord *snapshot;
+        assert(action != NULL && action->__state == PROCESSING);
+        if (action->__readonly == true) {
+                assert(action->__writeset.size() == 0);
+                uint32_t num_reads = action->__readset.size();
+                uint64_t action_epoch = GET_MV_EPOCH(action->__version);
+                for (uint32_t i = 0; i < num_reads; ++i) {
+                        MVRecord *rec = action->__readset[i].value;
+                        MVRecord *snapshot;
                   if (action_epoch == GET_MV_EPOCH(rec->createTimestamp)) {
                           snapshot = rec->epoch_ancestor;
                   } else {
@@ -386,74 +455,47 @@ bool Executor::ProcessTxn(Action *action) {
                   barrier();
                   if (value_ptr == NULL)
                           return false;
+                }
+                action->Run();
+                xchgq(&action->__state, SUBSTANTIATED);
+                return true;
+        }
+        uint32_t numWrites = action->__writeset.size();
+        bool ready = check_ready(action);
+        if (ready == false) {
+                return false;
+        }
+        /*else {
+                for (uint32_t i = 0; i < numWrites; ++i) {
+                        uint64_t index = next_ptr();
+                        void *buf = this->bufs[index];
+                        action->__writeset[i].value->value = (Record*)buf;
+                }
+        }
+        */
+
+        
+        /*
+        bool ready = check_ready(action);
+        if (!ready) {
+                return false;
+        }
+        */
+        
+        /*
+          for (uint32_t i = 0; i < numWrites; ++i) {
+          uint32_t tbl = action->__writeset[i].tableId;
+          Record **valuePtr = &action->__writeset[i].value->value;
+          action->__writeset[i].value->writingThread = config.threadId;
+          bool success = allocators[tbl]->GetRecord(valuePtr);
+          assert(success);
           }
-          action->Run();
-          
-          barrier();
-          action->__state = SUBSTANTIATED;
-          barrier();
-//          xchgq(&action->__state, SUBSTANTIATED);
-
-          return true;
-  }
-  bool ready = true;
-  bool abort = false;
-  uint32_t numReads = action->__readset.size();
-  uint32_t numWrites = action->__writeset.size();
-
-  // First ensure that all transactions on which the current one depends on have
-  // been processed.
-  for (size_t i = 0; i < numReads; ++i) {
-          assert(action->__readset[i].value != NULL);
-          Action *dependAction = action->__readset[i].value->writer;
-          if (dependAction != NULL && !ProcessSingle(dependAction))
-                    ready = false;
-          else if (action->__readset[i].value->value == NULL)
-                  abort = true;
-  }    
-
-  for (size_t i = 0; i < numWrites; ++i) {
-          assert(action->__writeset[i].value != NULL);
-          if (action->__writeset[i].is_rmw) {
-                  MVRecord *prev = action->__writeset[i].value->recordLink;
-                  if (prev != NULL) {
-                          Action *dependAction = prev->writer;
-                          if (dependAction != NULL && !ProcessSingle(dependAction))
-                                  ready = false;
-                  }
-          }
-    
-    // Ensure that the previous version of this record has been written
-    /*
-    MVRecord *prev = action->__writeset[i].value->recordLink;
-    if (prev != NULL) {
-      // There exists a previous version
-      Action *dependAction = prev->writer;
-      if (dependAction != NULL && !ProcessSingle(dependAction)) {
-        ready = false;
-      }
-    }
-    */
-  }
-  
-  // If abort is true at this point, it's because the txn tried to read a 
-  // non-existent record
-  if (!ready) {
-    return false;
-  }
-
-  /*
-  for (uint32_t i = 0; i < numWrites; ++i) {
-    uint32_t tbl = action->__writeset[i].tableId;
-    Record **valuePtr = &action->__writeset[i].value->value;
-    action->__writeset[i].value->writingThread = config.threadId;
-    bool success = allocators[tbl]->GetRecord(valuePtr);
-    assert(success);
-  }
-  */
+        */
   
   // Transaction aborted
-  if (abort || !action->Run()) {
+        action->Run();
+        /*
+  if (!action->Run()) {
     assert(false);
     for (uint32_t i = 0; i < numWrites; ++i) {
       uint32_t tbl = action->__writeset[i].tableId;
@@ -470,19 +512,22 @@ bool Executor::ProcessTxn(Action *action) {
       }
     }    
   }
+        */
 
-
-  barrier();  
-  action->__state = SUBSTANTIATED;
-  barrier();
-//  xchgq(&action->__state, SUBSTANTIATED);
+        barrier();
+        xchgq(&action->__state, SUBSTANTIATED);
+        barrier();
   for (uint32_t i = 0; i < numWrites; ++i) {
-    action->__writeset[i].value->writer = NULL;
+          //          xchgq((volatile uint64_t*)&action->__writeset[i].value->writer,
+          //                (uint64_t)NULL);
+          //          action->__writeset[i].value->writer = NULL;
+  
     MVRecord *previous = action->__writeset[i].value->recordLink;
     if (previous != NULL) {
       garbageBin->AddMVRecord(action->__writeset[i].threadId, previous);
     }
   }
+  barrier();
   //  bool gcSuccess = ProcessSingleGC(action);
   //  assert(gcSuccess);
   /*

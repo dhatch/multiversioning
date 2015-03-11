@@ -24,7 +24,7 @@ class occ_composite_key {
         uint64_t key;
         volatile uint64_t old_tid;
         bool is_rmw;
-        void *value;
+        volatile void *value;
 
         occ_composite_key(uint32_t tableId, uint64_t key, bool is_rmw);
         void* GetValue() const ;

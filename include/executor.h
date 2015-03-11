@@ -138,11 +138,13 @@ class Executor : public Runnable {
   uint32_t epoch;
 
   RecordAllocator **allocators;
-
+  void **bufs;
+  uint64_t buf_ptr;
   PendingActionList *pendingGC;
   uint64_t counter;
 
  protected:
+
 
   virtual void LeaderFunction();
 
@@ -162,12 +164,16 @@ class Executor : public Runnable {
 
   uint32_t DoPendingGC();
   bool ProcessSingleGC(Action *action);
+  bool check_ready(Action *action);
 
+  virtual uint64_t next_ptr();
  public:
   void* operator new(std::size_t sz, int cpu) {
     return alloc_mem(sz, cpu);
   }
-  Executor(ExecutorConfig config);  
+  Executor(ExecutorConfig config);
+
+  //  uint64_t GetEpoch();
 };
 
 #endif          // EXECUTOR_H_

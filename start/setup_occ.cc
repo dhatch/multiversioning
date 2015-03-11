@@ -166,18 +166,21 @@ OCCAction* generate_small_bank_occ_action(uint64_t numRecords, bool read_only)
         return ret;
 }
 
-OCCActionBatch** setup_occ_input(OCCConfig config, uint32_t iters)
+OCCActionBatch** setup_occ_input(OCCConfig config, uint32_t extra_batches)
 {
         OCCActionBatch **ret;
-        uint32_t i;
-        uint32_t saved_num_txns;
-        saved_num_txns = config.numTxns;
+        uint32_t i, total_iters;
+        OCCConfig fake_config;
+        
+        total_iters = 1 + 1 + extra_batches; // dry run + real run + extra
+        fake_config = config;
+        fake_config.numTxns = FAKE_ITER_SIZE;
+        ret = (OCCActionBatch**)malloc(sizeof(OCCActionBatch*)*(total_iters));
+        ret[0] = setup_occ_single_input(fake_config);
+        ret[1] = setup_occ_single_input(config);
         config.numTxns = 1000000;
-        ret = (OCCActionBatch**)malloc(sizeof(OCCActionBatch*)*(iters+1));
-        ret[0] = setup_occ_single_input(config);
-        config.numTxns = saved_num_txns;
-        for (i = 0; i < iters; ++i) 
-                ret[i+1] = setup_occ_single_input(config);
+        for (i = 2; i < total_iters; ++i) 
+                ret[i] = setup_occ_single_input(fake_config);
         std::cerr << "Done setting up occ input\n";
         return ret;
 }
@@ -245,6 +248,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                         epoch_threshold,
                         OCC_LOG_SIZE,
                         false,
+                        numTables,
                 };
                 buf_config = {
                         numTables,
@@ -252,7 +256,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                         100,
                         i,
                 };                
-                workers[i] = new OCCWorker(worker_config, buf_config);
+                workers[i] = new(i) OCCWorker(worker_config, buf_config);
         }
         std::cerr << "Done setting up occ workers\n";
         return workers;
@@ -511,6 +515,6 @@ void occ_experiment(OCCConfig config)
                                     config.numThreads, config.occ_epoch, 2);
         inputs = setup_occ_input(config, OCC_TXN_BUFFER);
         result = run_occ_workers(input_queues, output_queues, workers,
-                                 inputs, OCC_TXN_BUFFER, config);
+                                 inputs, OCC_TXN_BUFFER+1, config);
         write_occ_output(result, config);
 }

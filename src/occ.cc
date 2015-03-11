@@ -1,5 +1,6 @@
 #include <occ.h>
 #include <action.h>
+#include <cpuinfo.h>
 #include <algorithm>
 
 OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
@@ -7,14 +8,17 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
 {
         this->config = conf;
         this->bufs = new(conf.cpu) RecordBuffers(rb_conf);
+        this->logs[0] = (char*)alloc_mem(config.log_size, config.cpu);
+        this->logs[1] = (char*)alloc_mem(config.log_size, config.cpu);
+        assert(this->logs[0] != NULL && this->logs[1] != NULL);
+        memset(this->logs[0], 0x0, config.log_size);
+        memset(this->logs[1], 0x0, config.log_size);
+        this->cur_log = 0;
+        this->log_tail = this->logs[0];
 }
 
 void OCCWorker::Init()
 {
-        this->log_head = (char*)alloc_mem(config.log_size, config.cpu);
-        //        this->log_head = (char*)alloc_interleaved_all(config.log_size);
-        memset(log_head, 0x0, config.log_size);
-        this->log_tail = log_head;
 }
 
 /*
@@ -22,16 +26,13 @@ void OCCWorker::Init()
  */
 void OCCWorker::StartWorking()
 {
+        OCCActionBatch input;
+        input = config.inputQueue->DequeueBlocking();
         if (config.cpu == 0) 
                 incr_timestamp = rdtsc();                
-        
         barrier();
-        OCCActionBatch input;
-        while (true) {
-                while (!config.inputQueue->Dequeue(&input)) {
-                        if (config.cpu == 0)
-                                UpdateEpoch();
-                }
+
+        do {
                 barrier();
                 config.num_completed = 0;
                 barrier();
@@ -42,7 +43,13 @@ void OCCWorker::StartWorking()
                 }
                 input.batchSize = config.num_completed;
                 config.outputQueue->EnqueueBlocking(input);
-        }
+
+
+                while (!config.inputQueue->Dequeue(&input)) {
+                        if (config.cpu == 0)
+                                UpdateEpoch();
+                }
+        } while (true);
 }
 
 void OCCWorker::UpdateEpoch()
@@ -76,8 +83,10 @@ void OCCWorker::RunSingle(OCCAction *action)
         PrepareReads(action);
         
         while (true) {
-                if (config.cpu == 0 && tries % 16 == 0)
-                        UpdateEpoch();                
+                tries += 1;
+                if (tries % 128 == 0 && config.cpu == 0) {
+                        UpdateEpoch();
+                }
                 status = action->Run();
                 if (status.validation_pass == false) {
                         tries += 1;
@@ -90,11 +99,11 @@ void OCCWorker::RunSingle(OCCAction *action)
                 if (Validate(action)) {
                         reset_log = (epoch > GET_EPOCH(last_tid));
                         cur_tid = ComputeTID(action, epoch);
-
+                        
                         InstallWrites(action, cur_tid);
                         fetch_and_increment(&config.num_completed);
                         Serialize(action, cur_tid, reset_log);
-                                                break;
+                        break;
                 } else {
                         tries += 1;
                         ReleaseWriteLocks(action);
@@ -109,8 +118,12 @@ void OCCWorker::SerializeSingle(const occ_composite_key &occ_key, uint64_t tid)
         uint64_t key;
         uint64_t total_sz;
         struct occ_log_header header;
+        char *log_head;
+
+        log_head = logs[cur_log];
         assert(occ_key.GetValue() != NULL);
         table_id = occ_key.tableId;
+        assert(table_id < config.num_tables);
         key = occ_key.key;
         record_size = config.tables[table_id]->RecordSize() - sizeof(uint64_t);
         header = {
@@ -130,7 +143,8 @@ void OCCWorker::SerializeSingle(const occ_composite_key &occ_key, uint64_t tid)
 void OCCWorker::Serialize(OCCAction *action, uint64_t tid, bool reset)
 {
         if (reset) {
-                log_tail = log_head;
+                cur_log = (cur_log + 1) % 2;
+                log_tail = logs[cur_log];
         }
         uint32_t i, num_writes;
         num_writes = action->writeset.size();
@@ -229,9 +243,9 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
                 assert(IS_LOCKED(*(uint64_t*)value) == true);
                 assert(GET_TIMESTAMP(*(uint64_t*)value) < tid);
                 record_size = config.tables[table_id]->RecordSize() - sizeof(uint64_t);
-                assert(record_size == 1000);
                 memcpy(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
                        record_size);
+                barrier();
 //                barrier();
 //                *RECORD_TID_PTR(value) = tid;
 //                barrier();
@@ -265,7 +279,7 @@ void OCCWorker::RecycleBufs(OCCAction *action)
         num_writes = action->writeset.size();
         for (uint32_t i = 0; i < num_writes; ++i) {
                 table_id = action->writeset[i].tableId;
-                rec = action->writeset[i].value;
+                rec = (void*)action->writeset[i].value;
                 bufs->ReturnRecord(table_id, rec);
         }
 }

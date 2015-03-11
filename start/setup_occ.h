@@ -2,8 +2,9 @@
 #define SETUP_OCC_H_
 
 #define OCC_WAIT_INTERVAL 1000
-#define OCC_TXN_BUFFER 1
-#define OCC_LOG_SIZE (((uint64_t)1)<<29)
+#define OCC_TXN_BUFFER 0
+#define FAKE_ITER_SIZE 1000000
+#define OCC_LOG_SIZE (((uint64_t)1)<<28)
 
 #include <occ_action.h>
 #include <config.h>
