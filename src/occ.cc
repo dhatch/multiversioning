@@ -56,6 +56,9 @@ void OCCWorker::TxnRunner()
         
         output.batch = NULL;
         while (true) {
+                barrier();
+                config.num_completed = 0;
+                barrier();
                 input = config.inputQueue->DequeueBlocking();
                 for (i = 0; i < input.batchSize; ++i) {
                         RunSingle(input.batch[i]);
