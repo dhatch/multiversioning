@@ -5,6 +5,7 @@
 #define OCC_TXN_BUFFER 0
 #define FAKE_ITER_SIZE 1000000
 #define OCC_LOG_SIZE (((uint64_t)1)<<28)
+#define OCC_EPOCH_SIZE 7984000
 
 #include <occ_action.h>
 #include <config.h>

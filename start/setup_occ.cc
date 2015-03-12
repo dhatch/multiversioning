@@ -192,6 +192,7 @@ OCCActionBatch* setup_occ_single_input(OCCConfig config)
         uint32_t txns_per_thread, remainder, i;
         OCCAction **actions;
 
+        config.numThreads -= 1;
         gen = NULL;
         if (config.distribution == 0) 
                 gen = new UniformGenerator(config.numRecords);
@@ -408,7 +409,7 @@ uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
         uint32_t i;
         uint64_t num_completed = 0;
         OCCActionBatch temp;
-        for (i = 0; i < num_workers; ++i) {
+        for (i = 1; i < num_workers; ++i) {
                 temp = output_queues[i]->DequeueBlocking();
                 num_completed += temp.batchSize;
         }
@@ -437,10 +438,10 @@ void dry_run(SimpleQueue<OCCActionBatch> **input_queues,
              uint32_t num_workers)
 {
         uint32_t i;
-        for (i = 0; i < num_workers; ++i) 
-                input_queues[i]->EnqueueBlocking(input_batches[i]);
+        for (i = 1; i < num_workers; ++i) 
+                input_queues[i]->EnqueueBlocking(input_batches[i-1]);
         barrier();
-        for (i = 0; i < num_workers; ++i) 
+        for (i = 1; i < num_workers; ++i) 
                 output_queues[i]->DequeueBlocking();
 }
 
@@ -468,8 +469,8 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
         barrier();
         for (i = 0; i < num_batches; ++i) 
-                for (j = 0; j < config.numThreads; ++j) 
-                        inputQueues[j]->EnqueueBlocking(inputBatches[i+1][j]);
+                for (j = 0; j < config.numThreads-1; ++j) 
+                        inputQueues[j+1]->EnqueueBlocking(inputBatches[i+1][j]);
         barrier();
         result.num_txns = wait_to_completion(outputQueues, config.numThreads);
         barrier();
@@ -508,6 +509,7 @@ void occ_experiment(OCCConfig config)
         OCCWorker **workers;
         OCCActionBatch **inputs;
         struct occ_result result;
+	config.occ_epoch = OCC_EPOCH_SIZE;
         input_queues = setup_queues<OCCActionBatch>(config.numThreads, 1024);
         output_queues = setup_queues<OCCActionBatch>(config.numThreads, 1024);
         tables = setup_occ_tables(config);

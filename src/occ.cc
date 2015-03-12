@@ -26,40 +26,55 @@ void OCCWorker::Init()
  */
 void OCCWorker::StartWorking()
 {
-        OCCActionBatch input;
-        input = config.inputQueue->DequeueBlocking();
-        if (config.cpu == 0) 
-                incr_timestamp = rdtsc();                
+        if (config.cpu == 0) {
+                EpochManager();
+        } else {
+                TxnRunner();
+        }
+}
+
+void OCCWorker::EpochManager()
+{
+        uint64_t i, iters;
+        iters = 100000;
+        assert(iters < (config.epoch_threshold/2));
         barrier();
+        incr_timestamp = rdtsc();
+        barrier();
+        while (true) {
+                for (i = 0; i < iters; ++i) {
+                        single_work();
+                }
+                UpdateEpoch();
+        }
+}
 
-        do {
-                barrier();
-                config.num_completed = 0;
-                barrier();
-                for (uint32_t i = 0; i < input.batchSize; ++i) {
+void OCCWorker::TxnRunner()
+{
+        uint32_t i;
+        OCCActionBatch input, output;
+        
+        output.batch = NULL;
+        while (true) {
+                input = config.inputQueue->DequeueBlocking();
+                for (i = 0; i < input.batchSize; ++i) {
                         RunSingle(input.batch[i]);
-                        if ((config.cpu == 0))
-                                UpdateEpoch();
                 }
-                input.batchSize = config.num_completed;
-                config.outputQueue->EnqueueBlocking(input);
-
-
-                while (!config.inputQueue->Dequeue(&input)) {
-                        if (config.cpu == 0)
-                                UpdateEpoch();
-                }
-        } while (true);
+                output.batchSize = config.num_completed;
+                config.outputQueue->EnqueueBlocking(output);
+        }
 }
 
 void OCCWorker::UpdateEpoch()
 {
+        uint32_t temp;
         barrier();
         volatile uint64_t now = rdtsc();
         barrier();
-        if (now - incr_timestamp > config.epoch_threshold) {
-                fetch_and_increment_32(config.epoch_ptr);
+        if (now - incr_timestamp > config.epoch_threshold) {                
+                temp = fetch_and_increment_32(config.epoch_ptr);                
                 incr_timestamp = now;
+                assert(temp != 0);
         }
 }
 
@@ -75,7 +90,6 @@ uint64_t OCCWorker::NumCompleted()
 void OCCWorker::RunSingle(OCCAction *action)
 {
         uint64_t cur_tid;
-        uint32_t tries = 0;
         occ_txn_status status;
         volatile uint32_t epoch;
         bool reset_log = false;
@@ -83,13 +97,8 @@ void OCCWorker::RunSingle(OCCAction *action)
         PrepareReads(action);
         
         while (true) {
-                tries += 1;
-                if (tries % 128 == 0 && config.cpu == 0) {
-                        UpdateEpoch();
-                }
                 status = action->Run();
                 if (status.validation_pass == false) {
-                        tries += 1;
                         continue;
                 }
                 AcquireWriteLocks(action);
@@ -105,7 +114,6 @@ void OCCWorker::RunSingle(OCCAction *action)
                         Serialize(action, cur_tid, reset_log);
                         break;
                 } else {
-                        tries += 1;
                         ReleaseWriteLocks(action);
                 }
         }

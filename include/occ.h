@@ -96,6 +96,8 @@ class OCCWorker : public Runnable {
         virtual void SerializeSingle(const occ_composite_key &occ_key,
                                      uint64_t tid);
 
+        virtual void EpochManager();
+        virtual void TxnRunner();
         
  protected:
         virtual void StartWorking();
