@@ -68,7 +68,7 @@ static void CreateQueues(int cpuNumber, uint32_t subCount,
 
 
 static MVSchedulerConfig SetupSched(int cpuNumber, 
-                                    int threadId, 
+                                    uint32_t threadId, 
                                     int numThreads, 
                                     size_t alloc, 
                                     uint32_t numTables,
@@ -244,7 +244,7 @@ static ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId,
   ExecutorConfig config = {
     threadId,
     numWorkerThreads,
-    cpuNumber,
+    (int)cpuNumber,
     epoch,
     GClowWaterMarkPtr,
     inputQueue,
@@ -387,7 +387,7 @@ static MVScheduler** SetupSchedulers(int numProcs,
 
   MVSchedulerConfig localLeaderConfig = globalLeaderConfig;
   
-  for (int i = 1; i < numProcs; ++i) {
+  for (uint32_t i = 1; i < numProcs; ++i) {
     if (i % 10 == 0) {
       int leaderNum = i/10;
       auto inputQueue = globalLeaderConfig.pubQueues[9+leaderNum-1];

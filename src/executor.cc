@@ -160,7 +160,7 @@ uint64_t Executor::next_ptr()
 
 void Executor::LeaderFunction() {
   assert(config.threadId == 0);
-  ActionBatch dummy;
+  ActionBatch dummy = { NULL, 0 };
   volatile uint32_t minEpoch = *config.epochPtr;
   //        std::cout << "0:" << minEpoch << "\n";
   for (uint32_t i = 1; i < config.numExecutors; ++i) {
