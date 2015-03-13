@@ -3,19 +3,9 @@
 
 #include <concurrent_queue.h>
 #include <hek_action.h>
+#include <runnable.hh>
 
-#define HEK_INF		0xFFFFFFFFFFFFFFF0
-#define HEK_MASK	0x000000000000000F
-#define EXECUTING 	0x0
-#define PREPARING 	0x1
-#define COMMIT		0x2
-#define ABORT 		0x3
-
-#define HEK_TIME(ts) (HEK_MASK & ts)
-#define HEK_STATE(ts) ((~HEK_MASK) & ts)
-#define CREATE_PREP_TIMESTAMP(ts) ((ts<<8) | PREPARING)
-#define CREATE_COMMIT_TIMESTAMP(ts) ((ts<<8) | COMMIT)
-#define CREATE_COMMIT_TIMESTAMP(ts) ((ts<<8) | ABORT)
+class hek_table;
 
 class hek_queue {
         volatile hek_action *head;
@@ -32,14 +22,6 @@ struct hek_batch {
         uint32_t num_txns;
 };
 
-struct hek_record {
-        struct hek_record *next;
-        uint64_t begin;
-        uint64_t end;
-        uint64_t key;
-        uint32_t size;
-        char value[0];
-};
 
 struct hek_config {
         int cpu;
@@ -50,19 +32,47 @@ struct hek_config {
         SimpleQueue<hek_batch> *input_queue;
         SimpleQueue<hek_batch> *output_queue;
 
-        hek_action **committed;
-        hek_action **aborted;
+        hek_queue *commit_queue;
+        hek_queue *abort_queue;
 };
 
 class hek_worker : public Runnable {
  private:
+        uint32_t num_committed;
+        uint32_t num_done;
+        
+        hek_config config;
+        
         struct hek_record *records;
         
-        virtual bool run_txn(hek_action *txn);
+        virtual void run_txn(hek_action *txn);
         virtual void get_reads(hek_action *txn);
         virtual struct hek_record* get_new_record();
 
-        virtual bool validate(hek_action *txn);
+        virtual bool validate_single(hek_action *txn, hek_key *key,
+                                     hek_record *read_record);
+        virtual bool validate_reads(hek_action *txn);
+        //        virtual bool validate(hek_action *txn);
+        virtual void remove_writes(hek_action *txn);
+        virtual void install_writes(hek_action *txn);
+        virtual void check_dependents();
+
+        virtual void transition_begin(hek_action *txn);
+        virtual void transition_preparing(hek_action *txn);
+        virtual void transition_commit(hek_action *txn);
+        virtual void transition_abort(hek_action *txn);
+
+        virtual bool add_commit_dep(hek_action *dependency,
+                                    hek_action *dependent, hek_key *key);
+        
+        virtual void do_abort(hek_action *txn);
+        virtual void do_commit(hek_action *txn);
+
+        virtual void commit_waiters(hek_action *txn);
+        virtual void kill_waiters(hek_action *txn);
+
+        virtual inline void insert_commit_queue(hek_action *txn);
+        virtual inline void insert_abort_queue(hek_action *txn);
         
  protected:
         virtual void StartWorking();

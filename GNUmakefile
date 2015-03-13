@@ -43,7 +43,7 @@ start/%.o: start/%.cc $(DEPSDIR)/stamp
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -Istart -c -o $@ $<
 
-build/db:$(START_OBJECTS) $(NON_HEK_OBJECTS)
+build/db:$(START_OBJECTS) $(OBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS)

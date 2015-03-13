@@ -2,7 +2,15 @@
 #define HEK_TABLE_H_
 
 #include <stdint.h>
-#include <hek.h>
+
+struct hek_record {
+        struct hek_record *next;
+        uint64_t begin;
+        uint64_t end;
+        uint64_t key;
+        uint32_t size;
+        char value[0];
+};
 
 struct hek_table_slot {
         volatile uint64_t latch;
@@ -16,7 +24,8 @@ class hek_table {
         
         struct hek_table_slot* get_slot(uint64_t key);
         bool get_preparing_ts(hek_record *record, uint64_t *ret);
-        hek_record* search_stable(uint64_t key, uint64_t ts, hek_record *iter);
+        hek_record* search_stable(uint64_t key, uint64_t ts,
+                                  hek_record *iter);
         bool validate(hek_record *cur, hek_record *prev);
         hek_record* search_bucket(uint64_t key, uint64_t ts,
                                   struct hek_table_slot *slot);
@@ -28,3 +37,5 @@ class hek_table {
         void remove_version(hek_record *record, uint64_t ts);
         void finalize_version(hek_record *record, uint64_t ts);
 };
+
+#endif // HEK_TABLE_H_
