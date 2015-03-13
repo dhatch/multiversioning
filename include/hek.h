@@ -31,9 +31,10 @@ struct hek_config {
         hek_table **tables;
         SimpleQueue<hek_batch> *input_queue;
         SimpleQueue<hek_batch> *output_queue;
-
         hek_queue *commit_queue;
         hek_queue *abort_queue;
+        uint32_t *free_list_sizes;
+        uint32_t *record_sizes;
 };
 
 class hek_worker : public Runnable {
@@ -43,11 +44,16 @@ class hek_worker : public Runnable {
         
         hek_config config;
         
-        struct hek_record *records;
+        struct hek_record **records;
+
+        virtual void init_allocator();
+        virtual struct hek_record* get_new_record(uint32_t table_id);
+        virtual void return_record(uint32_t table_id,
+                                   struct hek_record *record);
+        
         
         virtual void run_txn(hek_action *txn);
         virtual void get_reads(hek_action *txn);
-        virtual struct hek_record* get_new_record();
 
         virtual bool validate_single(hek_action *txn, hek_key *key,
                                      hek_record *read_record);

@@ -3,6 +3,60 @@
 #include <hek_action.h>
 #include <hek_record.h>
 
+static void init_list(char *start, uint32_t num_records, uint32_t record_sz)
+{
+        uint32_t i;
+        hek_record *cur, *next;
+        
+        assert(num_records > 0);
+        cur = NULL;
+        next = NULL;
+        for (i = 0; i < num_records; ++i) {
+                cur = (hek_record*)start;
+                start += record_sz + sizeof(hek_record);
+                next = (hek_record*)start;
+                cur->next = next;
+        }
+        cur->next = NULL;
+}
+
+/*
+ * Initialize the record allocator. Works in two phases, first do the 
+ * allocation, then link up everything.
+ */
+void hek_worker::init_allocator()
+{
+        uint32_t free_list_sz, record_sz, header_sz, i;
+        char *temp, *start;
+        uint64_t total_sz;
+
+        header_sz = sizeof(hek_record);
+        total_sz = config.num_tables*sizeof(hek_record*);        
+        for (i = 0; i < this->config.num_tables; ++i) {
+                free_list_sz = config.free_list_sizes[i];
+                record_sz = config.record_sizes[i];
+                total_sz += free_list_sz * (record_sz + header_sz);
+        }
+        temp = (char*)alloc_mem(total_sz, config.cpu);
+        records = (hek_record**)temp;
+        start = temp + config.num_tables*sizeof(hek_record*);
+        for (i = 0; i < this->config.num_tables; ++i) {
+                records[i] = (hek_record*)start;
+                free_list_sz = config.free_list_sizes[i];
+                record_sz = config.record_sizes[i];
+                init_list(start, free_list_sz, record_sz);
+                start += free_list_sz * (record_sz + header_sz);
+        }
+}
+
+hek_worker::hek_worker(hek_config config) : Runnable(config.cpu)
+{
+        this->config = config;
+        init_allocator();
+}
+
+
+
 void hek_worker::insert_commit_queue(hek_action *txn)
 {
         hek_queue *queue = txn->worker->config.commit_queue;
@@ -226,9 +280,20 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key,
         return true;
 }
 
-hek_record* hek_worker::get_new_record()
+hek_record* hek_worker::get_new_record(uint32_t table_id)
 {
-        return NULL;
+        hek_record *ret;
+
+        ret = records[table_id];
+        assert(ret != NULL);
+        records[table_id] = ret->next;
+        return ret;       
+}
+
+void hek_worker::return_record(uint32_t table_id, hek_record *record)
+{
+        record->next = records[table_id];
+        records[table_id] = record;
 }
 
 bool hek_worker::validate_reads(hek_action *txn)
@@ -384,6 +449,8 @@ void hek_worker::remove_writes(hek_action *txn)
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 key = &txn->writeset[i];
+                record = key->value;
+                table_id = key->table_id;
                 assert(record != NULL);
                 assert(table_id < config.num_tables);
                 table_id = key->table_id;
