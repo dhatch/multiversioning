@@ -11,6 +11,9 @@ class UniformGenerator : public RecordGenerator {
   UniformGenerator(uint64_t numElems) {
     this->numElems = numElems;
   }
+
+  virtual ~UniformGenerator() {
+  }
   
   virtual uint64_t GenNext() {
     return (uint64_t)rand() % this->numElems;

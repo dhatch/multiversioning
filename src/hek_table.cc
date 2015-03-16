@@ -4,6 +4,7 @@
 
 hek_table::hek_table(uint64_t num_slots, int cpu_start, int cpu_end)
 {
+        this->init_done = false;
         this->num_slots = num_slots;
         this->slots =
                 (hek_table_slot*)
@@ -12,6 +13,10 @@ hek_table::hek_table(uint64_t num_slots, int cpu_start, int cpu_end)
         memset(slots, 0x0, sizeof(hek_table_slot)*num_slots);
 }
 
+/* 
+ * Return slot corresponding to a key. Encapsulated in a function so we can 
+ * switch between using an array or hash table. 
+ */
 hek_table_slot* hek_table::get_slot(uint64_t key)
 {
         return &slots[key];
@@ -43,11 +48,17 @@ bool hek_table::get_preparing_ts(hek_record *record, uint64_t *ret)
         }
 }
 
+/* 
+ * Standard search through a list of versions. Requires that all versions are 
+ * committed.  
+ */
 hek_record* hek_table::search_stable(uint64_t key, uint64_t ts,
                                      hek_record *iter)
 {
         while (iter != NULL) {
-                assert(IS_TIMESTAMP(iter->begin));
+                
+                /* Version must be committed */
+                assert(IS_TIMESTAMP(iter->begin));	
                 if (key == iter->key && HEK_TIME(iter->begin) < ts)
                         break;
                 iter = iter->next;
@@ -55,6 +66,9 @@ hek_record* hek_table::search_stable(uint64_t key, uint64_t ts,
         return iter;
 }
 
+/*
+ * 
+ */
 bool hek_table::validate(hek_record *cur, hek_record *prev)
 {
         if (IS_TIMESTAMP(cur->begin) || (prev == NULL) ||
@@ -63,6 +77,7 @@ bool hek_table::validate(hek_record *cur, hek_record *prev)
         return false;
 }
 
+/* Search a particular bucket for a key. */ 
 hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
                                      struct hek_table_slot *slot)
 {
@@ -82,23 +97,36 @@ hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
                         break;
         }
         if (cur == NULL)
-                return NULL;
-        if (get_preparing_ts(cur, &record_ts) && record_ts < ts) {
+                return NULL;        
+        else if (get_preparing_ts(cur, &record_ts) && record_ts < ts) 
                 return cur;
-        } else {
+        else if (prev != NULL) 
                 return search_stable(key, ts, prev);
-        }
+        else
+                return NULL;
+        
 }
 
+/* 
+ * Perform a read of a record at a particular timestamp. Returns a reference to 
+ * the requested record.  
+ */
 hek_record* hek_table::get_version(uint64_t key, uint64_t ts)
 {
+        assert(init_done == true);
         struct hek_table_slot *slot;
         slot = get_slot(key);
         return search_bucket(key, ts, slot);
 }
 
+/* 
+ * Used to perform a write during txn execution. The write is _not_ committed, 
+ * but serves as a lock to protect the given bucket from concurrent 
+ * modification.
+ */
 bool hek_table::insert_version(hek_record *record)
 {
+        assert(init_done == true);
         hek_table_slot *slot;
         hek_record *prev;
 
@@ -114,8 +142,10 @@ bool hek_table::insert_version(hek_record *record)
         }
 }
 
+/* Used to abort a write. Remove the version and clear the bucket's lock bit. */
 void hek_table::remove_version(hek_record *record, uint64_t ts)
 {
+        assert(init_done == true);
         hek_table_slot *slot;
         hek_record *prev;
 
@@ -128,8 +158,10 @@ void hek_table::remove_version(hek_record *record, uint64_t ts)
         xchgq(&slot->latch, 0x0);
 }
 
+/* Used to commit a write. Clear the lock bit corresponding to the bucket. */
 void hek_table::finalize_version(hek_record *record, uint64_t ts)
 {
+        assert(init_done == true);
         hek_table_slot *slot;
         hek_record *prev;
 
@@ -140,4 +172,24 @@ void hek_table::finalize_version(hek_record *record, uint64_t ts)
         if (prev != NULL) 
                 prev->end = ts;
         xchgq(&slot->latch, 0x0);
+}
+
+/* Insert a record without any concurrency control. Used for initialization. */
+void hek_table::force_insert(hek_record *rec)
+{
+        assert(init_done == false);
+        assert(rec->begin == 0 && rec->end == HEK_INF);
+        hek_table_slot *slot;
+        
+        slot = get_slot(rec->key);
+        assert(slot->latch == 0);
+        rec->next = (hek_record*)slot->records;
+        slot->records = rec;
+}
+
+/*  */
+void hek_table::finish_init()
+{
+        assert(init_done == false);
+        init_done = true;
 }

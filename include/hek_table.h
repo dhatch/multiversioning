@@ -21,6 +21,7 @@ class hek_table {
  private:
         uint64_t num_slots;
         struct hek_table_slot *slots;
+        bool init_done;
         
         struct hek_table_slot* get_slot(uint64_t key);
         bool get_preparing_ts(hek_record *record, uint64_t *ret);
@@ -36,6 +37,8 @@ class hek_table {
         bool insert_version(hek_record *record);
         void remove_version(hek_record *record, uint64_t ts);
         void finalize_version(hek_record *record, uint64_t ts);
+        void force_insert(hek_record *record);
+        void finish_init();
 };
 
 #endif // HEK_TABLE_H_

@@ -60,4 +60,15 @@ class hek_action {
         
 } __attribute__((__aligned__(256)));
 
+class hek_rmw_action : public hek_action {
+ public:
+        virtual hek_status Run();
+};
+
+class hek_readonly_action : public hek_action {
+        volatile char read[1000];
+ public:
+        virtual hek_status Run();
+};
+
 #endif // HEK_ACTION_H_

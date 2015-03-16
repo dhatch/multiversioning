@@ -12,6 +12,14 @@ class hek_queue {
         volatile hek_action **tail;
 
  public:
+        void* operator new(std::size_t sz, int cpu)
+        {
+                void *ret;
+                ret = alloc_mem(sz, cpu);
+                memset(ret, sz, 0x0);
+                return ret;
+        }
+        
         hek_queue();
         virtual void enqueue(hek_action *txn);
         virtual hek_action* dequeue_batch();
@@ -23,7 +31,7 @@ struct hek_batch {
 };
 
 
-struct hek_config {
+struct hek_worker_config {
         int cpu;
         uint64_t *global_time;
         uint32_t num_tables;
@@ -33,7 +41,7 @@ struct hek_config {
         SimpleQueue<hek_batch> *output_queue;
         hek_queue *commit_queue;
         hek_queue *abort_queue;
-        uint32_t *free_list_sizes;
+        uint64_t *free_list_sizes;
         uint32_t *record_sizes;
 };
 
@@ -42,7 +50,7 @@ class hek_worker : public Runnable {
         uint32_t num_committed;
         uint32_t num_done;
         
-        hek_config config;
+        hek_worker_config config;
         
         struct hek_record **records;
 
@@ -85,7 +93,12 @@ class hek_worker : public Runnable {
         virtual void Init();
         
  public:
-        hek_worker(hek_config conf);
+        void* operator new(std::size_t sz, int cpu)
+        {
+                return alloc_mem(sz, cpu);
+        }
+        
+        hek_worker(hek_worker_config conf);
 
 
 };

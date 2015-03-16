@@ -27,7 +27,8 @@ uint64_t GenUniqueKey(RecordGenerator *gen,
 }
 
 void GenRandomSmallBank(char *rec, int len)
-{        
+{
+        assert(len % 4 == 0);
         int *temp = (int*)rec;
         len = len/4;
         for (int i = 0; i < len; ++i) {

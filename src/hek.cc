@@ -49,7 +49,7 @@ void hek_worker::init_allocator()
         }
 }
 
-hek_worker::hek_worker(hek_config config) : Runnable(config.cpu)
+hek_worker::hek_worker(hek_worker_config config) : Runnable(config.cpu)
 {
         this->config = config;
         init_allocator();

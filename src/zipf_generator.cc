@@ -42,3 +42,8 @@ uint64_t ZipfGenerator::GenNext() {
     return temp-1;
   }
 }
+
+ZipfGenerator::~ZipfGenerator()
+{
+}
+      

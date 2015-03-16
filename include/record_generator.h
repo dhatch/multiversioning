@@ -5,7 +5,8 @@
 
 class RecordGenerator {
  public:
-  virtual uint64_t GenNext() = 0;  
+        virtual ~RecordGenerator() {}
+        virtual uint64_t GenNext() = 0;
 };
 
 #endif          // RECORD_GENERATOR_H_

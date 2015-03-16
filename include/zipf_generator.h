@@ -28,7 +28,7 @@ class ZipfGenerator : public RecordGenerator {
 
  public:
   ZipfGenerator(uint64_t numElems, double theta);
-  
+  virtual ~ZipfGenerator();  
   virtual uint64_t GenNext();
 };
 

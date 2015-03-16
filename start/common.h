@@ -6,7 +6,8 @@
 #include <table.h>
 #include <record_generator.h>
 
-#define RMW_COUNT 5
+#define RMW_COUNT	5
+#define MAX_CPU 	79
 
 template<class T>
 SimpleQueue<T>** setup_queues(int num_queues, int queue_size)
