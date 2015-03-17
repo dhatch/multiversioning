@@ -16,7 +16,7 @@ class hek_queue {
         {
                 void *ret;
                 ret = alloc_mem(sz, cpu);
-                memset(ret, sz, 0x0);
+                memset(ret, 0x0, sz);
                 return ret;
         }
         

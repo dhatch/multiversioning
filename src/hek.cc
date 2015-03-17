@@ -26,26 +26,28 @@ static void init_list(char *start, uint32_t num_records, uint32_t record_sz)
  */
 void hek_worker::init_allocator()
 {
-        uint32_t free_list_sz, record_sz, header_sz, i;
+        uint32_t record_sz, header_sz, i;
         char *temp, *start;
-        uint64_t total_sz;
+        uint64_t total_sz, free_list_sz, num_elems;
 
         header_sz = sizeof(hek_record);
         total_sz = config.num_tables*sizeof(hek_record*);        
         for (i = 0; i < this->config.num_tables; ++i) {
                 free_list_sz = config.free_list_sizes[i];
                 record_sz = config.record_sizes[i];
-                total_sz += free_list_sz * (record_sz + header_sz);
+                num_elems = free_list_sz / (record_sz + header_sz);
+                total_sz += num_elems * (record_sz + header_sz);
         }
-        temp = (char*)alloc_mem(total_sz, config.cpu);
+        temp = (char*)alloc_interleaved_all(total_sz);
         records = (hek_record**)temp;
         start = temp + config.num_tables*sizeof(hek_record*);
         for (i = 0; i < this->config.num_tables; ++i) {
                 records[i] = (hek_record*)start;
                 free_list_sz = config.free_list_sizes[i];
                 record_sz = config.record_sizes[i];
-                init_list(start, free_list_sz, record_sz);
-                start += free_list_sz * (record_sz + header_sz);
+                num_elems = free_list_sz / (record_sz + header_sz);
+                init_list(start, num_elems, record_sz);
+                start += num_elems * (record_sz + header_sz);
         }
 }
 

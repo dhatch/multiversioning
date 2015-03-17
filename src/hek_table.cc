@@ -1,6 +1,7 @@
 #include <cpuinfo.h>
 #include <hek_table.h>
 #include <hek_action.h>
+#include <iostream>
 
 hek_table::hek_table(uint64_t num_slots, int cpu_start, int cpu_end)
 {
@@ -9,7 +10,7 @@ hek_table::hek_table(uint64_t num_slots, int cpu_start, int cpu_end)
         this->slots =
                 (hek_table_slot*)
                 alloc_interleaved(sizeof(hek_table_slot)*num_slots,
-                                        cpu_start, cpu_end);
+                                  cpu_start, cpu_end);
         memset(slots, 0x0, sizeof(hek_table_slot)*num_slots);
 }
 

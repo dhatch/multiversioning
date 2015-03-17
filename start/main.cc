@@ -8,11 +8,13 @@
 #include <small_bank.h>
 #include <setup_occ.h>
 #include <setup_mv.h>
+#include <setup_hek.h>
 #include <algorithm>
 #include <fstream>
 #include <set>
 #include <iostream>
 #include <common.h>
+#include <sys/mman.h>
 
 #define RECYCLE_QUEUE_SIZE 64
 #define INPUT_SIZE 1024
@@ -403,6 +405,7 @@ void LockingExperiment(LockingConfig config) {
 // arg2: number of txns in an epoch
 // arg3: number of epochs
 int main(int argc, char **argv) {
+        //        mlockall(MCL_FUTURE);
   srand(time(NULL));
   ExperimentConfig cfg(argc, argv);
   std::cout << cfg.ccType << "\n";
@@ -427,5 +430,11 @@ int main(int argc, char **argv) {
           assert(recordSize == 8 || recordSize == 1000);
           occ_experiment(cfg.occConfig);
           exit(0);
-  } 
+  } else if (cfg.ccType == HEK) {
+          recordSize = cfg.hek_conf.record_size;
+          assert(cfg.hek_conf.distribution < 2);
+          assert(recordSize == 8 || recordSize == 1000);
+          do_hekaton_experiment(cfg.hek_conf);
+          exit(0);
+  }
 }

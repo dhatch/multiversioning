@@ -6,6 +6,7 @@
 #include <getopt.h>
 #include <stdlib.h>
 #include <unordered_map>
+#include <cassert>
 
 using namespace std;
 
@@ -34,6 +35,7 @@ enum ConcurrencyControl {
   MULTIVERSION = 0,
   LOCKING = 1,
   OCC,
+  HEK,
 };
 
 struct OCCConfig {
@@ -126,7 +128,8 @@ class ExperimentConfig {
   LockingConfig lockConfig;
   OCCConfig occConfig;
   MVConfig mvConfig;    
-
+  hek_config hek_conf;
+  
   ExperimentConfig(int argc, char **argv) {
     ReadArgs(argc, argv);
     InitConfig();
@@ -136,7 +139,7 @@ class ExperimentConfig {
     int ccType = -1;
     if ((argMap.count(CC_TYPE) == 0) || 
         ((ccType = atoi(argMap[CC_TYPE])) != MULTIVERSION && 
-         ccType != LOCKING && ccType != OCC)) {
+         ccType != LOCKING && ccType != OCC && ccType != HEK)) {
       std::cerr << "Undefined concurrency control type\n";
       exit(-1);
     }
@@ -281,7 +284,48 @@ class ExperimentConfig {
       }
       occConfig.occ_epoch = (uint32_t)atoi(argMap[OCC_EPOCH]);              
       this->ccType = OCC;
-    }
+    } else if (ccType == HEK) {
+
+      if (argMap.count(NUM_LOCK_THREADS) == 0 || 
+          argMap.count(NUM_TXNS) == 0 ||
+          argMap.count(NUM_RECORDS) == 0 ||
+          argMap.count(TXN_SIZE) == 0 || 
+          argMap.count(EXPERIMENT) == 0 ||
+          argMap.count(RECORD_SIZE) == 0 || 
+          argMap.count(DISTRIBUTION) == 0 ||
+          argMap.count(READ_PCT) == 0 ||
+          argMap.count(READ_TXN_SIZE) == 0) {
+        
+        std::cerr << "Missing one or more HEK params\n";
+        std::cerr << "--" << long_options[NUM_LOCK_THREADS].name << "\n";
+        std::cerr << "--" << long_options[NUM_TXNS].name << "\n";
+        std::cerr << "--" << long_options[NUM_RECORDS].name << "\n";
+        std::cerr << "--" << long_options[TXN_SIZE].name << "\n";
+        std::cerr << "--" << long_options[EXPERIMENT].name << "\n";
+        std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
+        std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
+        std::cerr << "--" << long_options[READ_PCT].name << "\n";
+        std::cerr << "--" << long_options[READ_TXN_SIZE].name << "\n";
+        exit(-1);
+      }
+
+      hek_conf.num_threads = (uint32_t)atoi(argMap[NUM_LOCK_THREADS]);
+      hek_conf.num_txns = (uint32_t)atoi(argMap[NUM_TXNS]);
+      hek_conf.num_records = (uint32_t)atoi(argMap[NUM_RECORDS]);
+      hek_conf.txn_size = (uint32_t)atoi(argMap[TXN_SIZE]);
+      hek_conf.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
+      hek_conf.record_size = (uint64_t)atoi(argMap[RECORD_SIZE]);
+      hek_conf.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
+      hek_conf.read_pct = (int)atoi(argMap[READ_PCT]);
+      hek_conf.read_txn_size = (int)atoi(argMap[READ_TXN_SIZE]);
+      if (argMap.count(THETA) > 0) {
+        hek_conf.theta = (double)atof(argMap[THETA]);
+      }
+      this->ccType = HEK;
+            
+    } else {
+            assert(false);
+    }    
   }
 
   void ReadArgs(int argc, char **argv) {

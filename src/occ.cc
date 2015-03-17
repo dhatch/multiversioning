@@ -8,6 +8,7 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
 {
         this->config = conf;
         this->bufs = new(conf.cpu) RecordBuffers(rb_conf);
+        /*
         this->logs[0] = (char*)alloc_mem(config.log_size, config.cpu);
         this->logs[1] = (char*)alloc_mem(config.log_size, config.cpu);
         assert(this->logs[0] != NULL && this->logs[1] != NULL);
@@ -15,6 +16,7 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         memset(this->logs[1], 0x0, config.log_size);
         this->cur_log = 0;
         this->log_tail = this->logs[0];
+        */
 }
 
 void OCCWorker::Init()
@@ -95,7 +97,7 @@ void OCCWorker::RunSingle(OCCAction *action)
         uint64_t cur_tid;
         occ_txn_status status;
         volatile uint32_t epoch;
-        bool reset_log = false;
+        //        bool reset_log = false;
         PrepareWrites(action);
         PrepareReads(action);
         
@@ -109,12 +111,12 @@ void OCCWorker::RunSingle(OCCAction *action)
                 epoch = *config.epoch_ptr;
                 barrier();
                 if (Validate(action)) {
-                        reset_log = (epoch > GET_EPOCH(last_tid));
+                        //                        reset_log = (epoch > GET_EPOCH(last_tid));
                         cur_tid = ComputeTID(action, epoch);
                         
                         InstallWrites(action, cur_tid);
                         fetch_and_increment(&config.num_completed);
-                        Serialize(action, cur_tid, reset_log);
+                        //                        Serialize(action, cur_tid, reset_log);
                         break;
                 } else {
                         ReleaseWriteLocks(action);
@@ -380,7 +382,7 @@ void OCCWorker::ReleaseWriteLocks(OCCAction *action)
 {
         uint32_t num_writes, i, table_id;
         volatile uint64_t *tid_ptr;
-        uint64_t old_tid, key;
+        uint64_t old_tid, key, temp;
         num_writes = action->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 table_id = action->writeset[i].tableId;
@@ -393,7 +395,8 @@ void OCCWorker::ReleaseWriteLocks(OCCAction *action)
                 old_tid = GET_TIMESTAMP(old_tid);
                 assert(!IS_LOCKED(old_tid));
                 //                assert(GET_TIMESTAMP(old_tid) == GET_TIMESTAMP(*tid_ptr));
-                xchgq(tid_ptr, old_tid);
+                temp = xchgq(tid_ptr, old_tid);
+                assert(GET_TIMESTAMP(temp) == old_tid);
 //                barrier();
 //                *tid_ptr = old_tid;
 //                barrier();

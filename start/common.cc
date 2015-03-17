@@ -1,4 +1,5 @@
 #include <common.h>
+#include <sys/mman.h>
 
 TableConfig create_table_config(uint64_t table_id, uint64_t num_buckets,
                                 int start_cpu, int end_cpu,
@@ -65,4 +66,18 @@ void gen_random_array(void *array, size_t sz)
                 temp = (uint32_t)rand();
                 memcpy(byte_array, &temp, remainder);
         }
+}
+
+void pin_memory()
+{
+        mlockall(MCL_CURRENT);
+        if (errno != 0) {
+                std::cout << "Couldn't pin memory!\n";
+                assert(false);
+        }         
+        mlockall(MCL_FUTURE);
+        if (errno != 0) {
+                std::cout << "Couldn't pin memory!\n";
+                assert(false);
+        }        
 }

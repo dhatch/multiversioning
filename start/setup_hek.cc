@@ -7,9 +7,10 @@
 #include <uniform_generator.h>
 #include <gperftools/profiler.h>
 #include <fstream>
+#include <stdlib.h>
 
 /* Total space available for free lists */
-#define TOTAL_SIZE (((uint64_t)1) << 35)
+#define TOTAL_SIZE (((uint64_t)1) << 30)
 
 struct hek_result {
         struct timespec elapsed_time;
@@ -32,8 +33,8 @@ static void init_ycsb(hek_config config, hek_table *table)
         char *records;
         hek_record *rec_ptr;
         record_size = 1000 + sizeof(hek_record);
-        records = (char*)alloc_interleaved_all(record_size);
-        memset(records, 0x0, record_size);
+        records = (char*)alloc_interleaved_all(record_size*config.num_records);
+        memset(records, 0x0, record_size*config.num_records);
         for (i = 0; i < config.num_records; ++i) {
                 rec_ptr = (hek_record*)(records + i*record_size);
                 rec_ptr->next = NULL;
@@ -141,7 +142,7 @@ static int num_tables(hek_config config)
         else if (config.experiment < 5) 
                 return 2;
         else 
-                return -1;        
+                return 0;        
 }
 
 /*
@@ -215,10 +216,16 @@ static hek_action* generate_readonly(hek_config config, RecordGenerator *gen)
         hek_readonly_action *ret;
         hek_key to_add;
         std::set<uint64_t> seen_keys;
+        void *mem;
         
         num_reads = config.read_txn_size;
         to_add = create_blank_key();
-        ret = new hek_readonly_action();
+        if (posix_memalign(&mem, 256, sizeof(hek_readonly_action)) != 0) {
+                std::cerr << "Txn initialization failed!\n";
+                assert(false);
+        }
+        ret = new (mem) hek_readonly_action();
+        assert(((uint64_t)ret) % 256 == 0);
         for (i = 0; i < num_reads; ++i) {
                 to_add.key = GenUniqueKey(gen, &seen_keys);
                 to_add.txn = ret;
@@ -239,8 +246,14 @@ static hek_action* generate_rmw(hek_config config, RecordGenerator *gen)
         hek_key to_add;
         hek_rmw_action *ret;
         std::set<uint64_t> seen_keys;
-        
-        ret = new hek_rmw_action();        
+        void *mem;
+
+        if (posix_memalign(&mem, 256, sizeof(hek_rmw_action)) != 0) {
+                std::cerr << "Txn initialization failed!\n";
+                assert(false);
+        }
+        ret = new (mem) hek_rmw_action();
+        assert(((uint64_t)ret) % 256 == 0);
         to_add = create_blank_key();
         for (i = 0; i < config.txn_size; ++i) {
                 to_add.key = GenUniqueKey(gen, &seen_keys);
@@ -458,9 +471,14 @@ void do_hekaton_experiment(hek_config config)
         compute_free_sz(config);
         compute_record_sizes(config);
         tables = setup_tables(config);
+        std::cerr << "Done setting up tables!\n";
         init_tables(config, tables);
+        std::cerr << "Done initializing tables!\n";
         workers = setup_workers(config, tables, &input_queues, &output_queues);
+        std::cerr << "Done setting up workers!\n";
         inputs = setup_txns(config);
+        std::cerr << "Done setting up transactions!\n";
+        pin_memory();        
         result = run_experiment(config, inputs, workers, input_queues,
                                 output_queues);
         write_results(result, config);

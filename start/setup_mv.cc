@@ -957,6 +957,7 @@ void do_mv_experiment(MVConfig config)
                                       schedGCQueues);
         init_database(config, schedInputQueue, outputQueue, schedThreads,
                       execThreads);
+        pin_memory();
         elapsed_time = run_experiment(schedInputQueue,
                                       outputQueue,
                                       input_placeholder);

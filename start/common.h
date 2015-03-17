@@ -33,4 +33,6 @@ timespec diff_time(timespec end, timespec start);
 
 void gen_random_array(void *array, size_t sz);
 
+void pin_memory();
+
 #endif // COMMON_H_

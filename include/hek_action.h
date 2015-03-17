@@ -58,17 +58,17 @@ class hek_action {
         
         virtual hek_status Run() = 0;
         
-} __attribute__((__aligned__(256)));
+};
 
 class hek_rmw_action : public hek_action {
  public:
         virtual hek_status Run();
-};
+} __attribute__((__packed__, __aligned__(256)));
 
 class hek_readonly_action : public hek_action {
         volatile char read[1000];
  public:
         virtual hek_status Run();
-};
+} __attribute__((__packed__, __aligned__(256)));
 
 #endif // HEK_ACTION_H_
