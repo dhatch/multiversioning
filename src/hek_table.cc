@@ -67,45 +67,65 @@ hek_record* hek_table::search_stable(uint64_t key, uint64_t ts,
         return iter;
 }
 
-/*
- * 
- */
-bool hek_table::validate(hek_record *cur, hek_record *prev)
+/* Find the first record that matches this key. */
+hek_record* hek_table::stable_next(uint64_t key, hek_record *iter)
 {
-        if (IS_TIMESTAMP(cur->begin) || (prev == NULL) ||
-            IS_TIMESTAMP(prev->begin))
-                return true;
-        return false;
+        while (iter != NULL) {
+                assert(IS_TIMESTAMP(iter->begin));
+                if (iter->key == key)
+                        return iter;
+                iter = iter->next;
+        }
+        return NULL;
 }
 
-/* Search a particular bucket for a key. */ 
-hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
-                                     struct hek_table_slot *slot)
+/* 
+ * Atomically read the first record, its timestamp, and the second record in 
+ * hash bucket. 
+ */
+void hek_table::read_stable(struct hek_table_slot *slot, uint64_t *head_time,
+                            hek_record **head, hek_record **next)
 {
-        hek_record *cur, *prev;
-        uint64_t record_ts;
+        hek_record *cur;
         while (true) {
                 barrier();
                 cur = (hek_record*)slot->records;
                 barrier();
-                if (cur != NULL) {
-                        prev = cur->next;
-                } else {
-                        prev = NULL;
-                        break;
-                }
-                if (validate(cur, prev))
+                assert(cur != NULL);
+                *head = cur;			/* first record */
+                *head_time = cur->begin;	/* first record's timestamp */
+                *next = cur->next;		/* second record */
+                barrier();
+                if (cur == slot->records)
                         break;
         }
-        if (cur == NULL)
-                return NULL;        
-        else if (get_preparing_ts(cur, &record_ts) && record_ts < ts) 
-                return cur;
-        else if (prev != NULL) 
+}
+
+/* Search a particular bucket for a key. Used to perform a read. */ 
+hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
+                                     struct hek_table_slot *slot)
+{
+        hek_record *head, *prev;
+        uint64_t record_ts;
+
+        read_stable(slot, &record_ts, &head, &prev);
+        if (IS_TIMESTAMP(record_ts)) {
+                return search_stable(key, ts, head);
+        } else if (head->key == key && visible(record_ts, ts)) {
+                return head;
+        } else {
                 return search_stable(key, ts, prev);
-        else
-                return NULL;
-        
+        }
+}
+
+/* Check if the "PREPARING" txn at the slot is visible. */
+bool hek_table::visible(uint64_t txn_ptr, uint64_t read_timestamp)
+{
+        assert(!IS_TIMESTAMP(txn_ptr));
+        hek_action *txn;
+
+        txn = GET_TXN(txn_ptr);
+        return txn->begin < read_timestamp;
 }
 
 /* 
@@ -127,16 +147,24 @@ hek_record* hek_table::get_version(uint64_t key, uint64_t ts)
  */
 bool hek_table::insert_version(hek_record *record)
 {
-        assert(init_done == true);
+        assert(init_done == true);	/* table should be initialized */
+        assert(record != NULL);
+
+        /* not yet committed, so the new record's begin ts must be a txn ptr. */
+        assert(!IS_TIMESTAMP(record->begin) && record->end == HEK_INF);	
+               
         hek_table_slot *slot;
         hek_record *prev;
 
         slot = get_slot(record->key);
         if (try_lock((volatile uint64_t*)&slot->latch)) {
-                prev = (hek_record*)slot->records;
-                prev->end = record->begin;
+                prev = stable_next(record->key, (hek_record*)slot->records);
+                assert(prev == NULL || IS_TIMESTAMP(prev->end));
+                if (prev != NULL && prev->end == HEK_INF) {
+                        prev->end = record->begin;
+                }
                 record->next = (hek_record*)slot->records;
-                slot->records = record;
+                xchgq((volatile uint64_t*)&slot->records, (uint64_t)record);
                 return true;
         } else {
                 return false;
@@ -152,10 +180,11 @@ void hek_table::remove_version(hek_record *record, uint64_t ts)
 
         slot = get_slot(record->key);
         assert(slot->latch == 1 && slot->records == record);
-        prev = record->next;
-        slot->records = prev;
-        if (prev != NULL)
+        prev = stable_next(record->key, record->next);
+        if (prev != NULL && prev->end == record->begin) {
                 prev->end = ts;
+        }
+        xchgq((volatile uint64_t*)&slot->records, (uint64_t)prev);
         xchgq(&slot->latch, 0x0);
 }
 
@@ -163,15 +192,20 @@ void hek_table::remove_version(hek_record *record, uint64_t ts)
 void hek_table::finalize_version(hek_record *record, uint64_t ts)
 {
         assert(init_done == true);
+        assert(record->end == HEK_INF);
         hek_table_slot *slot;
         hek_record *prev;
 
         slot = get_slot(record->key);
         assert(slot->latch == 1 && slot->records == record);
-        record->begin = ts;
-        prev = record->next;
-        if (prev != NULL) 
-                prev->end = ts;
+
+        prev = stable_next(record->key, record->next);
+        if (prev != NULL) {
+                assert(!IS_TIMESTAMP(prev->end) || prev->end != HEK_INF);
+                if (prev->end == record->begin)
+                        prev->end = ts;
+        }
+        record->begin = ts;        
         xchgq(&slot->latch, 0x0);
 }
 

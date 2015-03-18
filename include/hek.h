@@ -33,7 +33,7 @@ struct hek_batch {
 
 struct hek_worker_config {
         int cpu;
-        uint64_t *global_time;
+        volatile uint64_t *global_time;
         uint32_t num_tables;
         uint32_t num_threads;
         hek_table **tables;
@@ -62,11 +62,14 @@ class hek_worker : public Runnable {
         
         virtual void run_txn(hek_action *txn);
         virtual void get_reads(hek_action *txn);
-
+        virtual void get_writes(hek_action *txn);
+        
         virtual bool validate_single(hek_action *txn, hek_key *key,
                                      hek_record *read_record);
         virtual bool validate_reads(hek_action *txn);
         //        virtual bool validate(hek_action *txn);
+
+        virtual bool insert_writes(hek_action *txn);                
         virtual void remove_writes(hek_action *txn);
         virtual void install_writes(hek_action *txn);
         virtual void check_dependents();

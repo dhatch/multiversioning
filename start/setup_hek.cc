@@ -10,7 +10,7 @@
 #include <stdlib.h>
 
 /* Total space available for free lists */
-#define TOTAL_SIZE (((uint64_t)1) << 30)
+#define TOTAL_SIZE (((uint64_t)1) << 35)
 
 struct hek_result {
         struct timespec elapsed_time;
@@ -158,7 +158,21 @@ static hek_worker** setup_workers(hek_config config, hek_table **tables,
         hek_worker **workers;
         hek_worker_config worker_conf;
         int i;
+        void *global_time;
 
+        /* Allocate space for global counter */
+        global_time = malloc(64);
+        assert(global_time != NULL);
+        memset(global_time, 0x0, 64);
+        
+        /* Common worker_conf data */
+        worker_conf.global_time = (volatile uint64_t*)global_time;
+        worker_conf.num_tables = num_tables(config);
+        worker_conf.num_threads = config.num_threads;
+        worker_conf.free_list_sizes = freelist_sizes;
+        worker_conf.record_sizes = record_sizes;
+        worker_conf.tables = tables;
+        
         /* Initialize data structures */
         workers = (hek_worker**)malloc(sizeof(hek_worker*)*config.num_threads);
         inputs = setup_queues<hek_batch>(config.num_threads, 1024);
@@ -169,14 +183,10 @@ static hek_worker** setup_workers(hek_config config, hek_table **tables,
         /* Create workers */
         for (i = 0; i < config.num_threads; ++i) {
                 worker_conf.cpu = i;
-                worker_conf.num_tables = num_tables(config);
-                worker_conf.tables = tables;
                 worker_conf.input_queue = inputs[i];
                 worker_conf.output_queue = outputs[i];
                 worker_conf.commit_queue = commit_queues[i];
                 worker_conf.abort_queue = abort_queues[i];
-                worker_conf.free_list_sizes = freelist_sizes;
-                worker_conf.record_sizes = record_sizes;
                 workers[i] = new (i) hek_worker(worker_conf);
         }
 
@@ -201,6 +211,7 @@ static hek_key create_blank_key()
                 NULL,		/* table_ptr */
                 0,		/* time */                
                 0,		/* prev_ts */
+                false,		/* written */
         };
         return ret;
 }
@@ -483,3 +494,4 @@ void do_hekaton_experiment(hek_config config)
                                 output_queues);
         write_results(result, config);
 }
+

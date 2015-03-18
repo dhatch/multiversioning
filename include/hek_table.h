@@ -27,9 +27,13 @@ class hek_table {
         bool get_preparing_ts(hek_record *record, uint64_t *ret);
         hek_record* search_stable(uint64_t key, uint64_t ts,
                                   hek_record *iter);
+        void read_stable(struct hek_table_slot *slot, uint64_t *head_time,
+                         hek_record **head, hek_record **next);
+        bool visible(uint64_t txn_ptr, uint64_t read_timestamp);
         bool validate(hek_record *cur, hek_record *prev);
         hek_record* search_bucket(uint64_t key, uint64_t ts,
                                   struct hek_table_slot *slot);
+        hek_record* stable_next(uint64_t key, hek_record *iter);                
 
  public:
         hek_table(uint64_t num_slots, int cpu_start, int cpu_end);

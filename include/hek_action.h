@@ -11,10 +11,10 @@
 #define COMMIT		0x2
 #define ABORT 		0x3
 
-#define GET_TXN(ts) (0)
-#define IS_TIMESTAMP(ts) (ts & 0x1)
-#define HEK_TIME(ts) (HEK_MASK & ts)
-#define HEK_STATE(ts) ((~HEK_MASK) & ts)
+#define GET_TXN(ts) ((hek_action*)(HEK_INF & ts))
+#define IS_TIMESTAMP(ts) ((ts & 0x0F) == 0)
+#define HEK_TIME(ts) (HEK_INF & ts)
+#define HEK_STATE(ts) (HEK_MASK & ts)
 #define CREATE_PREP_TIMESTAMP(ts) ((ts<<8) | PREPARING)
 #define CREATE_COMMIT_TIMESTAMP(ts) ((ts<<8) | COMMIT)
 #define CREATE_ABORT_TIMESTAMP(ts) ((ts<<8) | ABORT)
@@ -38,6 +38,7 @@ struct hek_key {
         hek_table *table_ptr;		// For reads, ptr to table
         uint64_t time;			// Timestamp of read record
         uint64_t prev_ts; 		// Prev version timestamp (for writes)
+        bool written;			// 
 };
 
 // Align to 256 bytes because we use the least significant byte

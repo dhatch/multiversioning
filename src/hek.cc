@@ -147,7 +147,7 @@ void hek_worker::check_dependents()
 // Hekaton worker threads's "main" function.
 void hek_worker::StartWorking()
 {
-        uint32_t i, num_committed, num_done;
+        uint32_t i;
         struct hek_batch input_batch, output_batch;
         
         output_batch.txns = NULL;
@@ -211,6 +211,20 @@ void hek_worker::transition_abort(hek_action *txn)
         lock(&txn->latch);
         txn->end = time;
         unlock(&txn->latch);
+}
+
+/* Give a transaction a new record for every write it performs. */
+void hek_worker::get_writes(hek_action *txn)
+{
+        uint32_t num_writes, i, table_id;
+        struct hek_record *write_record;
+
+        num_writes = txn->writeset.size();
+        for (i = 0; i < num_writes; ++i) {
+                table_id = txn->writeset[i].table_id;
+                write_record = get_new_record(table_id);
+                txn->writeset[i].value = write_record;
+        }
 }
 
 //
@@ -300,11 +314,17 @@ void hek_worker::return_record(uint32_t table_id, hek_record *record)
 
 bool hek_worker::validate_reads(hek_action *txn)
 {
+        /*
         uint32_t num_reads, i, table_id;
         uint64_t key, ts;
         //        volatile uint64_t read_begin;
         struct hek_record *read_record;
-        
+
+        * 
+         * XXX increment dep count to avoid being notified before registering 
+         * all commit dependencies
+         
+        fetch_and_increment(txn->dep_count);
         ts = txn->end;
         num_reads = txn->readset.size();
         for (i = 0; i < num_reads; ++i) {
@@ -314,7 +334,13 @@ bool hek_worker::validate_reads(hek_action *txn)
                 if (read_record != txn->readset[i].value)
                         return false;
         }
+        fetch_and_decrement(txn->dep_count);
         return true;
+        */
+
+        /* XXX this condition is always true */
+        txn->must_wait = false;
+        return txn != NULL;
 }
 
 /*
@@ -330,6 +356,32 @@ void hek_worker::install_writes(hek_action *txn)
 }
 */
 
+/* 
+ * Insert records written by a transaction. If all insertions succeed, it does 
+ * not mean that the txn will commit. Reads must still be validated, and writes 
+ * subsequently finalized.      
+ */
+bool hek_worker::insert_writes(hek_action *txn)
+{
+        uint32_t num_writes, i, tbl_id;
+        hek_table *table;
+        hek_record *rec;
+
+        num_writes = txn->writeset.size();
+        for (i = 0; i < num_writes; ++i) {
+                rec = txn->writeset[i].value;
+                rec->begin = txn->end;
+                rec->end = HEK_INF;
+                tbl_id = txn->writeset[i].table_id;
+                table = config.tables[tbl_id];
+                if (!table->insert_version(rec)) 
+                        return false;                
+                else
+                        txn->writeset[i].written = true;
+        }
+        return true;
+}
+
 // 1. Run txn logic (may abort due to write-write conflicts)
 // 2. Validate reads
 // 3. Check if the txn depends on others. If yes, wait for commit dependencies,
@@ -342,11 +394,12 @@ void hek_worker::run_txn(hek_action *txn)
         
         transition_begin(txn);
         txn->begin = fetch_and_increment(config.global_time);
-        get_reads(txn);        
+        get_reads(txn);
+        get_writes(txn);
         status = txn->Run();
-        if (status.validation == false)
-                goto abort;
         transition_preparing(txn);
+        if (!insert_writes(txn))
+                goto abort;
         validated = validate_reads(txn);
         if (validated == true) {
                 if (txn->must_wait == false) {
@@ -429,7 +482,7 @@ void hek_worker::install_writes(hek_action *txn)
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 key = &txn->writeset[i];
-                //                assert(key->is_written == true);
+                assert(key->written == true);
                 assert(key->value != NULL);
                 assert(key->table_id < config.num_tables);
                 config.tables[key->table_id]->finalize_version(key->value,
@@ -450,15 +503,19 @@ void hek_worker::remove_writes(hek_action *txn)
         uint64_t prev_ts;
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) {
-                key = &txn->writeset[i];
-                record = key->value;
-                table_id = key->table_id;
-                assert(record != NULL);
-                assert(table_id < config.num_tables);
-                table_id = key->table_id;
-                prev_ts = key->prev_ts;
-                record = key->value;
-                config.tables[table_id]->remove_version(record,
-                                                        prev_ts);
+                if (txn->writeset[i].written == true) {
+                        key = &txn->writeset[i];
+                        record = key->value;
+                        table_id = key->table_id;
+                        assert(record != NULL);
+                        assert(table_id < config.num_tables);
+                        table_id = key->table_id;
+                        prev_ts = key->prev_ts;
+                        record = key->value;
+                        config.tables[table_id]->remove_version(record,
+                                                                prev_ts);
+                } else {
+                        break;
+                }                
         }
 }

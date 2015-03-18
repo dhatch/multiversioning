@@ -3,3 +3,9 @@ build
 *~
 */*~
 .deps
+*.txt
+*.prof
+*.pdf
+*.pyc
+*#*
+nohup.out
