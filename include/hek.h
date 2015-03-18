@@ -64,8 +64,8 @@ class hek_worker : public Runnable {
         virtual void get_reads(hek_action *txn);
         virtual void get_writes(hek_action *txn);
         
-        virtual bool validate_single(hek_action *txn, hek_key *key,
-                                     hek_record *read_record);
+        virtual bool validate_single(hek_action *txn, hek_key *key);
+                             
         virtual bool validate_reads(hek_action *txn);
         //        virtual bool validate(hek_action *txn);
 
@@ -79,8 +79,9 @@ class hek_worker : public Runnable {
         virtual void transition_commit(hek_action *txn);
         virtual void transition_abort(hek_action *txn);
 
-        virtual bool add_commit_dep(hek_action *dependency,
-                                    hek_action *dependent, hek_key *key);
+        virtual void add_commit_dep(hek_action *out, hek_key *key,
+                                    hek_action *in);
+                                                                        
         
         virtual void do_abort(hek_action *txn);
         virtual void do_commit(hek_action *txn);

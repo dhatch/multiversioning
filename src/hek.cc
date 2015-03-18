@@ -256,47 +256,51 @@ void hek_worker::get_reads(hek_action *txn)
  * is in state PREPARING. We can't atomically ensure that the transaction's
  * state is PREPARING and enqueue the commit dependency without locks.
  */
-bool hek_worker::add_commit_dep(hek_action *dependency, hek_action *dependent,
-                                hek_key *key)
+void hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in)
 {
-        bool success, ret;
-        assert(false);
-        success = false;
-        ret = true;
-        lock(&dependency->latch);
-        if (HEK_TIME(dependency->end) == key->time &&
-            HEK_STATE(dependency->end) == PREPARING) {
-                success = true;
-                key->next = dependency->dependents;
-                dependency->dependents = key;
-        }
-        ret = (HEK_STATE(dependency->end) == PREPARING ||
-               HEK_STATE(dependency->end) == COMMIT) &&
-                HEK_TIME(dependency->end) == key->time;
-        unlock(&dependency->latch);
-        if (success)
-                fetch_and_increment(&dependent->dep_count);
-        return ret;
+        assert(!IS_TIMESTAMP(key->time) && in == GET_TXN(key->time));
+        assert(HEK_STATE(out->end) == PREPARING);
+        assert(HEK_STATE(in->end) >= PREPARING);
+
+        lock(&in->latch);
+        if (HEK_STATE(in->end) == PREPARING) {
+                key->next = in->dependents;
+                in->dependents = key;
+        } else if (HEK_STATE(in->end) == ABORT &&
+                   cmp_and_swap(&out->dep_flag, PREPARING, ABORT)) {
+                config.abort_queue->enqueue(out);
+        } 
+        unlock(&in->latch);
 }
 
-bool hek_worker::validate_single(hek_action *txn, hek_key *key,
-                                 hek_record *read_record)
+bool hek_worker::validate_single(hek_action *txn, hek_key *key)
 {
-        volatile uint64_t read_begin;
-        hek_action *writer;
-        barrier();
-        read_begin = read_record->begin;
-        barrier();
-        if (IS_TIMESTAMP(read_begin)) {
-                if (HEK_TIME(read_begin) != key->time)
-                        return false;
-        } else {
-                writer = (hek_action*)GET_TXN(read_begin);
-                if (HEK_TIME(writer->end) != key->time ||
-                    add_commit_dep(writer, txn, key) == false)
-                        return false;
+        assert(!IS_TIMESTAMP(txn->end) && HEK_STATE(txn->end) == PREPARING);
+        struct hek_record *vis_record, *read_record;
+        hek_action *preparing;
+        uint64_t vis_ts, read_ts, record_key, end_ts;
+        uint32_t table_id;
+
+        end_ts = HEK_TIME(txn->end);
+        table_id = key->table_id;
+        record_key = key->key;
+        read_record = key->value;
+        read_ts = key->time;
+        vis_record = config.tables[table_id]->get_version(record_key, end_ts,
+                                                          &vis_ts);
+        if (vis_record == read_record) {
+                if (IS_TIMESTAMP(read_ts)) {
+                        return read_ts == vis_ts;
+                } else if (!IS_TIMESTAMP(vis_ts) && vis_ts == read_ts) {
+                        key->txn = txn;
+                        add_commit_dep(txn, key, GET_TXN(vis_ts));
+                        return true;
+                } else if (IS_TIMESTAMP(vis_ts)) {
+                        preparing = GET_TXN(read_ts);
+                        return HEK_TIME(preparing->begin) == vis_ts;
+                }
         }
-        return true;
+        return false;
 }
 
 hek_record* hek_worker::get_new_record(uint32_t table_id)
@@ -318,25 +322,18 @@ void hek_worker::return_record(uint32_t table_id, hek_record *record)
 
 bool hek_worker::validate_reads(hek_action *txn)
 {
-        /*
-        uint32_t num_reads, i, table_id;
-        uint64_t key, ts;
-        //        volatile uint64_t read_begin;
-        struct hek_record *read_record;
-         
-        fetch_and_increment(txn->dep_count);
-        ts = txn->end;
+        assert(!IS_TIMESTAMP(txn->end));
+        assert(HEK_STATE(txn->end) == PREPARING);
+        uint32_t num_reads, i;
+        
+        txn->must_wait = false;
+        fetch_and_increment(&txn->dep_count);
         num_reads = txn->readset.size();
         for (i = 0; i < num_reads; ++i) {
-                table_id = txn->readset[i].table_id;
-                key = txn->readset[i].key;
-                read_record = config.tables[table_id]->get_version(key, ts);
-                if (read_record != txn->readset[i].value)
+                if (!validate_single(txn, &txn->readset[i]))
                         return false;
         }
-        fetch_and_decrement(txn->dep_count);
-        */
-        txn->must_wait = false;
+        fetch_and_decrement(&txn->dep_count);
         return true;
 }
 
