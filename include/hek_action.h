@@ -20,9 +20,17 @@
 #define CREATE_ABORT_TIMESTAMP(ts) ((ts<<8) | ABORT)
 
 class hek_action;
-class hek_record;
 class hek_worker;
 class hek_table;
+
+struct hek_record {
+        struct hek_record *next;
+        uint64_t begin;
+        uint64_t end;
+        uint64_t key;
+        uint32_t size;
+        char value[0];
+};
 
 struct hek_status {
         bool validation;
@@ -58,7 +66,9 @@ class hek_action {
         bool must_wait;
         
         virtual hek_status Run() = 0;
-        
+
+        virtual void* Read(uint32_t index);
+        virtual void* GetWriteRef(uint32_t index);
 };
 
 class hek_rmw_action : public hek_action {

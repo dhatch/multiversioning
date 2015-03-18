@@ -3,14 +3,7 @@
 
 #include <stdint.h>
 
-struct hek_record {
-        struct hek_record *next;
-        uint64_t begin;
-        uint64_t end;
-        uint64_t key;
-        uint32_t size;
-        char value[0];
-};
+struct hek_record;
 
 struct hek_table_slot {
         volatile uint64_t latch;
