@@ -87,6 +87,8 @@ void hek_table::read_stable(struct hek_table_slot *slot, uint64_t *head_time,
                             hek_record **head, hek_record **next)
 {
         hek_record *cur;
+        volatile hek_record *validation_record;
+        volatile uint64_t validation_time;
         while (true) {
                 barrier();
                 cur = (hek_record*)slot->records;
@@ -96,25 +98,34 @@ void hek_table::read_stable(struct hek_table_slot *slot, uint64_t *head_time,
                 *head_time = cur->begin;	/* first record's timestamp */
                 *next = cur->next;		/* second record */
                 barrier();
-                if (cur == slot->records)
+                validation_record = slot->records;
+                validation_time = slot->records->begin;
+                barrier();
+                if (cur == validation_record && *head_time == validation_time)
                         break;
         }
 }
 
 /* Search a particular bucket for a key. Used to perform a read. */ 
 hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
-                                     struct hek_table_slot *slot)
+                                     struct hek_table_slot *slot,
+                                     uint64_t *read_time)
 {
-        hek_record *head, *prev;
+        hek_record *head, *prev, *ret;
         uint64_t record_ts;
 
         read_stable(slot, &record_ts, &head, &prev);
         if (IS_TIMESTAMP(record_ts)) {
-                return search_stable(key, ts, head);
+                ret = search_stable(key, ts, head);
+                *read_time = ret->begin;
+                return ret;
         } else if (head->key == key && visible(record_ts, ts)) {
+                *read_time = record_ts;
                 return head;
         } else {
-                return search_stable(key, ts, prev);
+                ret = search_stable(key, ts, prev);
+                *read_time = ret->begin;
+                return ret;
         }
 }
 
@@ -132,12 +143,13 @@ bool hek_table::visible(uint64_t txn_ptr, uint64_t read_timestamp)
  * Perform a read of a record at a particular timestamp. Returns a reference to 
  * the requested record.  
  */
-hek_record* hek_table::get_version(uint64_t key, uint64_t ts)
+hek_record* hek_table::get_version(uint64_t key, uint64_t ts,
+                                   uint64_t *begin_ts)
 {
         assert(init_done == true);
         struct hek_table_slot *slot;
         slot = get_slot(key);
-        return search_bucket(key, ts, slot);
+        return search_bucket(key, ts, slot, begin_ts);
 }
 
 /* 

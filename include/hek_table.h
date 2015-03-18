@@ -32,12 +32,13 @@ class hek_table {
         bool visible(uint64_t txn_ptr, uint64_t read_timestamp);
         bool validate(hek_record *cur, hek_record *prev);
         hek_record* search_bucket(uint64_t key, uint64_t ts,
-                                  struct hek_table_slot *slot);
+                                  struct hek_table_slot *slot,
+                                  uint64_t *begin_ts);
         hek_record* stable_next(uint64_t key, hek_record *iter);                
 
  public:
         hek_table(uint64_t num_slots, int cpu_start, int cpu_end);
-        hek_record* get_version(uint64_t key, uint64_t ts);
+        hek_record* get_version(uint64_t key, uint64_t ts, uint64_t *begin_ts);
         bool insert_version(hek_record *record);
         void remove_version(hek_record *record);
         void finalize_version(hek_record *record, uint64_t ts);

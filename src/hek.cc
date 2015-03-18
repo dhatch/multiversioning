@@ -235,7 +235,7 @@ void hek_worker::get_writes(hek_action *txn)
 void hek_worker::get_reads(hek_action *txn)
 {
         uint32_t num_reads, i, table_id;
-        uint64_t key, ts;        
+        uint64_t key, ts, *begin_ptr;
         struct hek_record *read_record;
         
         ts = txn->begin;
@@ -243,18 +243,19 @@ void hek_worker::get_reads(hek_action *txn)
         for (i = 0; i < num_reads; ++i) {
                 table_id = txn->readset[i].table_id;
                 key = txn->readset[i].key;
-                read_record = config.tables[table_id]->get_version(key, ts);
+                begin_ptr = &txn->readset[i].time;
+                read_record = config.tables[table_id]->get_version(key, ts,
+                                                                   begin_ptr);
                 txn->readset[i].value = read_record;
-                txn->readset[i].time = read_record->begin;
         }
 }
 
-//
-// Each transaction's state is protected by a lock. We need locks because of
-// commit dependencies; a commit dependency can only be added if the transaction
-// is in state PREPARING. We can't atomically ensure that the transaction's
-// state is PREPARING and enqueue the commit dependency without locks.
-//
+/*
+ * Each transaction's state is protected by a lock. We need locks because of
+ * commit dependencies; a commit dependency can only be added if the transaction
+ * is in state PREPARING. We can't atomically ensure that the transaction's
+ * state is PREPARING and enqueue the commit dependency without locks.
+ */
 bool hek_worker::add_commit_dep(hek_action *dependency, hek_action *dependent,
                                 hek_key *key)
 {
@@ -322,10 +323,6 @@ bool hek_worker::validate_reads(hek_action *txn)
         uint64_t key, ts;
         //        volatile uint64_t read_begin;
         struct hek_record *read_record;
-
-        * 
-         * XXX increment dep count to avoid being notified before registering 
-         * all commit dependencies
          
         fetch_and_increment(txn->dep_count);
         ts = txn->end;
@@ -338,12 +335,9 @@ bool hek_worker::validate_reads(hek_action *txn)
                         return false;
         }
         fetch_and_decrement(txn->dep_count);
-        return true;
         */
-
-        /* XXX this condition is always true */
         txn->must_wait = false;
-        return txn != NULL;
+        return true;
 }
 
 /*
