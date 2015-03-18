@@ -160,7 +160,7 @@ void hek_worker::StartWorking()
                         check_dependents();                
                 }
 
-                // Wait for all txns with commit dependencies.
+                /* Wait for all txns with commit dependencies. */
                 while (num_done != input_batch.num_txns) 
                         check_dependents();
                 output_batch.num_txns = num_committed;
@@ -223,6 +223,7 @@ void hek_worker::get_writes(hek_action *txn)
         for (i = 0; i < num_writes; ++i) {
                 table_id = txn->writeset[i].table_id;
                 write_record = get_new_record(table_id);
+                write_record->key = txn->writeset[i].key;
                 txn->writeset[i].value = write_record;
         }
 }
@@ -258,6 +259,7 @@ bool hek_worker::add_commit_dep(hek_action *dependency, hek_action *dependent,
                                 hek_key *key)
 {
         bool success, ret;
+        assert(false);
         success = false;
         ret = true;
         lock(&dependency->latch);
@@ -303,6 +305,7 @@ hek_record* hek_worker::get_new_record(uint32_t table_id)
         ret = records[table_id];
         assert(ret != NULL);
         records[table_id] = ret->next;
+        ret->next = NULL;
         return ret;       
 }
 
@@ -369,8 +372,9 @@ bool hek_worker::insert_writes(hek_action *txn)
 
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) {
+                assert(txn->writeset[i].written == false);
                 rec = txn->writeset[i].value;
-                rec->begin = txn->end;
+                rec->begin = (uint64_t)txn | 0x1;
                 rec->end = HEK_INF;
                 tbl_id = txn->writeset[i].table_id;
                 table = config.tables[tbl_id];
@@ -406,6 +410,7 @@ void hek_worker::run_txn(hek_action *txn)
                         transition_commit(txn);
                         do_commit(txn);
                 }
+                return;
         } 
  abort:
         transition_abort(txn);
@@ -485,8 +490,9 @@ void hek_worker::install_writes(hek_action *txn)
                 assert(key->written == true);
                 assert(key->value != NULL);
                 assert(key->table_id < config.num_tables);
-                config.tables[key->table_id]->finalize_version(key->value,
-                                                               txn->end);
+                assert(GET_TXN(key->value->begin) == txn);
+                config.tables[key->table_id]->
+                        finalize_version(key->value, HEK_TIME(txn->end));
         }
         
 }
@@ -500,7 +506,6 @@ void hek_worker::remove_writes(hek_action *txn)
         uint32_t num_writes, i, table_id;
         hek_key *key;
         hek_record *record;
-        uint64_t prev_ts;
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 if (txn->writeset[i].written == true) {
@@ -509,11 +514,9 @@ void hek_worker::remove_writes(hek_action *txn)
                         table_id = key->table_id;
                         assert(record != NULL);
                         assert(table_id < config.num_tables);
-                        table_id = key->table_id;
-                        prev_ts = key->prev_ts;
                         record = key->value;
-                        config.tables[table_id]->remove_version(record,
-                                                                prev_ts);
+                        config.tables[table_id]->remove_version(record);
+                                                       
                 } else {
                         break;
                 }                
