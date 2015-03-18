@@ -133,10 +133,12 @@ hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
 bool hek_table::visible(uint64_t txn_ptr, uint64_t read_timestamp)
 {
         assert(!IS_TIMESTAMP(txn_ptr));
+        uint64_t txn_end;
         hek_action *txn;
 
         txn = GET_TXN(txn_ptr);
-        return txn->begin < read_timestamp;
+        txn_end = HEK_TIME(txn->end);
+        return txn_end < read_timestamp;
 }
 
 /* 

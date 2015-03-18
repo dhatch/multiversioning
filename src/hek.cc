@@ -132,6 +132,7 @@ void hek_worker::check_dependents()
                 transition_abort(aborted);
                 do_abort(aborted);
                 aborted = (hek_action*)aborted->next;
+                assert(false);
         }
         committed = config.commit_queue->dequeue_batch();
         barrier();
@@ -141,6 +142,7 @@ void hek_worker::check_dependents()
                 transition_commit(committed);
                 do_commit(committed);
                 committed = (hek_action*)committed->next;
+                assert(false);
         }
 }
 
@@ -293,11 +295,12 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
                         return read_ts == vis_ts;
                 } else if (!IS_TIMESTAMP(vis_ts) && vis_ts == read_ts) {
                         key->txn = txn;
+                        txn->must_wait = true;
                         add_commit_dep(txn, key, GET_TXN(vis_ts));
                         return true;
                 } else if (IS_TIMESTAMP(vis_ts)) {
                         preparing = GET_TXN(read_ts);
-                        return HEK_TIME(preparing->begin) == vis_ts;
+                        return HEK_TIME(preparing->end) == vis_ts;
                 }
         }
         return false;
@@ -330,7 +333,7 @@ bool hek_worker::validate_reads(hek_action *txn)
         fetch_and_increment(&txn->dep_count);
         num_reads = txn->readset.size();
         for (i = 0; i < num_reads; ++i) {
-                if (!validate_single(txn, &txn->readset[i]))
+                if (!validate_single(txn, &txn->readset[i])) 
                         return false;
         }
         fetch_and_decrement(&txn->dep_count);
