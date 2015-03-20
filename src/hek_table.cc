@@ -3,10 +3,12 @@
 #include <hek_action.h>
 #include <iostream>
 
+
+        
 hek_table::hek_table(uint64_t num_slots, int cpu_start, int cpu_end)
 {
         this->init_done = false;
-        this->num_slots = num_slots/4;
+        this->num_slots = num_slots;
         this->slots =
                 (hek_table_slot*)
                 alloc_interleaved(sizeof(hek_table_slot)*num_slots,
@@ -20,6 +22,7 @@ hek_table::hek_table(uint64_t num_slots, int cpu_start, int cpu_end)
  */
 hek_table_slot* hek_table::get_slot(uint64_t key)
 {
+        //        uint64_t index = Hash128to64(std::make_pair(key, 0)) % this->num_slots;
         return &slots[key];
 }
 

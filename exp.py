@@ -125,7 +125,9 @@ def mv_expt_records(outdir, filename, ccThreads, txns, records, threads, expt, d
         os.system("rm results.txt")
 
         cmd = fmt_multi.format(str(ccThreads), str(txns), str(records), str(threads), str(expt), str(distribution), str(theta), str(rec_size))
-        os.system(cmd)
+        
+        subprocess.call(cmd)
+
         os.system("cat results.txt >>" + outfile)
         clean.records_fn(outfile, temp)
         saved_dir = os.getcwd()
@@ -192,7 +194,7 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
     os.system("mkdir -p outdir")
     if not os.path.exists(outdep):
 
-        val_range = gen_range(lowThreads, highThreads, 1)
+        val_range = gen_range(lowThreads, highThreads, 4)
 
         for i in val_range:
             os.system("rm results.txt")
@@ -232,6 +234,7 @@ def occ_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, dis
     
     temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
 
+    
     os.system("mkdir -p " + outdir)
     outdep = os.path.join(outdir, "." + filename)
     if not os.path.exists(outdep):
@@ -252,7 +255,21 @@ def hek_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, dis
     outfile = os.path.join(outdir, filename)
     temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
 
-    os.system("mkdir -p " + outdir)
+
+#     param_dict = {}
+#     param_dict["--cc_type"] = str(3)
+#     param_dict["--num_contended"] = str(2)
+#     param_dict["--txn_size"] = str(10)
+#     param_dict["--read_pct"] = str(0)
+#     param_dict["--read_txn_size"] = str(5)
+# 
+#     param_dict["--num_txns"] = str(txns)
+#     param_dict["--num_records"] = str(records)
+#     param_dict["--experiment"] = str(expt)
+#     param_dict["--distribution"] = str(distribution)
+#     param_dict["--record_size"] = str(1000)
+#     
+#     os.system("mkdir -p " + outdir)
     outdep = os.path.join(outdir, "." + filename)
     if not os.path.exists(outdep):
 
@@ -342,20 +359,21 @@ def uncontended_1000():
 def hek_uncontended_1000():
     for i in range(0, 5):
         result_dir = "results/hekaton/ycsb/uncontended"
-        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
-        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000)
+        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000)
 #        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
 #        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
-#        mv_expt(result_dir, "mv_10rmw.txt", 12, 1000000, 1000000, 4, 28, 0, 1, 0.0, 1000)
-#        mv_expt(result_dir, "mv_8r2rmw.txt", 12, 1000000, 1000000, 4, 28, 1, 1, 0.0, 1000)
+        mv_expt(result_dir, "mv_10rmw.txt", 10, 1000000, 10000000, 2, 30, 0, 1, 0.0, 1000)
+        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 1000000, 10000000, 2, 30, 1, 1, 0.0, 1000)
 
+    for i in range(0, 5):
         result_dir = "results/hekaton/ycsb/contended"
-        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
-        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
+        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 3000000, 1000, 0, 1, 0.0, 1000)
+        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 3000000, 1000, 1, 1, 0.0, 1000)
 #        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
 #        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
-#        mv_expt(result_dir, "mv_10rmw.txt", 12, 1000000, 1000000, 4, 28, 0, 1, 0.9, 1000)
-#        mv_expt(result_dir, "mv_8r2rmw.txt", 12, 1000000, 1000000, 4, 28, 1, 1, 0.9, 1000)
+        mv_expt(result_dir, "mv_10rmw.txt", 10, 3000000, 1000, 2, 30, 0, 1, 0.0, 1000)
+        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 3000000, 1000, 2, 30, 1, 1, 0.0, 1000)
         
     
     

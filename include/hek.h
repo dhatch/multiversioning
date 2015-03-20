@@ -56,8 +56,8 @@ class hek_worker : public Runnable {
 
         virtual void init_allocator();
         virtual struct hek_record* get_new_record(uint32_t table_id);
-        virtual void return_record(uint32_t table_id,
-                                   struct hek_record *record);
+        //        virtual void return_record(uint32_t table_id,
+        //                                   struct hek_record *record);
         
         
         virtual void run_txn(hek_action *txn);
@@ -79,7 +79,7 @@ class hek_worker : public Runnable {
         virtual void transition_commit(hek_action *txn);
         virtual void transition_abort(hek_action *txn);
 
-        virtual void add_commit_dep(hek_action *out, hek_key *key,
+        virtual bool add_commit_dep(hek_action *out, hek_key *key,
                                     hek_action *in);
                                                                         
         

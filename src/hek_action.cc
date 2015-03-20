@@ -23,13 +23,13 @@ hek_status hek_rmw_action::Run()
         counter = 0;
         for (i = 0; i < num_reads; ++i) {
                 char *field_ptr = (char*)Read(i);
-                for (j = 0; j < 10; ++j) 
+                for (j = 0; j < 2; ++j) 
                         counter += *((uint64_t*)&field_ptr[j*100]);
         }
         for (i = 0; i < num_writes; ++i) {
                 char *write_ptr = (char*)GetWriteRef(i);
-                memcpy(write_ptr, Read(i), 1000);
-                for (j = 0; j < 10; ++j) {
+                memcpy(write_ptr, Read(i), 256);
+                for (j = 0; j < 2; ++j) {
                         *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
                 }
         }

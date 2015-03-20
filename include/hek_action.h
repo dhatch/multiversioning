@@ -30,6 +30,7 @@ struct hek_record {
         uint64_t end;
         uint64_t key;
         uint32_t size;
+        uint32_t writer;
         char value[0];
 };
 

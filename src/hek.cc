@@ -20,6 +20,7 @@ static void init_list(char *start, uint32_t num_records, uint32_t record_sz)
         cur->next = NULL;
 }
 
+
 /*
  * Initialize the record allocator. Works in two phases, first do the 
  * allocation, then link up everything.
@@ -94,31 +95,26 @@ void hek_queue::enqueue(hek_action *txn)
         barrier();
         prev = (hek_action**)xchgq((volatile uint64_t*)&this->tail,
                                    (uint64_t)&txn->next);
-        if (prev != NULL) 
-                *prev = txn;
+        *prev = txn;
 }
 
 // Dequeue several transactions. 
 hek_action* hek_queue::dequeue_batch()
 {
         hek_action *ret, **old_tail;
-        volatile hek_action **iter;
-        ret = (hek_action*)head;
-        barrier();
-        head = NULL;
-        barrier();
+        volatile hek_action *iter;
+        iter = (volatile hek_action*)xchgq((volatile uint64_t*)&head, (uint64_t)NULL);
+        ret = (hek_action*)iter;
         old_tail = (hek_action**)xchgq((volatile uint64_t*)&this->tail,
                                        (uint64_t)&head);
-        iter = &head;
-        while (old_tail != iter) {
-                while (true) {
-                        barrier();
-                        if (*iter != NULL)
-                                break;
-                        barrier();
+        if (iter != NULL) {
+                while (old_tail != &iter->next) {
+                        while (iter->next == NULL) 
+                                ;
+                        iter = (volatile hek_action*)iter->next;
                 }
-                iter = (volatile hek_action**)&(*iter)->next;
         }
+        
         return ret;
 }
 
@@ -129,18 +125,20 @@ void hek_worker::check_dependents()
         aborted = config.abort_queue->dequeue_batch();
         barrier();
         while (aborted != NULL) {
-                assert(aborted->dep_flag == ABORT);
+                assert(HEK_STATE(aborted->end) == PREPARING &&
+                       aborted->dep_flag == ABORT);
                 transition_abort(aborted);
-                do_abort(aborted);
+                //                do_abort(aborted);
                 aborted = (hek_action*)aborted->next;
         }
         committed = config.commit_queue->dequeue_batch();
         barrier();
         while (committed != NULL) {
-                assert(committed->dep_flag == COMMIT &&
+                assert(HEK_STATE(committed->end) == PREPARING &&
+                       committed->dep_flag == COMMIT &&
                        committed->dep_count == 0);
                 transition_commit(committed);
-                do_commit(committed);
+                //                do_commit(committed);
                 committed = (hek_action*)committed->next;
         }
 }
@@ -189,7 +187,8 @@ void hek_worker::transition_preparing(hek_action *txn)
         end_ts = fetch_and_increment(config.global_time);
         end_ts = CREATE_PREP_TIMESTAMP(end_ts);
         lock(&txn->latch);
-        txn->end = end_ts;
+        //        txn->end = end_ts;
+        xchgq(&txn->end, end_ts);
         unlock(&txn->latch);
         assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
         assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
@@ -202,9 +201,9 @@ void hek_worker::transition_commit(hek_action *txn)
         assert(HEK_STATE(txn->end) == PREPARING);
         time = HEK_TIME(txn->end);
         time |= COMMIT;
-        //        time = CREATE_COMMIT_TIMESTAMP(time);
-        lock(&txn->latch);        
+        lock(&txn->latch);
         txn->end = time;
+        do_commit(txn);        
         unlock(&txn->latch);
         assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
         assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
@@ -217,10 +216,10 @@ void hek_worker::transition_abort(hek_action *txn)
         
         assert(HEK_STATE(txn->end) == PREPARING);
         time = HEK_TIME(txn->end);
-        //        time = CREATE_ABORT_TIMESTAMP(time);
         time |= ABORT;
-        lock(&txn->latch);
+        lock(&txn->latch);        
         txn->end = time;
+        do_abort(txn);        
         unlock(&txn->latch);
         assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
         assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
@@ -270,21 +269,32 @@ void hek_worker::get_reads(hek_action *txn)
  * is in state PREPARING. We can't atomically ensure that the transaction's
  * state is PREPARING and enqueue the commit dependency without locks.
  */
-void hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in)
+bool hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in)
 {
         assert(!IS_TIMESTAMP(key->time) && in == GET_TXN(key->time));
         assert(HEK_STATE(out->end) == PREPARING);
         assert(HEK_STATE(in->end) >= PREPARING);
-        
+        bool ret;
+
+        ret = false;
         lock(&in->latch);
         if (HEK_STATE(in->end) == PREPARING) {
                 key->next = in->dependents;
                 in->dependents = key;
+                out->must_wait = true;
+                fetch_and_increment(&out->dep_count);
+                ret = true;
+        }
+        unlock(&in->latch);
+        return ret;
+        /*
         } else if (HEK_STATE(in->end) == ABORT &&
                    cmp_and_swap(&out->dep_flag, PREPARING, ABORT)) {
                 config.abort_queue->enqueue(out);
         } 
         unlock(&in->latch);
+        */
+        
 }
 
 bool hek_worker::validate_single(hek_action *txn, hek_key *key)
@@ -307,11 +317,8 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
                         return read_ts == vis_ts;
                 } else if (!IS_TIMESTAMP(vis_ts) &&
                            GET_TXN(vis_ts) == GET_TXN(read_ts)) {
-                        //                        return false;
                         key->txn = txn;
-                        txn->must_wait = true;
-                        add_commit_dep(txn, key, GET_TXN(vis_ts));
-                        return true;
+                        return add_commit_dep(txn, key, GET_TXN(vis_ts));
                 } else if (IS_TIMESTAMP(vis_ts)) {
                         preparing = GET_TXN(read_ts);
                         return HEK_TIME(preparing->end) == vis_ts;
@@ -331,12 +338,14 @@ hek_record* hek_worker::get_new_record(uint32_t table_id)
         return ret;       
 }
 
+/*
 void hek_worker::return_record(uint32_t table_id, hek_record *record)
 {
         //        memset(record, 0x0, sizeof(hek_record));
         record->next = records[table_id];
         records[table_id] = record;
 }
+*/
 
 bool hek_worker::validate_reads(hek_action *txn)
 {
@@ -344,14 +353,34 @@ bool hek_worker::validate_reads(hek_action *txn)
         assert(HEK_STATE(txn->end) == PREPARING);
         uint32_t num_reads, i;
         
+        barrier();
         txn->must_wait = false;
+        txn->dep_flag = PREPARING;
+        txn->dep_count = 0;
+        barrier();
         fetch_and_increment(&txn->dep_count);
         num_reads = txn->readset.size();
         for (i = 0; i < num_reads; ++i) {
-                if (!validate_single(txn, &txn->readset[i])) 
-                        return false;
+                if (!validate_single(txn, &txn->readset[i])) {
+                        if (cmp_and_swap((volatile uint64_t*)&txn->dep_flag,
+                                         PREPARING,
+                                         ABORT)) {
+                                return false;
+                        } else {
+                                assert(txn->must_wait == true &&
+                                       txn->dep_flag == ABORT);
+                                return true;
+                        }                        
+                }
         }
-        fetch_and_decrement(&txn->dep_count);
+        if (fetch_and_decrement(&txn->dep_count) == 0) {
+                assert(txn->dep_flag == PREPARING);
+                //                old_flag = xchgq((volatile uint64_t*)&txn->dep_flag,
+                //                                 COMMIT);
+                //                assert(old_flag == PREPARING);
+                //                assert(HEK_STATE(txn->end) == PREPARING);
+                txn->must_wait = false;
+        }
         return true;
 }
 
@@ -375,6 +404,7 @@ void hek_worker::install_writes(hek_action *txn)
  */
 bool hek_worker::insert_writes(hek_action *txn)
 {
+
         uint32_t num_writes, i, tbl_id;
         hek_table *table;
         hek_record *rec;
@@ -382,7 +412,7 @@ bool hek_worker::insert_writes(hek_action *txn)
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 assert(txn->writeset[i].written == false);
-                assert(IS_TIMESTAMP((uint64_t)txn)); /* ptr must be aligned */
+                assert(IS_TIMESTAMP((uint64_t)txn));  //ptr must be aligned 
                 rec = txn->writeset[i].value;
                 rec->begin = (uint64_t)txn | 0x1;
                 rec->end = HEK_INF;
@@ -393,6 +423,7 @@ bool hek_worker::insert_writes(hek_action *txn)
                 else
                         txn->writeset[i].written = true;
         }
+
         return true;
 }
 
@@ -405,7 +436,9 @@ void hek_worker::run_txn(hek_action *txn)
 {
         hek_status status;
         bool validated;
-        
+
+        txn->worker = this;
+        txn->dependents = NULL;
         txn->begin =
                 CREATE_EXEC_TIMESTAMP(fetch_and_increment(config.global_time));
         transition_begin(txn);
@@ -419,33 +452,27 @@ void hek_worker::run_txn(hek_action *txn)
         if (validated == true) {
                 if (txn->must_wait == false) {
                         transition_commit(txn);
-                        do_commit(txn);
+                        //                        do_commit(txn);
                 }
                 return;
         } 
  abort:
         transition_abort(txn);
-        do_abort(txn);
+        //        do_abort(txn);
 }
 
 void hek_worker::kill_waiters(hek_action *txn)
 {
+        assert(HEK_STATE(txn->end) == ABORT);
         hek_key *wait_record;
         hek_action *waiter;
-        uint64_t state;
-
+        
         wait_record = txn->dependents;
         while (wait_record != NULL) {
                 waiter = wait_record->txn;
-                barrier();
-                state = waiter->dep_flag;
-                barrier();
-                if (state == PREPARING &&
-                    cmp_and_swap(&waiter->dep_flag, PREPARING, ABORT)) {
-                        assert(waiter->dep_count > 0);
-                        fetch_and_decrement(&waiter->dep_count);
+                assert(waiter->dep_count > 0);
+                if (cmp_and_swap(&waiter->dep_flag, PREPARING, ABORT)) 
                         insert_abort_queue(waiter);
-                }
                 wait_record = wait_record->next;
         }
 }
@@ -455,17 +482,17 @@ void hek_worker::kill_waiters(hek_action *txn)
  */
 void hek_worker::commit_waiters(hek_action *txn)
 {
+        assert(HEK_STATE(txn->end) == COMMIT);
         hek_key *wait_record;
         hek_action *waiter;
-        volatile uint64_t flag;
+        uint64_t flag;
 
         wait_record = txn->dependents;
         while (wait_record != NULL) {
-                waiter = wait_record->txn;
+                waiter = wait_record->txn;                
                 if (fetch_and_decrement(&waiter->dep_count) == 0) {
-                        barrier();
-                        flag = waiter->dep_flag;
-                        barrier();
+                        flag = xchgq((volatile uint64_t*)&waiter->dep_flag,
+                                     (uint64_t)COMMIT);
                         assert(flag == PREPARING);
                         insert_commit_queue(waiter);
                 }
@@ -492,6 +519,7 @@ void hek_worker::do_commit(hek_action *txn)
 
 void hek_worker::install_writes(hek_action *txn)
 {
+
         uint32_t num_writes, i;
         hek_key *key;
         //        uint64_t prev_ts;
@@ -505,6 +533,7 @@ void hek_worker::install_writes(hek_action *txn)
                 config.tables[key->table_id]->
                         finalize_version(key->value, HEK_TIME(txn->end));
         }
+
         
 }
 
@@ -514,6 +543,7 @@ void hek_worker::install_writes(hek_action *txn)
  */
 void hek_worker::remove_writes(hek_action *txn)
 {
+
         uint32_t num_writes, i, table_id;
         hek_key *key;
         hek_record *record;
@@ -527,10 +557,11 @@ void hek_worker::remove_writes(hek_action *txn)
                         assert(table_id < config.num_tables);
                         record = key->value;
                         config.tables[table_id]->remove_version(record);
-                        return_record(table_id, record);
+                        //                        return_record(table_id, record);
                                                        
                 } else {
                         break;
                 }                
         }
+        
 }
