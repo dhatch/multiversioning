@@ -99,7 +99,7 @@ void hek_table::read_stable(struct hek_table_slot *slot, uint64_t *head_time,
                 barrier();
                 cur = (hek_record*)slot->records;
                 barrier();
-                assert(cur != NULL);
+                //                assert(cur != NULL);
                 *head = cur;			/* first record */
                 *head_time = cur->begin;	/* first record's timestamp */
                 *next = cur->next;		/* second record */

@@ -177,8 +177,8 @@ void hek_worker::transition_begin(hek_action *txn)
         lock(&txn->latch);
         txn->end = EXECUTING;
         unlock(&txn->latch);
-        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
-               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
+        //        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
+        //               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
 }
 
 void hek_worker::transition_preparing(hek_action *txn)
@@ -191,8 +191,11 @@ void hek_worker::transition_preparing(hek_action *txn)
         xchgq(&txn->end, end_ts);
         unlock(&txn->latch);
         assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
-        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
-               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
+
+        // Reading global timestamp kills performance. Use the following
+        // assertion only for debugging purposes.
+        //        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
+        //               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
 }
 
 void hek_worker::transition_commit(hek_action *txn)
@@ -206,8 +209,11 @@ void hek_worker::transition_commit(hek_action *txn)
         do_commit(txn);        
         unlock(&txn->latch);
         assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
-        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
-               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
+
+        // Reading global timestamp kills performance. Use the following
+        // assertion only for debugging purposes.
+        //        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
+        //               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
 }
 
 void hek_worker::transition_abort(hek_action *txn)
@@ -222,8 +228,11 @@ void hek_worker::transition_abort(hek_action *txn)
         do_abort(txn);        
         unlock(&txn->latch);
         assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
-        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
-               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
+
+        // Reading global timestamp kills performance. Use the following
+        // assertion only for debugging purposes.
+        //        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
+        //               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
 }
 
 /* Give a transaction a new record for every write it performs. */
