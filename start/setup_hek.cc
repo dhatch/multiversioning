@@ -8,6 +8,7 @@
 #include <gperftools/profiler.h>
 #include <fstream>
 #include <stdlib.h>
+#include <algorithm>
 
 /* Total space available for free lists */
 #define TOTAL_SIZE (((uint64_t)1) << 35)
@@ -23,6 +24,19 @@ struct hek_result {
  */
 static uint64_t freelist_sizes[2];
 static uint32_t record_sizes[2];
+
+
+// 
+// static bool key_cmp(hek_key key1, hek_key key2)
+// {
+//         if (key1.table_id < key2.table_id) 
+//                 return true;
+//         else if (key1.table_id > key2.table_id)
+//                 return false;
+//         else
+//                 return key1.key < key2.key;
+// }
+// 
 
 /*
  * Insert records into the YCSB table. 
@@ -110,6 +124,7 @@ static void compute_free_sz(hek_config config)
         thread_sz = TOTAL_SIZE / config.num_threads;
         if (config.experiment < 3) {
                 freelist_sizes[0] = thread_sz;
+                //                freelist_sizes[0] = 1<<30;
                 freelist_sizes[1] = 0;
         } else {
                 freelist_sizes[0] = thread_sz/2;
@@ -167,6 +182,7 @@ static hek_worker** setup_workers(hek_config config, hek_table **tables,
         
         /* Common worker_conf data */
         worker_conf.global_time = (volatile uint64_t*)global_time;
+        assert(*worker_conf.global_time == 0);
         worker_conf.num_tables = num_tables(config);
         worker_conf.num_threads = config.num_threads;
         worker_conf.free_list_sizes = freelist_sizes;
@@ -246,6 +262,7 @@ static hek_action* generate_readonly(hek_config config, RecordGenerator *gen)
         return ret;
 }
 
+
 /*
  * Generate an RMW YCSB txn. 
  */
@@ -274,6 +291,13 @@ static hek_action* generate_rmw(hek_config config, RecordGenerator *gen)
                 if (config.experiment == 0 || i < RMW_COUNT)
                         ret->writeset.push_back(to_add);
         }
+
+        /* 
+         * Sort keys so records are inserted in a deterministic order. 
+         * Reduces the chance of an abort.  
+         * std::sort(ret->writeset.begin(), ret->writeset.end(), key_cmp);
+         * std::sort(ret->readset.begin(), ret->readset.end(), key_cmp);
+         */
         return ret;
 }
 
@@ -469,6 +493,7 @@ static void write_results(struct hek_result result, hek_config config)
                 result_file << "zipf theta:" << config.theta << "\n";
         result_file.close();  
 }
+
 
 /* "main" function for hekaton */
 void do_hekaton_experiment(hek_config config)

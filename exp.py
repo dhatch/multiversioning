@@ -12,6 +12,10 @@ fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_si
 
 fmt_occ = "build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 0 --read_txn_size 5"
 
+fmt_hek = "build/db --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 0 --read_txn_size 5"
+
+
+
 def main():
 #    write_searches_top()
 #    small_bank_uncontended()
@@ -25,11 +29,12 @@ def main():
 #    vary_contention()
 
 #    search_best()
-    test_cc()
+#    test_cc()
 #    exp_0()
 #    occ_uncontended_1000()
 
-    search_best()
+#    search_best()
+    hek_uncontended_1000()
 #    combine_best()
 #    small_bank_contended()
 #    small_bank_uncontended()
@@ -242,6 +247,27 @@ def occ_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, dis
             os.chdir(outdir)
             os.system("gnuplot plot.plt")
             os.chdir(saved_dir)
+
+def hek_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size):
+    outfile = os.path.join(outdir, filename)
+    temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
+
+    os.system("mkdir -p " + outdir)
+    outdep = os.path.join(outdir, "." + filename)
+    if not os.path.exists(outdep):
+
+        val_range = gen_range(lowThreads, highThreads, 4)
+        for i in val_range:
+            os.system("rm hek.txt")
+            cmd = fmt_hek.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size))
+            os.system(cmd)
+            os.system("cat hek.txt >>" + outfile)
+            clean.clean_fn("occ", outfile, temp)
+            saved_dir = os.getcwd()
+            os.chdir(outdir)
+            os.system("gnuplot plot.plt")
+            os.chdir(saved_dir)
+
             
 def ccontrol():
     outdir = "results/concurrency_control"
@@ -313,6 +339,26 @@ def uncontended_1000():
     os.system("touch " + os.path.join(outdir, "." + "locking_10rmw.txt"))
     os.system("touch " + os.path.join(outdir, "." + "locking_8r2rmw.txt"))
 
+def hek_uncontended_1000():
+    for i in range(0, 5):
+        result_dir = "results/hekaton/ycsb/uncontended"
+        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+#        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+#        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+#        mv_expt(result_dir, "mv_10rmw.txt", 12, 1000000, 1000000, 4, 28, 0, 1, 0.0, 1000)
+#        mv_expt(result_dir, "mv_8r2rmw.txt", 12, 1000000, 1000000, 4, 28, 1, 1, 0.0, 1000)
+
+        result_dir = "results/hekaton/ycsb/contended"
+        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
+#        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+#        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
+#        mv_expt(result_dir, "mv_10rmw.txt", 12, 1000000, 1000000, 4, 28, 0, 1, 0.9, 1000)
+#        mv_expt(result_dir, "mv_8r2rmw.txt", 12, 1000000, 1000000, 4, 28, 1, 1, 0.9, 1000)
+        
+    
+    
 def occ_uncontended_1000():
     result_dir = "results/rec_1000/uncontended"
     for i in range(0, 5):

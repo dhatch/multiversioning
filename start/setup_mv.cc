@@ -286,10 +286,10 @@ static Executor** SetupExecutors(uint32_t cpuStart,
   // worker's local GC queue.
   ExecutorConfig configs[numWorkers];  
   for (uint32_t i = 0; i < numWorkers; ++i) {
-    SimpleQueue<ActionBatch> *curOutput = NULL;
-    if (i == 0) {
-      curOutput = outputQueue;
-    }
+          SimpleQueue<ActionBatch> *curOutput = &outputQueue[i];
+          //    if (i == 0) {
+          //            curOutput = &outputQueue[i];
+          //    }
     configs[i] = SetupExec(cpuStart+i, i, numWorkers, &epochArray[i], 
                            &epochArray[numWorkers],
                            &sizeData[0],
@@ -777,7 +777,7 @@ static void write_results(MVConfig config, timespec elapsed_time)
         result_file.open("results.txt", std::ios::app | std::ios::out);
         result_file << "mv ";
         result_file << "time:" << elapsed_milli << " ";
-        result_file << "txns:" << (num_epochs-5)*config.epochSize << " ";
+        result_file << "txns:" << (num_epochs)*config.epochSize << " ";
         result_file << "ccthreads:" << config.numCCThreads << " ";
         result_file << "workerthreads:" << config.numWorkerThreads << " ";
         result_file << "records:" << config.numRecords << " ";
@@ -802,9 +802,10 @@ static void write_results(MVConfig config, timespec elapsed_time)
 
 static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
                                SimpleQueue<ActionBatch> *output_queue,
-                               std::vector<ActionBatch> inputs)
+                               std::vector<ActionBatch> inputs,
+                               uint32_t num_workers)
 {
-        uint32_t num_batches, i;
+        uint32_t num_batches, i, j;
         struct timespec elapsed_time, end_time, start_time;
         num_batches = inputs.size();
 
@@ -812,7 +813,8 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
         for (i = 0; i < MV_DRY_RUNS; ++i)
                 input_queue->EnqueueBlocking(inputs[i]);
         for (i = 0; i < MV_DRY_RUNS; ++i)
-                output_queue->DequeueBlocking();
+                for (j = 0; j < num_workers; ++j)
+                        (&output_queue[j])->DequeueBlocking();
         barrier();
 
         if (PROFILE)
@@ -825,7 +827,8 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
         }
         barrier();
         for (i = MV_DRY_RUNS; i < num_batches; ++i) {
-                output_queue->DequeueBlocking();
+                for (j = 0; j < num_workers; ++j) 
+                        (&output_queue[j])->DequeueBlocking();
         }
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
@@ -874,7 +877,8 @@ static void init_database(MVConfig config,
                 exec_threads[i]->WaitInit();                
         }
         input_queue->EnqueueBlocking(init_batch);
-        output_queue->DequeueBlocking();
+        for (i = 0; i < config.numWorkerThreads; ++i) 
+                (&output_queue[i])->DequeueBlocking();
         barrier();
         std::cerr << "Done loading the database!\n";
         return;
@@ -948,7 +952,8 @@ void do_mv_experiment(MVConfig config)
         MVScheduler::NUM_CC_THREADS = (uint32_t)config.numCCThreads;
         NUM_CC_THREADS = (uint32_t)config.numCCThreads;
         assert(config.distribution < 2);
-        outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE, 1, 71);
+        outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE,
+                                                    config.numWorkerThreads, 71);
         schedThreads = setup_scheduler_threads(config, &schedInputQueue,
                                                &schedOutputQueues,
                                                schedGCQueues);
@@ -958,9 +963,10 @@ void do_mv_experiment(MVConfig config)
         init_database(config, schedInputQueue, outputQueue, schedThreads,
                       execThreads);
         pin_memory();
-        elapsed_time = run_experiment(schedInputQueue,
+        elapsed_time = run_experiment(schedInputQueue,  //&schedOutputQueues[config.numWorkerThreads],
                                       outputQueue,
-                                      input_placeholder);
+                                      input_placeholder,
+                                      config.numWorkerThreads);
         write_results(config, elapsed_time);
 }
 

@@ -39,6 +39,7 @@ void hek_worker::init_allocator()
                 total_sz += num_elems * (record_sz + header_sz);
         }
         temp = (char*)alloc_interleaved_all(total_sz);
+        //        temp = (char*)alloc_mem(total_sz, config.cpu);
         records = (hek_record**)temp;
         start = temp + config.num_tables*sizeof(hek_record*);
         for (i = 0; i < this->config.num_tables; ++i) {
@@ -132,7 +133,6 @@ void hek_worker::check_dependents()
                 transition_abort(aborted);
                 do_abort(aborted);
                 aborted = (hek_action*)aborted->next;
-                assert(false);
         }
         committed = config.commit_queue->dequeue_batch();
         barrier();
@@ -142,7 +142,6 @@ void hek_worker::check_dependents()
                 transition_commit(committed);
                 do_commit(committed);
                 committed = (hek_action*)committed->next;
-                assert(false);
         }
 }
 
@@ -180,6 +179,8 @@ void hek_worker::transition_begin(hek_action *txn)
         lock(&txn->latch);
         txn->end = EXECUTING;
         unlock(&txn->latch);
+        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
+               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
 }
 
 void hek_worker::transition_preparing(hek_action *txn)
@@ -190,6 +191,9 @@ void hek_worker::transition_preparing(hek_action *txn)
         lock(&txn->latch);
         txn->end = end_ts;
         unlock(&txn->latch);
+        assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
+        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
+               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
 }
 
 void hek_worker::transition_commit(hek_action *txn)
@@ -197,10 +201,14 @@ void hek_worker::transition_commit(hek_action *txn)
         uint64_t time;
         assert(HEK_STATE(txn->end) == PREPARING);
         time = HEK_TIME(txn->end);
-        time = CREATE_COMMIT_TIMESTAMP(time);
+        time |= COMMIT;
+        //        time = CREATE_COMMIT_TIMESTAMP(time);
         lock(&txn->latch);        
         txn->end = time;
         unlock(&txn->latch);
+        assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
+        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
+               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
 }
 
 void hek_worker::transition_abort(hek_action *txn)
@@ -209,10 +217,14 @@ void hek_worker::transition_abort(hek_action *txn)
         
         assert(HEK_STATE(txn->end) == PREPARING);
         time = HEK_TIME(txn->end);
-        time = CREATE_ABORT_TIMESTAMP(time);
+        //        time = CREATE_ABORT_TIMESTAMP(time);
+        time |= ABORT;
         lock(&txn->latch);
         txn->end = time;
         unlock(&txn->latch);
+        assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
+        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
+               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
 }
 
 /* Give a transaction a new record for every write it performs. */
@@ -240,7 +252,7 @@ void hek_worker::get_reads(hek_action *txn)
         uint64_t key, ts, *begin_ptr;
         struct hek_record *read_record;
         
-        ts = txn->begin;
+        ts = HEK_TIME(txn->begin);
         num_reads = txn->readset.size();
         for (i = 0; i < num_reads; ++i) {
                 table_id = txn->readset[i].table_id;
@@ -263,7 +275,7 @@ void hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in)
         assert(!IS_TIMESTAMP(key->time) && in == GET_TXN(key->time));
         assert(HEK_STATE(out->end) == PREPARING);
         assert(HEK_STATE(in->end) >= PREPARING);
-
+        
         lock(&in->latch);
         if (HEK_STATE(in->end) == PREPARING) {
                 key->next = in->dependents;
@@ -293,7 +305,9 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
         if (vis_record == read_record) {
                 if (IS_TIMESTAMP(read_ts)) {
                         return read_ts == vis_ts;
-                } else if (!IS_TIMESTAMP(vis_ts) && vis_ts == read_ts) {
+                } else if (!IS_TIMESTAMP(vis_ts) &&
+                           GET_TXN(vis_ts) == GET_TXN(read_ts)) {
+                        //                        return false;
                         key->txn = txn;
                         txn->must_wait = true;
                         add_commit_dep(txn, key, GET_TXN(vis_ts));
@@ -319,6 +333,7 @@ hek_record* hek_worker::get_new_record(uint32_t table_id)
 
 void hek_worker::return_record(uint32_t table_id, hek_record *record)
 {
+        //        memset(record, 0x0, sizeof(hek_record));
         record->next = records[table_id];
         records[table_id] = record;
 }
@@ -367,6 +382,7 @@ bool hek_worker::insert_writes(hek_action *txn)
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 assert(txn->writeset[i].written == false);
+                assert(IS_TIMESTAMP((uint64_t)txn)); /* ptr must be aligned */
                 rec = txn->writeset[i].value;
                 rec->begin = (uint64_t)txn | 0x1;
                 rec->end = HEK_INF;
@@ -390,8 +406,9 @@ void hek_worker::run_txn(hek_action *txn)
         hek_status status;
         bool validated;
         
+        txn->begin =
+                CREATE_EXEC_TIMESTAMP(fetch_and_increment(config.global_time));
         transition_begin(txn);
-        txn->begin = fetch_and_increment(config.global_time);
         get_reads(txn);
         get_writes(txn);
         status = txn->Run();
@@ -510,6 +527,7 @@ void hek_worker::remove_writes(hek_action *txn)
                         assert(table_id < config.num_tables);
                         record = key->value;
                         config.tables[table_id]->remove_version(record);
+                        return_record(table_id, record);
                                                        
                 } else {
                         break;

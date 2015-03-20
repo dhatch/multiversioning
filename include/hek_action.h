@@ -15,9 +15,10 @@
 #define IS_TIMESTAMP(ts) ((ts & 0x0F) == 0)
 #define HEK_TIME(ts) (HEK_INF & ts)
 #define HEK_STATE(ts) (HEK_MASK & ts)
+#define CREATE_EXEC_TIMESTAMP(ts) (ts<<8)
 #define CREATE_PREP_TIMESTAMP(ts) ((ts<<8) | PREPARING)
-#define CREATE_COMMIT_TIMESTAMP(ts) ((ts<<8) | COMMIT)
-#define CREATE_ABORT_TIMESTAMP(ts) ((ts<<8) | ABORT)
+//#define CREATE_COMMIT_TIMESTAMP(ts) ((ts<<8) | COMMIT)
+//#define CREATE_ABORT_TIMESTAMP(ts) ((ts<<8) | ABORT)
 
 class hek_action;
 class hek_worker;

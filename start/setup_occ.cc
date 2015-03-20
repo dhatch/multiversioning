@@ -516,6 +516,7 @@ void occ_experiment(OCCConfig config)
         workers = setup_occ_workers(input_queues, output_queues, tables,
                                     config.numThreads, config.occ_epoch, 2);
         inputs = setup_occ_input(config, OCC_TXN_BUFFER);
+        pin_memory();
         result = run_occ_workers(input_queues, output_queues, workers,
                                  inputs, OCC_TXN_BUFFER+1, config);
         write_occ_output(result, config);

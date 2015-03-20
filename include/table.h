@@ -92,7 +92,7 @@ class Table {
 
   uint32_t RecordSize()
   {
-          return conf.valueSz;
+          return 256;
   }
 };
 

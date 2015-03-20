@@ -25,10 +25,10 @@ hek_status hek_rmw_action::Run()
                 char *field_ptr = (char*)Read(i);
                 for (j = 0; j < 10; ++j) 
                         counter += *((uint64_t*)&field_ptr[j*100]);
-                memcpy(GetWriteRef(i), field_ptr, 1000);
         }
         for (i = 0; i < num_writes; ++i) {
                 char *write_ptr = (char*)GetWriteRef(i);
+                memcpy(write_ptr, Read(i), 1000);
                 for (j = 0; j < 10; ++j) {
                         *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
                 }

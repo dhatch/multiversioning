@@ -70,14 +70,16 @@ void gen_random_array(void *array, size_t sz)
 
 void pin_memory()
 {
-        mlockall(MCL_CURRENT);
-        if (errno != 0) {
-                std::cout << "Couldn't pin memory!\n";
-                assert(false);
-        }         
-        mlockall(MCL_FUTURE);
-        if (errno != 0) {
-                std::cout << "Couldn't pin memory!\n";
-                assert(false);
-        }        
+        if (!PROFILE) {
+                mlockall(MCL_CURRENT);
+                if (errno != 0) {
+                        std::cout << "Couldn't pin memory!\n";
+                        assert(false);
+                }         
+                mlockall(MCL_FUTURE);
+                if (errno != 0) {
+                        std::cout << "Couldn't pin memory!\n";
+                        assert(false);
+                }
+        }
 }

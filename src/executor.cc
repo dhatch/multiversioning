@@ -160,7 +160,7 @@ uint64_t Executor::next_ptr()
 
 void Executor::LeaderFunction() {
   assert(config.threadId == 0);
-  ActionBatch dummy = { NULL, 0 };
+  //  ActionBatch dummy = { NULL, 0 };
   volatile uint32_t minEpoch = *config.epochPtr;
   //        std::cout << "0:" << minEpoch << "\n";
   for (uint32_t i = 1; i < config.numExecutors; ++i) {
@@ -182,10 +182,12 @@ void Executor::LeaderFunction() {
     //          std::cout << "LowWaterMark: " << minEpoch << "\n";
   }
   barrier();
-      
+
+  /*
   for (uint32_t i = 0; i < minEpoch - prev; ++i) {
     config.outputQueue->EnqueueBlocking(dummy);
   }
+  */
 }
 /*
 static void wait() 
@@ -315,6 +317,9 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
   while (!pendingList->IsEmpty()) {
     ExecPending();
   }
+
+  ActionBatch dummy = {NULL, 0};
+  config.outputQueue->EnqueueBlocking(dummy);  
 }
 
 // Returns the epoch of the oldest pending record.

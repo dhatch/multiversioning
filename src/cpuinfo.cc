@@ -133,16 +133,20 @@ alloc_mem(size_t size, int cpu) {
           numa_set_strict(1);
           void *buf = numa_alloc_onnode(size, numa_node);
           //          void *buf = numa_alloc_interleaved(size);
-          assert(buf != NULL);
-          /*
-    if (buf == NULL) {
-        return buf;
-    }
-          */
-            if (errno != 0) {
-          perror("Error: ");
-  }
 
+  if (buf != NULL) {
+    if (mlock(buf, size) != 0) {
+      numa_free(buf, size);
+      std::cout << "mlock couldn't pin memory to RAM!\n";
+      buf = NULL;
+    }
+  }  
+
+          
+//           if (errno != 0) {
+//                   perror("Error: ");
+//           }
+// 
           return buf;
   }
 }
@@ -157,26 +161,14 @@ void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
     mask = numa_bitmask_setbit(mask, i);
   }
   void *buf = numa_alloc_interleaved_subset(size, mask);
-  if (errno != 0) {
-          perror("Error: ");
-  }
-  return buf;
-  /*
-  if (buf != NULL) {
-    if (mlock(buf, size) != 0) {
-      numa_free(buf, size);
-      std::cout << "mlock couldn't pin memory to RAM!\n";
-      buf = NULL;
-    }
-  }  
-  numa_bitmask_free(mask);
-  return buf;
-  */
-}
+  assert(buf != NULL);
+  
+//   if (errno != 0) {
+//           perror("Error: ");
+//   }
+//  return buf;
 
-void* alloc_interleaved_all(size_t size) {
-  void *buf = numa_alloc_interleaved(size);
-  /*
+
   if (buf != NULL) {
     if (mlock(buf, size) != 0) {
       numa_free(buf, size);
@@ -184,10 +176,28 @@ void* alloc_interleaved_all(size_t size) {
       buf = NULL;
     }
   } 
-  */
-    if (errno != 0) {
-          perror("Error: ");
-  }
+
+  numa_bitmask_free(mask);
+  return buf;
+  
+}
+
+void* alloc_interleaved_all(size_t size) {
+  void *buf = numa_alloc_interleaved(size);
+  assert(buf != NULL);
+
+  if (buf != NULL) {
+    if (mlock(buf, size) != 0) {
+      numa_free(buf, size);
+      std::cout << "mlock couldn't pin memory to RAM!\n";
+      buf = NULL;
+    }
+  } 
+
+
+//   if (errno != 0) {
+//           perror("Error: ");
+//   }
 
   return buf;
 }

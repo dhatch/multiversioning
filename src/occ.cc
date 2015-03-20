@@ -229,6 +229,7 @@ void OCCWorker::PrepareReads(OCCAction *action)
         uint32_t num_reads, table_id;
         uint64_t key;
         void *value;
+        volatile uint64_t *tid_ptr;
         
         num_reads = action->readset.size();
         for (uint32_t i = 0; i < num_reads; ++i) {
@@ -236,6 +237,14 @@ void OCCWorker::PrepareReads(OCCAction *action)
                 key = action->readset[i].key;
                 value = config.tables[table_id]->Get(key);
                 action->readset[i].value = value;
+                tid_ptr = (volatile uint64_t*)value;
+                while (true) {
+                        barrier();
+                        action->readset[i].old_tid = *tid_ptr;
+                        barrier();
+                        if (!IS_LOCKED(action->readset[i].old_tid))
+                                break;
+                }                
         }
 }
 

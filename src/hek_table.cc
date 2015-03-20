@@ -6,7 +6,7 @@
 hek_table::hek_table(uint64_t num_slots, int cpu_start, int cpu_end)
 {
         this->init_done = false;
-        this->num_slots = num_slots;
+        this->num_slots = num_slots/4;
         this->slots =
                 (hek_table_slot*)
                 alloc_interleaved(sizeof(hek_table_slot)*num_slots,
@@ -56,6 +56,8 @@ bool hek_table::get_preparing_ts(hek_record *record, uint64_t *ret)
 hek_record* hek_table::search_stable(uint64_t key, uint64_t ts,
                                      hek_record *iter)
 {
+        assert(IS_TIMESTAMP(ts));
+        assert(iter != NULL);
         while (iter != NULL) {
                 
                 /* Version must be committed */
@@ -89,6 +91,7 @@ void hek_table::read_stable(struct hek_table_slot *slot, uint64_t *head_time,
         hek_record *cur;
         volatile hek_record *validation_record;
         volatile uint64_t validation_time;
+        volatile hek_record *validation_next;
         while (true) {
                 barrier();
                 cur = (hek_record*)slot->records;
@@ -99,9 +102,11 @@ void hek_table::read_stable(struct hek_table_slot *slot, uint64_t *head_time,
                 *next = cur->next;		/* second record */
                 barrier();
                 validation_record = slot->records;
-                validation_time = slot->records->begin;
+                validation_time = validation_record->begin;
+                validation_next = validation_record->next;
                 barrier();
-                if (cur == validation_record && *head_time == validation_time)
+                if (cur == validation_record && *head_time == validation_time &&
+                    *next == validation_next)
                         break;
         }
 }
@@ -111,12 +116,14 @@ hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
                                      struct hek_table_slot *slot,
                                      uint64_t *read_time)
 {
+        assert(IS_TIMESTAMP(ts));
         hek_record *head, *prev, *ret;
         uint64_t record_ts;
 
         read_stable(slot, &record_ts, &head, &prev);
         if (IS_TIMESTAMP(record_ts)) {
                 ret = search_stable(key, ts, head);
+                assert(ret != NULL);
                 *read_time = ret->begin;
                 return ret;
         } else if (head->key == key && visible(record_ts, ts)) {
@@ -124,6 +131,7 @@ hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
                 return head;
         } else {
                 ret = search_stable(key, ts, prev);
+                assert(ret != NULL);
                 *read_time = ret->begin;
                 return ret;
         }
@@ -148,6 +156,7 @@ bool hek_table::visible(uint64_t txn_ptr, uint64_t read_timestamp)
 hek_record* hek_table::get_version(uint64_t key, uint64_t ts,
                                    uint64_t *begin_ts)
 {
+        assert(IS_TIMESTAMP(ts));
         assert(init_done == true);
         struct hek_table_slot *slot;
         slot = get_slot(key);
