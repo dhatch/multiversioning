@@ -2,7 +2,17 @@
 
 import os
 import sys
+import math
 
+def confidence_interval(vals):
+    sample_mean = sum(vals) / float(len(vals))
+    dev = 0
+    for v in vals:
+        dev += (sample_mean - v) * (sample_mean - v)
+    s = math.sqrt(dev / float(len(vals)))
+    conf_min = sample_mean - 1.96 * s
+    conf_max = sample_mean + 1.96 * s
+    return [sample_mean/float(1000), conf_min/float(1000), conf_max/float(1000)]
 
 def compute_avg_records(input_file):
     inpt = open(input_file)
@@ -166,12 +176,8 @@ def write_output(output_dict, output_filename):
     print keys
     keys.sort()    
     for k in keys:
-        output_lst = output_dict[k]
-        length = len(output_lst)
-        median = 1.0*sum(output_lst)/(1000.0*len(output_lst))
-        minm = output_lst[0] / 1000.0
-        maxm = output_lst[length-1] / 1000.0
-        output_line = str(k) + " " + str(median) + " " + str(minm) + " " + str(maxm) + "\n"
+        output_lst = confidence_interval(output_dict[k])
+        output_line = str(k) + " " + str(output_lst[0]) + " " + str(output_lst[1]) + " " + str(output_lst[2]) + "\n"
         outpt.write(output_line)
     outpt.close()
 

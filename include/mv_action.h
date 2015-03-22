@@ -96,7 +96,7 @@ class CompositeKey {
                 return Hash128to64(std::make_pair((uint64_t)key->tableId, key->key));
         }
 
-} __attribute__((__packed__, __aligned__(64)));
+};// __attribute__((__packed__, __aligned__(64)));
 
 class Action {
  protected:

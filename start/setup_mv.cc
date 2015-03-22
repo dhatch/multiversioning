@@ -872,14 +872,17 @@ static void init_database(MVConfig config,
                 sched_threads[i]->Run();        
                 sched_threads[i]->WaitInit();
         }
+
         for (i = 0; i < config.numWorkerThreads; ++i) {
                 exec_threads[i]->Run();
                 exec_threads[i]->WaitInit();                
         }
+
         input_queue->EnqueueBlocking(init_batch);
         for (i = 0; i < config.numWorkerThreads; ++i) 
                 (&output_queue[i])->DequeueBlocking();
         barrier();
+
         std::cerr << "Done loading the database!\n";
         return;
 }
@@ -893,7 +896,7 @@ static MVScheduler** setup_scheduler_threads(MVConfig config,
         uint32_t num_tables;
         MVScheduler **schedulers;
         int worker_start, worker_end;
-
+        
         worker_start = (int)config.numCCThreads;
         worker_end = worker_start + config.numWorkerThreads - 1;
         if (config.experiment < 3) {
@@ -963,9 +966,9 @@ void do_mv_experiment(MVConfig config)
         init_database(config, schedInputQueue, outputQueue, schedThreads,
                       execThreads);
         pin_memory();
-        elapsed_time = run_experiment(schedInputQueue,  //&schedOutputQueues[config.numWorkerThreads],
+        elapsed_time = run_experiment(schedInputQueue, // &schedOutputQueues[config.numWorkerThreads],
                                       outputQueue,
-                                      input_placeholder,
+                                      input_placeholder,// 1);
                                       config.numWorkerThreads);
         write_results(config, elapsed_time);
 }

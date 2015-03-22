@@ -171,7 +171,7 @@ hek_record* hek_table::get_version(uint64_t key, uint64_t ts,
  * but serves as a lock to protect the given bucket from concurrent 
  * modification.
  */
-bool hek_table::insert_version(hek_record *record)
+bool hek_table::insert_version(hek_record *record, uint64_t txn_begin)
 {
         assert(init_done == true);	/* table should be initialized */
         assert(record != NULL);
@@ -189,13 +189,18 @@ bool hek_table::insert_version(hek_record *record)
                 xchgq((volatile uint64_t*)&slot->records, (uint64_t)record);
                 prev = stable_next(record->key, record->next);
                 assert(prev == NULL || prev->end == HEK_INF);
-                if (prev != NULL && prev->end == HEK_INF) {
+                if (prev != NULL && prev->end == HEK_INF) 
                         prev->end = record->begin;
-                }
+                if (SNAPSHOT_ISOLATION) 
+                        if (prev->begin > txn_begin) { /* check for ww conflict */
+                                remove_version(record);
+                                goto failure;
+                        }
                 return true;
-        } else {
-                return false;
         }
+ failure:
+        return false;
+                
 }
 
 /* Used to abort a write. Remove the version and clear the bucket's lock bit. */

@@ -69,6 +69,7 @@ InsertAction::InsertAction() : Action()
 
 bool InsertAction::Run()
 {
+        /*
         uint32_t num_writes, i, j;
         uint64_t *ref, key;
         if (recordSize == 8) {
@@ -89,6 +90,7 @@ bool InsertAction::Run()
         } else {
                 assert(false);
         }
+        */
         return true;
 }
 
@@ -203,6 +205,7 @@ void RMWAction::DoWrites()
 
 bool RMWAction::Run()
 {
+
         uint32_t i, j, num_reads, num_writes;
         assert(recordSize == 1000);
         num_reads = __readset.size();
@@ -223,5 +226,6 @@ bool RMWAction::Run()
                         *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
                 //                                *((uint64_t*)&read_ptr[j*100]);
         }
+
         return true;
 }

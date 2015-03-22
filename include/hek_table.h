@@ -32,7 +32,7 @@ class hek_table {
  public:
         hek_table(uint64_t num_slots, int cpu_start, int cpu_end);
         hek_record* get_version(uint64_t key, uint64_t ts, uint64_t *begin_ts);
-        bool insert_version(hek_record *record);
+        bool insert_version(hek_record *record, uint64_t txn_begin);
         void remove_version(hek_record *record);
         void finalize_version(hek_record *record, uint64_t ts);
         void force_insert(hek_record *record);

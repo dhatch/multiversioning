@@ -287,9 +287,12 @@ static hek_action* generate_rmw(hek_config config, RecordGenerator *gen)
                 to_add.key = GenUniqueKey(gen, &seen_keys);
                 to_add.table_id = 0;
                 to_add.txn = ret;
+                to_add.is_rmw = false;
                 ret->readset.push_back(to_add);
-                if (config.experiment == 0 || i < RMW_COUNT)
+                if (config.experiment == 0 || i < RMW_COUNT) {
                         ret->writeset.push_back(to_add);
+                        ret->readset[i].is_rmw = true;
+                }
         }
 
         /* 
@@ -390,6 +393,7 @@ static vector<hek_batch*> setup_txns(hek_config config)
         warmup_batch_sz = 10000;
         ret.push_back(create_single_round(config, warmup_batch_sz));
         ret.push_back(create_single_round(config, config.num_txns));
+        ret.push_back(create_single_round(config, config.num_txns));
         return ret;
 }
 
@@ -452,6 +456,7 @@ static struct hek_result run_experiment(hek_config config,
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
         barrier();
         start_single_round(input_queues, input[1], config.num_threads);
+        start_single_round(input_queues, input[2], config.num_threads);
         num_txns = end_single_round(output_queues, config.num_threads);
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);

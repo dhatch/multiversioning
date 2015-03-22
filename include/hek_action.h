@@ -48,7 +48,8 @@ struct hek_key {
         hek_table *table_ptr;		// For reads, ptr to table
         uint64_t time;			// Timestamp of read record
         uint64_t prev_ts; 		// Prev version timestamp (for writes)
-        bool written;			// 
+        bool written;			//
+        bool is_rmw;
 };
 
 // Align to 256 bytes because we use the least significant byte

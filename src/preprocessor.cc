@@ -72,28 +72,7 @@ void MVActionHasher::ProcessAction(Action *action, uint32_t epoch,
 }
 
 void MVScheduler::Init() {
-        //  std::cout << "Called init on core: " << m_cpu_number << "\n";
 
-  this->partitions = 
-    (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
-                                  config.cpuNumber);
-  assert(this->partitions != NULL);
-
-  // Initialize the allocator and the partitions.
-  this->alloc = new (config.cpuNumber) MVRecordAllocator(config.allocatorSize, 
-                                                         config.cpuNumber,
-                                                         config.worker_start,
-                                                         config.worker_end);
-  for (uint32_t i = 0; i < this->config.numTables; ++i) {
-
-    // Track the partition locally and add it to the database's catalog.
-          this->partitions[i] =
-                  new (config.cpuNumber) MVTablePartition(config.tblPartitionSizes[i],
-                                                          config.cpuNumber, alloc);
-    assert(this->partitions[i] != NULL);
-    //    DB.PutPartition(i, config.threadId, this->partitions[i]);
-  }
-  this->threadId = config.threadId;
 }
 
 MVScheduler::MVScheduler(MVSchedulerConfig config) : 
@@ -108,6 +87,27 @@ MVScheduler::MVScheduler(MVSchedulerConfig config) :
   //  std::cout << "Mask: " << txnMask << "\n";
 
   //    this->alloc = NULL;
+
+  this->partitions = 
+          (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
+                                        config.cpuNumber);
+  assert(this->partitions != NULL);
+
+  // Initialize the allocator and the partitions.
+  this->alloc = new (config.cpuNumber) MVRecordAllocator(config.allocatorSize, 
+                                                         config.cpuNumber,
+                                                         config.worker_start,
+                                                         config.worker_end);
+  for (uint32_t i = 0; i < this->config.numTables; ++i) {
+
+          // Track the partition locally and add it to the database's catalog.
+          this->partitions[i] =
+                  new (config.cpuNumber) MVTablePartition(config.tblPartitionSizes[i],
+                                                          config.cpuNumber, alloc);
+          assert(this->partitions[i] != NULL);
+          //    DB.PutPartition(i, config.threadId, this->partitions[i]);
+  }
+  this->threadId = config.threadId;
 }
 
 static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {

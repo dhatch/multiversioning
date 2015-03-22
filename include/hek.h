@@ -82,7 +82,7 @@ class hek_worker : public Runnable {
         virtual bool add_commit_dep(hek_action *out, hek_key *key,
                                     hek_action *in);
                                                                         
-        
+        virtual uint64_t get_timestamp();
         virtual void do_abort(hek_action *txn);
         virtual void do_commit(hek_action *txn);
 

@@ -24,7 +24,7 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu, int worker_start, i
   //  std::cout << "Record size: " << recordSize << "\nRecord data size: " << recordDataSize << "\n";
   //  std::cout << "Worker start:" << worker_start << " Worker end: " << worker_end << "\n";
   //  std::cout << "Cpus: " << numa_num_configured_cpus() << "\n";
-  //  char *recordData = NULL;
+  //    char *recordData = NULL;
   //  int cntr = 0;
   //  while (recordData == NULL) {
   //          recordData = (char*)alloc_interleaved(recordDataSize, worker_start, worker_end+cntr*10);
@@ -34,17 +34,17 @@ MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu, int worker_start, i
 
   //  char *recordData = (char*)alloc_mem(recordDataSize, 19);
   
-  char *recordData = (char*)alloc_interleaved_all(recordDataSize);
+    char *recordData = (char*)alloc_interleaved_all(recordDataSize);
   //char *recordData = (char*)alloc_mem(recordDataSize, recordCpu);
 
-  //  char *recordData = (char*)alloc_interleaved(recordDataSize, worker_start, worker_end);
-  assert(recordData != NULL);
-  memset(recordData, 0xA3, recordDataSize);
+  //  char *recordData = (char*)alloc_interleaved(recordDataSize, worker_start, 79);
+    assert(recordData != NULL);
+    memset(recordData, 0xA3, recordDataSize);
   //  std::cout << "Done initializing record data\n";
   //  uint64_t endIndex = numRecords-1;
   for (uint64_t i = 0; i < numRecords; ++i) {
     data[i].allocLink = &data[i+1];
-    data[i].value = NULL;
+    //data[i].value = NULL;
     data[i].value = (Record*)(&recordData[i*recordSize]);
     data[i].writer = NULL;
     this->count += 1;

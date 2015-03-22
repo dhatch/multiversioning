@@ -14,6 +14,8 @@ fmt_occ = "build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_rec
 
 fmt_hek = "build/db --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 0 --read_txn_size 5"
 
+fmt_si = "build/si --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 0 --read_txn_size 5"
+
 
 
 def main():
@@ -32,9 +34,9 @@ def main():
 #    test_cc()
 #    exp_0()
 #    occ_uncontended_1000()
-
-#    search_best()
     hek_uncontended_1000()
+#    search_best()
+
 #    combine_best()
 #    small_bank_contended()
 #    small_bank_uncontended()
@@ -251,6 +253,43 @@ def occ_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, dis
             os.system("gnuplot plot.plt")
             os.chdir(saved_dir)
 
+
+
+def si_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size):
+    outfile = os.path.join(outdir, filename)
+    temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
+
+
+#     param_dict = {}
+#     param_dict["--cc_type"] = str(3)
+#     param_dict["--num_contended"] = str(2)
+#     param_dict["--txn_size"] = str(10)
+#     param_dict["--read_pct"] = str(0)
+#     param_dict["--read_txn_size"] = str(5)
+# 
+#     param_dict["--num_txns"] = str(txns)
+#     param_dict["--num_records"] = str(records)
+#     param_dict["--experiment"] = str(expt)
+#     param_dict["--distribution"] = str(distribution)
+#     param_dict["--record_size"] = str(1000)
+#     
+#     os.system("mkdir -p " + outdir)
+    outdep = os.path.join(outdir, "." + filename)
+    if not os.path.exists(outdep):
+
+        val_range = gen_range(lowThreads, highThreads, 4)
+        for i in val_range:
+            os.system("rm hek.txt")
+            cmd = fmt_si.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size))
+            os.system(cmd)
+            os.system("cat hek.txt >>" + outfile)
+            clean.clean_fn("occ", outfile, temp)
+            saved_dir = os.getcwd()
+            os.chdir(outdir)
+            os.system("gnuplot plot.plt")
+            os.chdir(saved_dir)
+
+
 def hek_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size):
     outfile = os.path.join(outdir, filename)
     temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
@@ -358,22 +397,31 @@ def uncontended_1000():
 
 def hek_uncontended_1000():
     for i in range(0, 5):
-        result_dir = "results/hekaton/ycsb/uncontended"
-        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000)
-        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000)
+        result_dir = "results/hekaton/ycsb/uncontended/"
+#        si_expt(result_dir, "si_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+#        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+
+#        si_expt(result_dir, "si_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+
 #        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
 #        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
-        mv_expt(result_dir, "mv_10rmw.txt", 10, 1000000, 10000000, 2, 30, 0, 1, 0.0, 1000)
-        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 1000000, 10000000, 2, 30, 1, 1, 0.0, 1000)
+#        mv_expt(result_dir, "mv_10rmw.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.0, 1000)
+#        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
 
-    for i in range(0, 5):
+
+#    for i in range(0, 5):
         result_dir = "results/hekaton/ycsb/contended"
-        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 3000000, 1000, 0, 1, 0.0, 1000)
-        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 3000000, 1000, 1, 1, 0.0, 1000)
+
+        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 1000000, 1000, 1, 1, 0.0, 1000)
+#        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000, 0, 1, 0.0, 1000)
+#        si_expt(result_dir, "si_10rmw.txt", 4, 40, 1000000, 1000, 0, 1, 0.0, 1000)
+#        si_expt(result_dir, "si_8r2rmw.txt", 4, 40, 1000000, 1000, 1, 1, 0.0, 1000)
+
 #        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
 #        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
-        mv_expt(result_dir, "mv_10rmw.txt", 10, 3000000, 1000, 2, 30, 0, 1, 0.0, 1000)
-        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 3000000, 1000, 2, 30, 1, 1, 0.0, 1000)
+#        mv_expt(result_dir, "mv_10rmw.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.0, 1000)
+#        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 1000000, 500, 2, 30, 1, 1, 0.0, 1000)
         
     
     
@@ -639,7 +687,7 @@ def check_increasing(outfile):
             return t0 > t1 and t1 > t2
     return False
     
-def search_best_inner(expt, theta, out_dir):    
+def search_best_inner(expt, theta, num_records, out_dir):    
     thread_range = [4,8,12,16,20,24,28,32,36,40]
     prev_best = 0
     for t in thread_range:
@@ -651,22 +699,46 @@ def search_best_inner(expt, theta, out_dir):
             ccthreads = 1
         while ccthreads < t and not check_increasing(outfile):
             worker_threads = t-ccthreads
-            mv_expt_single(out_dir, filename, ccthreads, 1000000, 1000000,
-                           worker_threads, expt, 1, theta, 1000)            
+#            if ccthreads < 4:
+#                num_txns = 300000
+#            elif ccthreads < 9:
+#                num_txns = 500000
+#            else:
+#                num_txns = 1000000
+            num_txns = 1000000
+            mv_expt_single(out_dir, filename, ccthreads, num_txns, num_records,
+                           worker_threads, expt, 1, theta, 1000)
+
             ccthreads += 1
         prev_best = check_best(outfile)
 
-    top_level = "results/final/txn_size_10"
+#    top_level = "results/final/txn_size_10"
 
             
 def search_best():
-    low_contention = "results/final/txn_size_10/0_0/bohm"
-    high_contention = "results/final/txn_size_10/0_9/bohm"
+
+#    high_contention = "results/final/txn_size_10/0_9/bohm"
     for i in range(0, 5):
-        temp = os.path.join(low_contention, str(i))
-        search_best_inner(0, 0.0, temp)
+        high_contention = "results/hekaton/ycsb/contended/bohm/8r2rmw"
         temp = os.path.join(high_contention, str(i))
-        search_best_inner(0, 0.9, temp)
+        search_best_inner(1, 0.0, 1000, temp)
+
+        high_contention = "results/hekaton/ycsb/contended/bohm/10rmw"
+        temp = os.path.join(high_contention, str(i))
+        search_best_inner(0, 0.0, 1000, temp)
+
+        low_contention = "results/hekaton/ycsb/uncontended/bohm/10rmw"
+        temp = os.path.join(low_contention, str(i))
+        search_best_inner(0, 0.0, 1000000, temp)
+
+        low_contention = "results/hekaton/ycsb/uncontended/bohm/8r2rmw"
+        temp = os.path.join(low_contention, str(i))
+        search_best_inner(1, 0.0, 1000000, temp)
+
+
+
+#        temp = os.path.join(high_contention, str(i))
+#        search_best_inner(0, 0.9, temp)
 
 
 if __name__ == "__main__":

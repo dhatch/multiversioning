@@ -122,10 +122,7 @@ inline uint32_t PendingActionList::Size() {
 
 Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) {        
   this->config = cfg;
-}
-
-void Executor::Init() {
-  this->counter = 0;
+    this->counter = 0;
   /*
   this->allocators = 
 
@@ -149,6 +146,10 @@ void Executor::Init() {
   std::random_shuffle(&this->bufs[0], &this->bufs[250000-1]);
   this->buf_ptr = 0;
   */
+
+}
+
+void Executor::Init() {
 }
 
 uint64_t Executor::next_ptr()
@@ -522,6 +523,8 @@ bool Executor::ProcessTxn(Action *action) {
         barrier();
         xchgq(&action->__state, SUBSTANTIATED);
         barrier();
+
+
   for (uint32_t i = 0; i < numWrites; ++i) {
           //          xchgq((volatile uint64_t*)&action->__writeset[i].value->writer,
           //                (uint64_t)NULL);
@@ -531,8 +534,9 @@ bool Executor::ProcessTxn(Action *action) {
     if (previous != NULL) {
       garbageBin->AddMVRecord(action->__writeset[i].threadId, previous);
     }
+
   }
-  barrier();
+
   //  bool gcSuccess = ProcessSingleGC(action);
   //  assert(gcSuccess);
   /*

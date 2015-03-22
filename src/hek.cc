@@ -20,6 +20,12 @@ static void init_list(char *start, uint32_t num_records, uint32_t record_sz)
         cur->next = NULL;
 }
 
+uint64_t hek_worker::get_timestamp()
+{
+        return fetch_and_increment(config.global_time);
+        //        uint64_t ts = rdtsc();
+        //        return (ts << 8);
+}
 
 /*
  * Initialize the record allocator. Works in two phases, first do the 
@@ -89,12 +95,12 @@ hek_queue::hek_queue()
 // link pointer. Non-blocking.
 void hek_queue::enqueue(hek_action *txn)
 {
-        hek_action **prev;
+        volatile hek_action **prev;
         barrier();
         txn->next = NULL;
         barrier();
-        prev = (hek_action**)xchgq((volatile uint64_t*)&this->tail,
-                                   (uint64_t)&txn->next);
+        prev = (volatile hek_action**)xchgq((volatile uint64_t*)&this->tail,
+                                            (uint64_t)&txn->next);
         *prev = txn;
 }
 
@@ -102,15 +108,20 @@ void hek_queue::enqueue(hek_action *txn)
 hek_action* hek_queue::dequeue_batch()
 {
         hek_action *ret, **old_tail;
-        volatile hek_action *iter;
+        volatile hek_action *iter, *temp;
         iter = (volatile hek_action*)xchgq((volatile uint64_t*)&head, (uint64_t)NULL);
         ret = (hek_action*)iter;
         old_tail = (hek_action**)xchgq((volatile uint64_t*)&this->tail,
                                        (uint64_t)&head);
         if (iter != NULL) {
                 while (old_tail != &iter->next) {
-                        while (iter->next == NULL) 
-                                ;
+                        while (true) {
+                                barrier();
+                                temp = iter->next;
+                                barrier();
+                                if (temp != NULL)
+                                        break;
+                        }
                         iter = (volatile hek_action*)iter->next;
                 }
         }
@@ -184,7 +195,7 @@ void hek_worker::transition_begin(hek_action *txn)
 void hek_worker::transition_preparing(hek_action *txn)
 {
         uint64_t end_ts;
-        end_ts = fetch_and_increment(config.global_time);
+        end_ts = get_timestamp();
         end_ts = CREATE_PREP_TIMESTAMP(end_ts);
         lock(&txn->latch);
         //        txn->end = end_ts;
@@ -293,7 +304,9 @@ bool hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in)
                 out->must_wait = true;
                 fetch_and_increment(&out->dep_count);
                 ret = true;
-        }
+        } else {
+                assert(in->dependents == NULL);
+        }        
         unlock(&in->latch);
         return ret;
         /*
@@ -314,7 +327,10 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
         uint64_t vis_ts, read_ts, record_key, end_ts;
         uint32_t table_id;
 
-        end_ts = HEK_TIME(txn->end);
+        if (SNAPSHOT_ISOLATION)
+                end_ts = HEK_TIME(txn->begin);
+        else 
+                end_ts = HEK_TIME(txn->end);
         table_id = key->table_id;
         record_key = key->key;
         read_record = key->value;
@@ -326,6 +342,7 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
                         return read_ts == vis_ts;
                 } else if (!IS_TIMESTAMP(vis_ts) &&
                            GET_TXN(vis_ts) == GET_TXN(read_ts)) {
+                        //                        return false;
                         key->txn = txn;
                         return add_commit_dep(txn, key, GET_TXN(vis_ts));
                 } else if (IS_TIMESTAMP(vis_ts)) {
@@ -427,7 +444,7 @@ bool hek_worker::insert_writes(hek_action *txn)
                 rec->end = HEK_INF;
                 tbl_id = txn->writeset[i].table_id;
                 table = config.tables[tbl_id];
-                if (!table->insert_version(rec)) 
+                if (!table->insert_version(rec, txn->begin)) 
                         return false;                
                 else
                         txn->writeset[i].written = true;
@@ -448,8 +465,9 @@ void hek_worker::run_txn(hek_action *txn)
 
         txn->worker = this;
         txn->dependents = NULL;
-        txn->begin =
-                CREATE_EXEC_TIMESTAMP(fetch_and_increment(config.global_time));
+        txn->begin = CREATE_EXEC_TIMESTAMP(get_timestamp());
+        
+        //                CREATE_EXEC_TIMESTAMP(fetch_and_increment(config.global_time));
         transition_begin(txn);
         get_reads(txn);
         get_writes(txn);
@@ -457,7 +475,10 @@ void hek_worker::run_txn(hek_action *txn)
         transition_preparing(txn);
         if (!insert_writes(txn))
                 goto abort;
-        validated = validate_reads(txn);
+        if (!SNAPSHOT_ISOLATION)
+                validated = validate_reads(txn);
+        else
+                validated = true;
         if (validated == true) {
                 if (txn->must_wait == false) {
                         transition_commit(txn);
