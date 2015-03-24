@@ -86,7 +86,7 @@ class hek_worker : public Runnable {
         virtual void transition_abort(hek_action *txn);
 
         virtual bool add_commit_dep(hek_action *out, hek_key *key,
-                                    hek_action *in);
+                                    hek_action *in, uint64_t txn_ts);
                                                                         
         virtual uint64_t get_timestamp();
         virtual void do_abort(hek_action *txn);

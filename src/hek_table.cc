@@ -116,7 +116,9 @@ void hek_table::read_stable(struct hek_table_slot *slot, uint64_t *head_time,
 
 /* Search a particular bucket for a key. Used to perform a read. */ 
 hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
-                                     struct hek_table_slot *slot)
+                                     struct hek_table_slot *slot,
+                                     uint64_t *read_time,
+                                     uint64_t *txn_ts)
 {
         assert(IS_TIMESTAMP(ts));
         hek_record *head, *prev, *ret;
@@ -128,7 +130,7 @@ hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
                 assert(ret != NULL);
                 *read_time = ret->begin;
                 return ret;
-        } else if (head->key == key && visible(record_ts, ts)) {
+        } else if (head->key == key && visible(record_ts, ts, txn_ts)) {
                 *read_time = record_ts;
                 return head;
         } else {
@@ -140,7 +142,8 @@ hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
 }
 
 /* Check if the "PREPARING" txn at the slot is visible. */
-bool hek_table::visible(uint64_t txn_ptr, uint64_t read_timestamp)
+bool hek_table::visible(uint64_t txn_ptr, uint64_t read_timestamp,
+                        uint64_t *txn_ts)
 {
         assert(!IS_TIMESTAMP(txn_ptr));
         uint64_t txn_end;
@@ -151,10 +154,9 @@ bool hek_table::visible(uint64_t txn_ptr, uint64_t read_timestamp)
         txn_end = txn->end;
         barrier();
         if (HEK_STATE(txn_end) != ABORT) {
-                //                *txn_ts = HEK_TIME(txn_end);
+                *txn_ts = HEK_TIME(txn_end);
                 return HEK_TIME(txn_end) < read_timestamp;
-        }
-        else {
+        } else {
                 return false;
         }
 }
@@ -164,13 +166,13 @@ bool hek_table::visible(uint64_t txn_ptr, uint64_t read_timestamp)
  * the requested record.  
  */
 hek_record* hek_table::get_version(uint64_t key, uint64_t ts,
-                                   uint64_t *begin_ts)
+                                   uint64_t *begin_ts, uint64_t *txn_ts)
 {
         assert(IS_TIMESTAMP(ts));
         assert(init_done == true);
         struct hek_table_slot *slot;
         slot = get_slot(key);
-        return search_bucket(key, ts, slot, begin_ts);
+        return search_bucket(key, ts, slot, begin_ts, txn_ts);
 }
 
 /* 

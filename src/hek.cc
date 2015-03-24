@@ -220,9 +220,10 @@ void hek_worker::StartWorking()
 //
 void hek_worker::transition_begin(hek_action *txn)
 {
-        lock(&txn->latch);
-        txn->end = EXECUTING;
-        unlock(&txn->latch);
+        
+        //        lock(&txn->latch);
+        //        txn->end = EXECUTING;
+        //        unlock(&txn->latch);
         //        assert(CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->begin) &&
         //               CREATE_EXEC_TIMESTAMP(*config.global_time) >= HEK_TIME(txn->end));
 }
@@ -251,7 +252,8 @@ void hek_worker::transition_commit(hek_action *txn)
         time = HEK_TIME(txn->end);
         time |= COMMIT;
         lock(&txn->latch);
-        txn->end = time;
+        xchgq(&txn->end, time);
+        //        txn->end = time;
         do_commit(txn);        
         unlock(&txn->latch);
         assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
@@ -270,7 +272,8 @@ void hek_worker::transition_abort(hek_action *txn)
         time = HEK_TIME(txn->end);
         time |= ABORT;
         lock(&txn->latch);        
-        txn->end = time;
+        //        txn->end = time;
+        xchgq(&txn->end, time);
         do_abort(txn);        
         unlock(&txn->latch);
         assert(HEK_TIME(txn->end) > HEK_TIME(txn->begin));
@@ -314,8 +317,8 @@ void hek_worker::get_reads(hek_action *txn)
                 begin_ptr = &txn->readset[i].time;
                 txn_ts = &txn->readset[i].txn_ts;
                 read_record = config.tables[table_id]->get_version(key, ts,
-                                                                   begin_ptr);
-                                                                   //                                                                   txn_ts);
+                                                                   begin_ptr,
+                                                                   txn_ts);
                 txn->readset[i].value = read_record;
         }
 }
@@ -326,7 +329,8 @@ void hek_worker::get_reads(hek_action *txn)
  * is in state PREPARING. We can't atomically ensure that the transaction's
  * state is PREPARING and enqueue the commit dependency without locks.
  */
-bool hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in)
+bool hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in,
+                                uint64_t ts)
 {
         assert(!IS_TIMESTAMP(key->time) && in == GET_TXN(key->time));
         assert(HEK_STATE(out->end) == PREPARING);
@@ -335,7 +339,7 @@ bool hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in)
 
         ret = false;
         lock(&in->latch);
-        if (HEK_STATE(in->end) == PREPARING) {
+        if (HEK_STATE(in->end) == PREPARING && in->end == ts) {
                 key->next = in->dependents;
                 in->dependents = key;
                 out->must_wait = true;
@@ -343,8 +347,9 @@ bool hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in)
                 ret = true;
         } else {
                 /* in committed; it must be done with dependents */
-                assert(in->dependents == NULL);
-                ret = HEK_STATE(in->end) == COMMIT;
+                //                assert(in->dependents == NULL);
+                ret = (HEK_STATE(in->end) == COMMIT) &&
+                        (HEK_TIME(in->end) == HEK_TIME(ts));
         }
         unlock(&in->latch);
         return ret;
@@ -363,7 +368,7 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
         assert(!IS_TIMESTAMP(txn->end) && HEK_STATE(txn->end) == PREPARING);
         struct hek_record *vis_record, *read_record;
         hek_action *preparing;
-        uint64_t vis_ts, read_ts, record_key, end_ts;
+        uint64_t vis_ts, read_ts, record_key, end_ts, vis_txn_ts, read_txn_ts;
         uint32_t table_id;
 
         if (SNAPSHOT_ISOLATION)
@@ -374,19 +379,22 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
         record_key = key->key;
         read_record = key->value;
         read_ts = key->time;
+        read_txn_ts = key->txn_ts;
         vis_record = config.tables[table_id]->get_version(record_key, end_ts,
-                                                          &vis_ts);
+                                                          &vis_ts, &vis_txn_ts);
         if (vis_record == read_record) {
                 if (IS_TIMESTAMP(read_ts)) {
                         return read_ts == vis_ts;
                 } else if (!IS_TIMESTAMP(vis_ts) &&
-                           GET_TXN(vis_ts) == GET_TXN(read_ts)) {
+                           GET_TXN(vis_ts) == GET_TXN(read_ts) &&
+                           HEK_TIME(read_txn_ts) == HEK_TIME(vis_txn_ts)) {
                         //                        return false;
                         key->txn = txn;
-                        return add_commit_dep(txn, key, GET_TXN(vis_ts));
+                        return add_commit_dep(txn, key, GET_TXN(vis_ts),
+                                              vis_txn_ts);
                 } else if (IS_TIMESTAMP(vis_ts)) {
                         preparing = GET_TXN(read_ts);
-                        return HEK_TIME(preparing->end) == vis_ts;
+                        return HEK_TIME(read_txn_ts) == vis_ts;
                 }
         }
         return false;
@@ -504,29 +512,32 @@ void hek_worker::run_txn(hek_action *txn)
 
         txn->worker = this;
         txn->dependents = NULL;
-        txn->begin = CREATE_EXEC_TIMESTAMP(get_timestamp());
-        
-        //                CREATE_EXEC_TIMESTAMP(fetch_and_increment(config.global_time));
-        transition_begin(txn);
-        get_reads(txn);
         get_writes(txn);
-        status = txn->Run();
-        transition_preparing(txn);
-        if (!insert_writes(txn))
-                goto abort;
-        if (!SNAPSHOT_ISOLATION)
-                validated = validate_reads(txn);
-        else
-                validated = true;
-        if (validated == true) {
-                if (txn->must_wait == false) {
-                        transition_commit(txn);
-                        //                        do_commit(txn);
-                }
-                return;
-        } 
- abort:
-        transition_abort(txn);
+        while (true) {
+                txn->begin = CREATE_EXEC_TIMESTAMP(get_timestamp());
+        
+                //                CREATE_EXEC_TIMESTAMP(fetch_and_increment(config.global_time));
+                transition_begin(txn);
+                get_reads(txn);
+                status = txn->Run();
+                transition_preparing(txn);
+                if (!insert_writes(txn))
+                        goto abort;
+                //                if (!SNAPSHOT_ISOLATION)
+                        validated = validate_reads(txn);
+                        //                else
+                        //                        validated = true;
+                if (validated == true) {
+                        if (txn->must_wait == false) {
+                                transition_commit(txn);
+                                //                        do_commit(txn);
+                        }
+                        return;
+                } 
+        abort:
+                transition_abort(txn);
+
+        }
         //        do_abort(txn);
 }
 
@@ -578,7 +589,7 @@ void hek_worker::do_abort(hek_action *txn)
         assert(HEK_STATE(txn->end) == ABORT);
         remove_writes(txn);
         kill_waiters(txn);
-        num_done += 1;
+        //        num_done += 1;        
 }
 
 void hek_worker::do_commit(hek_action *txn)
@@ -623,6 +634,7 @@ void hek_worker::remove_writes(hek_action *txn)
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 if (txn->writeset[i].written == true) {
+                        txn->writeset[i].written = false;
                         key = &txn->writeset[i];
                         record = key->value;
                         table_id = key->table_id;
