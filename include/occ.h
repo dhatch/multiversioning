@@ -51,8 +51,10 @@ struct RecordBuffy {
 class RecordBuffers {
  private:
         RecordBuffy **record_lists;
+        RecordBuffy **tails;
         static void* AllocBufs(struct RecordBuffersConfig conf);
-        static void LinkBufs(struct RecordBuffy *start, uint32_t buf_size,
+        static void LinkBufs(struct RecordBuffy *start,
+                             uint32_t buf_size,
                              uint32_t num_bufs);
  public:
         void* operator new(std::size_t sz, int cpu)

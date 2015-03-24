@@ -99,12 +99,14 @@ void OCCWorker::RunSingle(OCCAction *action)
         volatile uint32_t epoch;
         //        bool reset_log = false;
         PrepareWrites(action);
-        PrepareReads(action);
+
         
         while (true) {
+
+                PrepareReads(action);
                 status = action->Run();
                 if (status.validation_pass == false) {
-                        continue;
+                        continue;        
                 }
                 AcquireWriteLocks(action);
                 barrier();
@@ -238,13 +240,22 @@ void OCCWorker::PrepareReads(OCCAction *action)
                 value = config.tables[table_id]->Get(key);
                 action->readset[i].value = value;
                 tid_ptr = (volatile uint64_t*)value;
+
+                AcquireSingleLock(tid_ptr);
+                assert(IS_LOCKED(*tid_ptr));
+                action->readset[i].old_tid = GET_TIMESTAMP(*tid_ptr);
+                xchgq(tid_ptr, action->readset[i].old_tid);
+
+                /*
                 while (true) {
                         barrier();
                         action->readset[i].old_tid = *tid_ptr;
                         barrier();
                         if (!IS_LOCKED(action->readset[i].old_tid))
                                 break;
-                }                
+                } 
+                */
+
         }
 }
 
@@ -312,12 +323,39 @@ void OCCWorker::RecycleBufs(OCCAction *action)
 bool OCCWorker::Validate(OCCAction *action)
 {
         uint32_t num_reads, i;
+        volatile uint64_t *tid_ptr;
+        bool valid, acquired;
+        uint64_t ts;
+        
+        valid = true;
         num_reads = action->readset.size();
         barrier();
-        for (i = 0; i < num_reads; ++i) 
+        for (i = 0; i < num_reads; ++i) {
+                /*
                 if (!action->readset[i].ValidateRead())
                         return false;
-        barrier();
+                */
+                
+                acquired = false;
+                tid_ptr = (volatile uint64_t*)action->readset[i].value;
+                if (!action->readset[i].is_rmw) 
+                        acquired = TryAcquireLock(tid_ptr);
+                else
+                        acquired = true;
+                if (acquired == true) {
+                        assert(IS_LOCKED(*tid_ptr));
+                        ts = GET_TIMESTAMP(*tid_ptr);
+                        assert(!IS_LOCKED(ts));
+                        valid &= (ts == action->readset[i].old_tid);
+                        if (!action->readset[i].is_rmw)
+                                xchgq(tid_ptr, ts);
+                } else {
+                        valid = false;
+                }
+                if (!valid)
+                        return false;
+
+        }
         return true;
 }
 
@@ -373,10 +411,11 @@ bool OCCWorker::AcquireWriteLocks(OCCAction *action)
         volatile uint64_t *tid_ptr;
         waited = false;
         num_writes = action->writeset.size();
-        std::sort(action->writeset.begin(), action->writeset.end());
+        std::sort(action->shadow_writeset.begin(),
+                  action->shadow_writeset.end());
         for (i = 0; i < num_writes; ++i) {
-                table_id = action->writeset[i].tableId;
-                key = action->writeset[i].key;
+                table_id = action->shadow_writeset[i].tableId;
+                key = action->shadow_writeset[i].key;
                 tid_ptr = (volatile uint64_t*)config.tables[table_id]->Get(key);
                 waited |= AcquireSingleLock(tid_ptr);
                 assert(IS_LOCKED(*tid_ptr));

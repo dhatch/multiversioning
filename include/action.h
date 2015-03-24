@@ -231,34 +231,25 @@ class RMWEagerAction : public EagerAction {
     else if (recordSize == 1000) {      //YCSB
       uint32_t numReads = shadowReadset.size();
       uint32_t numWrites = shadowWriteset.size();
+      char *read_ptr, *write_ptr;
       
       uint64_t counter = 0;
-        
-      // Read the ith field
-      for (uint32_t j = 0; j < numReads; ++j) {
-        uint64_t *record = (uint64_t*)shadowReadset[j].value;
-        for (uint32_t i = 0; i < 125; ++i) {
-          counter += record[i];
-        }
+      for (uint32_t i = 0; i < numReads; ++i) {
+              read_ptr = (char*)shadowReadset[i].value;
+              for (uint32_t j = 0; j < 10; ++j)
+                      counter += *((uint64_t*)&read_ptr[j*100]);
       }
-      for (uint32_t j = 0; j < numWrites; ++j) {
-        uint64_t *record = (uint64_t*)shadowWriteset[j].value;
-        for (uint32_t i = 0; i < 125; ++i) {
-          counter += record[i];
-        }
+      for (uint32_t i = 0; i < numWrites; ++i) {
+              read_ptr = (char*)shadowWriteset[i].value;
+              for (uint32_t j = 0; j < 10; ++j)
+                      counter += *((uint64_t*)&read_ptr[j*100]);
       }
-        
-      // Write the ith field
-      for (uint32_t j = 0; j < numWrites; ++j) {
-        uint64_t *record = (uint64_t*)shadowWriteset[j].value;
-        for (uint32_t i = 0; i < 125; ++i) {
-          if (i % 8 == 0) {
-            counter = counter*2;
-          }
-          record[i] = counter;
-        }
+      for (uint32_t i = 0; i < numWrites; ++i) {
+              write_ptr = (char*)shadowWriteset[i].value;
+              for (uint32_t j = 0; j < 10; ++j) 
+                      *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
       }
-    }
+    }      
 
     return true;
   }

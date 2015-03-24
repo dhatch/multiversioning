@@ -75,6 +75,7 @@ void OCCAction::AddWriteKey(uint32_t tableId, uint64_t key)
 {
         occ_composite_key k(tableId, key, false);
         writeset.push_back(k);
+        shadow_writeset.push_back(k);
 }
 
 readonly_action::readonly_action()
@@ -118,14 +119,9 @@ occ_txn_status mix_occ_action::Run()
         num_reads = readset.size();
         num_writes = writeset.size();
         for (i = 0; i < num_reads; ++i) {
-                char *read_ptr = (char*)readset[i].StartRead();
                 for (j = 0; j < 10; ++j) {
                         uint32_t *write_p = (uint32_t*)&__reads[j*100];
-                        *write_p += *((uint32_t*)&read_ptr[j*100]);
-                }
-                if (readset[i].FinishRead() == false) {
-                        status.validation_pass = false;
-                        return status;
+                        *write_p += *((uint32_t*)&__reads[j*100]);
                 }
         }
         for (i = 0; i < num_writes; ++i) {
@@ -142,27 +138,26 @@ occ_txn_status mix_occ_action::Run()
 
 bool RMWOCCAction::DoReads()
 {
-        uint32_t num_fields, num_reads, i, j, field_sz;
+        uint32_t num_writes, num_reads, i, j;
         char *read_ptr, *write_ptr;
-        num_fields = 10;
-        field_sz = 100;
+        uint64_t counter;
+        
         num_reads = readset.size();
+        num_writes = writeset.size();
+        counter = 0;
         for (i = 0; i < num_reads; ++i) {
-                barrier();
                 read_ptr = (char*)readset[i].StartRead();
-                barrier();
-                write_ptr = (char*)writeset[i].GetValue();
-                memcpy(write_ptr, read_ptr, 1000);
-                barrier();
-                if (readset[i].FinishRead() == false) 
-                        return false;
-                barrier();
-                for (j = 0; j < num_fields; ++j) {
-                        uint64_t *temp_ptr = (uint64_t*)&write_ptr[j*field_sz];
-                        *temp_ptr += j+1;
-                }         
+                for (j = 0; j < 10; ++j) 
+                        counter += *((uint64_t*)&read_ptr[j*100]);
         }
-        //        __total = counter;
+        for (i = 0; i < num_writes; ++i) {
+                write_ptr = (char*)writeset[i].GetValue();
+                read_ptr = (char*)readset[i].StartRead();
+                memcpy(write_ptr, read_ptr, 1000);
+                for (j = 0; j < 10; ++j) {
+                        *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
+                }
+        }
         return true;                
 }
 

@@ -397,26 +397,45 @@ def uncontended_1000():
 
 def hek_uncontended_1000():
     for i in range(0, 5):
-        result_dir = "results/hekaton/ycsb/uncontended/"
-#        si_expt(result_dir, "si_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+        result_dir = "results/hekaton/ycsb/uncontended/8r2rmw/"
+#        si_expt(result_dir, "si_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000)
+#        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000)
+        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+        locking_expt(result_dir, "locking_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000)
+
+        result_dir = "results/hekaton/ycsb/uncontended/10rmw/"
 #        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
-        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
-
 #        si_expt(result_dir, "si_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+        locking_expt(result_dir, "locking_10rmw.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000)
+        
+        result_dir = "results/hekaton/ycsb/contended/8r2rmw/"
+        si_expt(result_dir, "si_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
+        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
+        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
+        locking_expt(result_dir, "locking_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
+        
+        result_dir = "results/hekaton/ycsb/contended/10rmw/"
+        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+        si_expt(result_dir, "si_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+        locking_expt(result_dir, "locking_10rmw.txt", 4, 40, 3000000, 1000000, 0, 1, 0.9, 1000)
 
-#        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
-#        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
 #        mv_expt(result_dir, "mv_10rmw.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.0, 1000)
 #        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
 
 
 #    for i in range(0, 5):
-        result_dir = "results/hekaton/ycsb/contended"
 
-        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 1000000, 1000, 1, 1, 0.0, 1000)
+
+#        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000, 0, 1, 0.0, 1000)
+#        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000, 1, 1, 0.0, 1000)
+
+        
+#        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 3000000, 1000, 1, 1, 0.0, 1000)
 #        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000, 0, 1, 0.0, 1000)
 #        si_expt(result_dir, "si_10rmw.txt", 4, 40, 1000000, 1000, 0, 1, 0.0, 1000)
-#        si_expt(result_dir, "si_8r2rmw.txt", 4, 40, 1000000, 1000, 1, 1, 0.0, 1000)
+#        si_expt(result_dir, "si_8r2rmw.txt", 4, 40, 3000000, 1000, 1, 1, 0.0, 1000)
 
 #        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
 #        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
@@ -667,7 +686,7 @@ def create_file_dict(result_dir, threads):
     return ret
 
 def write_searches_top():
-    result_dir = "results/final/search/2_9/1/"
+    result_dir = "results/hekaton/ycsb/bohm/0/"
     threads = [4,8,12,16,20,24,28,32,36,40]
     file_dict = create_file_dict(result_dir, threads)
     write_search_results("mv_out.txt", file_dict)
@@ -675,7 +694,9 @@ def write_searches_top():
 def check_best(outfile):
     temp = get_fastest(outfile)
     return temp["threads"]
-    
+
+
+
 def check_increasing(outfile):
     if os.path.exists(outfile):
         times = clean.list_times(outfile)
@@ -688,8 +709,8 @@ def check_increasing(outfile):
     return False
     
 def search_best_inner(expt, theta, num_records, out_dir):    
-    thread_range = [4,8,12,16,20,24,28,32,36,40]
-    prev_best = 0
+    thread_range = [36,40]
+    prev_best = 10
     for t in thread_range:
         filename = str(t) + ".txt"
         outfile = os.path.join(out_dir, filename)
@@ -718,7 +739,7 @@ def search_best_inner(expt, theta, num_records, out_dir):
 def search_best():
 
 #    high_contention = "results/final/txn_size_10/0_9/bohm"
-    for i in range(0, 5):
+    for i in range(1, 6):
         high_contention = "results/hekaton/ycsb/contended/bohm/8r2rmw"
         temp = os.path.join(high_contention, str(i))
         search_best_inner(1, 0.0, 1000, temp)
@@ -726,16 +747,16 @@ def search_best():
         high_contention = "results/hekaton/ycsb/contended/bohm/10rmw"
         temp = os.path.join(high_contention, str(i))
         search_best_inner(0, 0.0, 1000, temp)
-
+ 
         low_contention = "results/hekaton/ycsb/uncontended/bohm/10rmw"
         temp = os.path.join(low_contention, str(i))
         search_best_inner(0, 0.0, 1000000, temp)
-
+ 
         low_contention = "results/hekaton/ycsb/uncontended/bohm/8r2rmw"
         temp = os.path.join(low_contention, str(i))
         search_best_inner(1, 0.0, 1000000, temp)
-
-
+ 
+ 
 
 #        temp = os.path.join(high_contention, str(i))
 #        search_best_inner(0, 0.9, temp)

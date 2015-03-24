@@ -68,6 +68,8 @@ class OCCAction {
         std::vector<occ_composite_key> readset;
         std::vector<occ_composite_key> writeset;
 
+        std::vector<occ_composite_key> shadow_writeset;
+        
         // XXX don't require this field anymore. Manually lookup hash tables for
         // refs to records.
         // std::vector<void*> write_records; 

@@ -116,8 +116,7 @@ void hek_table::read_stable(struct hek_table_slot *slot, uint64_t *head_time,
 
 /* Search a particular bucket for a key. Used to perform a read. */ 
 hek_record* hek_table::search_bucket(uint64_t key, uint64_t ts,
-                                     struct hek_table_slot *slot,
-                                     uint64_t *read_time)
+                                     struct hek_table_slot *slot)
 {
         assert(IS_TIMESTAMP(ts));
         hek_record *head, *prev, *ret;
@@ -148,8 +147,16 @@ bool hek_table::visible(uint64_t txn_ptr, uint64_t read_timestamp)
         hek_action *txn;
 
         txn = GET_TXN(txn_ptr);
-        txn_end = HEK_TIME(txn->end);
-        return txn_end < read_timestamp;
+        barrier();
+        txn_end = txn->end;
+        barrier();
+        if (HEK_STATE(txn_end) != ABORT) {
+                //                *txn_ts = HEK_TIME(txn_end);
+                return HEK_TIME(txn_end) < read_timestamp;
+        }
+        else {
+                return false;
+        }
 }
 
 /* 

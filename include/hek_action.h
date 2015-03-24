@@ -50,6 +50,7 @@ struct hek_key {
         uint64_t prev_ts; 		// Prev version timestamp (for writes)
         bool written;			//
         bool is_rmw;
+        uint64_t txn_ts;
 };
 
 // Align to 256 bytes because we use the least significant byte

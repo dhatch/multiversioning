@@ -107,35 +107,37 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
             recordInfo.record.key = key;
             recordInfo.record.hash = recordInfo.record.Hash() % numRecords;
             if (experiment == 0) {
-                    if (flip < 50) {
-                            action->readset.push_back(recordInfo);
-                            action->shadowReadset.push_back(recordInfo);
-                    } else if (j < 5) {
-                            action->writeset.push_back(recordInfo);
-                            action->shadowWriteset.push_back(recordInfo);
-                    }
+//                    if (flip < 50) {
+//                            action->readset.push_back(recordInfo);
+//                            action->shadowReadset.push_back(recordInfo);
+//                    } else if (j < 5) {
+
+                    recordInfo.is_write = true;
+                    action->shadowWriteset.push_back(recordInfo);
+                    action->writeset.push_back(recordInfo);
+                            //                    }
             }
             else if (experiment == 1) {
-                    if (flip < 0) {
+//                    if (flip < 0) {
+//                            recordInfo.is_write = false;
+//                            action->readset.push_back(recordInfo);
+//                            action->shadowReadset.push_back(recordInfo);
+                    if (j < 2) {
+                            recordInfo.is_write = true;
+                            action->writeset.push_back(recordInfo);
+                            action->shadowWriteset.push_back(recordInfo);
+                    } else {
                             recordInfo.is_write = false;
                             action->readset.push_back(recordInfo);
                             action->shadowReadset.push_back(recordInfo);
-                    } else if (j < 5) {
-                            if (j < 2) {
-                                    recordInfo.is_write = true;
-                                    action->writeset.push_back(recordInfo);
-                                    action->shadowWriteset.push_back(recordInfo);
-                            }
-                            else {
-                                    recordInfo.is_write = false;
-                                    action->readset.push_back(recordInfo);
-                                    action->shadowReadset.push_back(recordInfo);
-                            }
                     }
             }
-            break;
+            
+
           }
+          break;
         }
+
       }
       //    std::sort(action->writeset.begin(), action->writeset.end(), LockManager::SortCmp);
       ret[i] = action;
@@ -350,11 +352,15 @@ void LockingExperiment(LockingConfig config) {
                                                 config.theta);
   int success = pin_thread(79);
   assert(success == 0);
+
+
   
   for (uint32_t i = 0; i < config.numThreads; ++i) {
       threads[i]->Run();
+      threads[i]->WaitInit();
   }
-  
+
+  pin_memory();
   barrier();
 
   timespec start_time, end_time, elapsed_time;

@@ -103,13 +103,14 @@ static hek_table** setup_tables(hek_config config)
  * Create hek_queues for inter-thread communication of commit dependency 
  * results.
  */
-static hek_queue** setup_hek_queues(hek_config config)
+static SimpleQueue<hek_action*>*** setup_hek_queues(hek_config config)
 {
-        hek_queue **ret;
+        SimpleQueue<hek_action*> ***ret =
+                (SimpleQueue<hek_action*>***)
+                malloc(sizeof(SimpleQueue<hek_action**>)*config.num_threads);
         int i;
-        ret = (hek_queue**)malloc(sizeof(hek_queue*)*config.num_threads);
         for (i = 0; i < config.num_threads; ++i) 
-                ret[i] = new (i) hek_queue();        
+                ret[i] = setup_queues<hek_action*>(config.num_threads, 1024);
         return ret;
 }
 
@@ -169,7 +170,7 @@ static hek_worker** setup_workers(hek_config config, hek_table **tables,
                                   SimpleQueue<hek_batch> ***output_queues)
 {
         SimpleQueue<hek_batch> **inputs, **outputs;
-        hek_queue **commit_queues, **abort_queues;        
+        SimpleQueue<hek_action*> ***commit_queues, ***abort_queues;        
         hek_worker **workers;
         hek_worker_config worker_conf;
         int i;
@@ -201,8 +202,8 @@ static hek_worker** setup_workers(hek_config config, hek_table **tables,
                 worker_conf.cpu = i;
                 worker_conf.input_queue = inputs[i];
                 worker_conf.output_queue = outputs[i];
-                worker_conf.commit_queue = commit_queues[i];
-                worker_conf.abort_queue = abort_queues[i];
+                worker_conf.commit_queues = commit_queues[i];
+                worker_conf.abort_queues = abort_queues[i];
                 workers[i] = new (i) hek_worker(worker_conf);
         }
 

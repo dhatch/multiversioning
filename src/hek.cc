@@ -69,14 +69,18 @@ hek_worker::hek_worker(hek_worker_config config) : Runnable(config.cpu)
 
 void hek_worker::insert_commit_queue(hek_action *txn)
 {
-        hek_queue *queue = txn->worker->config.commit_queue;
-        queue->enqueue(txn);
+        int me;
+        me = config.cpu;
+        SimpleQueue<hek_action*> *queue = txn->worker->config.commit_queues[me];
+        queue->EnqueueBlocking(txn);
 }
 
 void hek_worker::insert_abort_queue(hek_action *txn)
 {
-        hek_queue *queue = txn->worker->config.abort_queue;
-        queue->enqueue(txn);
+        int me;
+        me = config.cpu;
+        SimpleQueue<hek_action*> *queue = txn->worker->config.abort_queues[me];
+        queue->EnqueueBlocking(txn);
 }
 
 void hek_worker::Init()
@@ -89,6 +93,8 @@ hek_queue::hek_queue()
 {
         this->head = NULL;
         this->tail = &head;
+        this->in_count = 0;
+        this->out_count = 0;
 }
 
 // Insert a single transaction into the queue. First change the tail, then add a
@@ -101,6 +107,7 @@ void hek_queue::enqueue(hek_action *txn)
         barrier();
         prev = (volatile hek_action**)xchgq((volatile uint64_t*)&this->tail,
                                             (uint64_t)&txn->next);
+        fetch_and_increment(&in_count);
         *prev = txn;
 }
 
@@ -114,6 +121,9 @@ hek_action* hek_queue::dequeue_batch()
         old_tail = (hek_action**)xchgq((volatile uint64_t*)&this->tail,
                                        (uint64_t)&head);
         if (iter != NULL) {
+                assert(old_tail != &head);
+                //                *old_tail = NULL;
+                ++out_count;
                 while (old_tail != &iter->next) {
                         while (true) {
                                 barrier();
@@ -122,35 +132,60 @@ hek_action* hek_queue::dequeue_batch()
                                 if (temp != NULL)
                                         break;
                         }
+                        ++out_count;
                         iter = (volatile hek_action*)iter->next;
                 }
         }
-        
+
+        /*
+        iter = ret;
+        while (iter != NULL) {
+                ++out_count;
+                iter = iter->next;
+                }
+        */
         return ret;
 }
+
+void hek_worker::abort_dependent(hek_action *aborted)
+{
+        assert(HEK_STATE(aborted->end) == PREPARING &&
+               aborted->dep_flag == ABORT);
+        transition_abort(aborted);
+}
+
+void hek_worker::commit_dependent(hek_action *committed)
+{
+        assert(HEK_STATE(committed->end) == PREPARING &&
+               committed->dep_flag == COMMIT &&
+               committed->dep_count == 0);
+        transition_commit(committed);
+ }
 
 // Check the result of dependent transactions.
 void hek_worker::check_dependents()
 {
         hek_action *aborted, *committed;
-        aborted = config.abort_queue->dequeue_batch();
-        barrier();
-        while (aborted != NULL) {
-                assert(HEK_STATE(aborted->end) == PREPARING &&
-                       aborted->dep_flag == ABORT);
-                transition_abort(aborted);
-                //                do_abort(aborted);
-                aborted = (hek_action*)aborted->next;
+        uint32_t i;
+
+        for (i = 0; i < config.num_threads; ++i) {
+                //                if (i != config.cpu) {
+                        while (config.abort_queues[i]->Dequeue(&aborted))
+                                abort_dependent(aborted);
+                        //                } else {
+                        //                        assert(config.abort_queues[i]->Dequeue(&aborted)
+                        //                               == false);
+                        //                }
         }
-        committed = config.commit_queue->dequeue_batch();
-        barrier();
-        while (committed != NULL) {
-                assert(HEK_STATE(committed->end) == PREPARING &&
-                       committed->dep_flag == COMMIT &&
-                       committed->dep_count == 0);
-                transition_commit(committed);
-                //                do_commit(committed);
-                committed = (hek_action*)committed->next;
+
+        for (i = 0; i < config.num_threads; ++i) {
+                //                if (i != config.cpu) {
+                        while (config.commit_queues[i]->Dequeue(&committed))
+                                commit_dependent(committed);
+                        //                } else {
+                        //                        assert(config.commit_queues[i]->Dequeue(&committed)
+                        //                               == false);
+                        //                }
         }
 }
 
@@ -268,7 +303,7 @@ void hek_worker::get_writes(hek_action *txn)
 void hek_worker::get_reads(hek_action *txn)
 {
         uint32_t num_reads, i, table_id;
-        uint64_t key, ts, *begin_ptr;
+        uint64_t key, ts, *begin_ptr, *txn_ts;
         struct hek_record *read_record;
         
         ts = HEK_TIME(txn->begin);
@@ -277,8 +312,10 @@ void hek_worker::get_reads(hek_action *txn)
                 table_id = txn->readset[i].table_id;
                 key = txn->readset[i].key;
                 begin_ptr = &txn->readset[i].time;
+                txn_ts = &txn->readset[i].txn_ts;
                 read_record = config.tables[table_id]->get_version(key, ts,
                                                                    begin_ptr);
+                                                                   //                                                                   txn_ts);
                 txn->readset[i].value = read_record;
         }
 }
@@ -305,8 +342,10 @@ bool hek_worker::add_commit_dep(hek_action *out, hek_key *key, hek_action *in)
                 fetch_and_increment(&out->dep_count);
                 ret = true;
         } else {
+                /* in committed; it must be done with dependents */
                 assert(in->dependents == NULL);
-        }        
+                ret = HEK_STATE(in->end) == COMMIT;
+        }
         unlock(&in->latch);
         return ret;
         /*
@@ -494,17 +533,19 @@ void hek_worker::run_txn(hek_action *txn)
 void hek_worker::kill_waiters(hek_action *txn)
 {
         assert(HEK_STATE(txn->end) == ABORT);
-        hek_key *wait_record;
+        assert(txn->latch == 1);
+        hek_key **wait_record;
         hek_action *waiter;
         
-        wait_record = txn->dependents;
-        while (wait_record != NULL) {
-                waiter = wait_record->txn;
+        wait_record = &txn->dependents;
+        while (*wait_record != NULL) {
+                waiter = (*wait_record)->txn;
                 assert(waiter->dep_count > 0);
                 if (cmp_and_swap(&waiter->dep_flag, PREPARING, ABORT)) 
                         insert_abort_queue(waiter);
-                wait_record = wait_record->next;
+                wait_record = &((*wait_record)->next);
         }
+        txn->dependents = NULL;
 }
 
 /*
@@ -513,21 +554,23 @@ void hek_worker::kill_waiters(hek_action *txn)
 void hek_worker::commit_waiters(hek_action *txn)
 {
         assert(HEK_STATE(txn->end) == COMMIT);
-        hek_key *wait_record;
+        assert(txn->latch == 1);
+        hek_key **wait_record;
         hek_action *waiter;
         uint64_t flag;
 
-        wait_record = txn->dependents;
-        while (wait_record != NULL) {
-                waiter = wait_record->txn;                
+        wait_record = &txn->dependents;
+        while (*wait_record != NULL) {
+                waiter = (*wait_record)->txn;                
                 if (fetch_and_decrement(&waiter->dep_count) == 0) {
                         flag = xchgq((volatile uint64_t*)&waiter->dep_flag,
                                      (uint64_t)COMMIT);
                         assert(flag == PREPARING);
                         insert_commit_queue(waiter);
                 }
-                wait_record = wait_record->next;
+                wait_record = &((*wait_record)->next);
         }
+        txn->dependents = NULL;
 }
 
 void hek_worker::do_abort(hek_action *txn)

@@ -10,7 +10,9 @@ class hek_table;
 class hek_queue {
         volatile hek_action *head;
         volatile hek_action **tail;
-
+        volatile uint64_t in_count;
+        volatile uint64_t out_count;
+        
  public:
         void* operator new(std::size_t sz, int cpu)
         {
@@ -39,8 +41,10 @@ struct hek_worker_config {
         hek_table **tables;
         SimpleQueue<hek_batch> *input_queue;
         SimpleQueue<hek_batch> *output_queue;
-        hek_queue *commit_queue;
-        hek_queue *abort_queue;
+        SimpleQueue<hek_action*> **commit_queues;
+        SimpleQueue<hek_action*> **abort_queues;
+        //        hek_queue *commit_queue;
+        //        hek_queue *abort_queue;
         uint64_t *free_list_sizes;
         uint32_t *record_sizes;
 };
@@ -58,7 +62,9 @@ class hek_worker : public Runnable {
         virtual struct hek_record* get_new_record(uint32_t table_id);
         //        virtual void return_record(uint32_t table_id,
         //                                   struct hek_record *record);
-        
+
+        virtual void abort_dependent(hek_action *aborted);
+        virtual void commit_dependent(hek_action *committed);
         
         virtual void run_txn(hek_action *txn);
         virtual void get_reads(hek_action *txn);

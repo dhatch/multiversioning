@@ -109,7 +109,10 @@ OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
                 num_writes = 0;
                 num_rmws = config.txnSize;
         } else if (config.experiment == 1) {
-                return generate_mix(config, gen, true);
+                assert(config.txnSize >= RMW_COUNT);
+                num_reads = config.txnSize - RMW_COUNT;
+                num_writes = 0;
+                num_rmws = RMW_COUNT;
         } else if (config.experiment == 2) {
                 num_reads = 0;
                 num_writes = config.txnSize;

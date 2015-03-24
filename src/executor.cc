@@ -523,8 +523,7 @@ bool Executor::ProcessTxn(Action *action) {
         barrier();
         xchgq(&action->__state, SUBSTANTIATED);
         barrier();
-
-
+        /*
   for (uint32_t i = 0; i < numWrites; ++i) {
           //          xchgq((volatile uint64_t*)&action->__writeset[i].value->writer,
           //                (uint64_t)NULL);
@@ -536,7 +535,7 @@ bool Executor::ProcessTxn(Action *action) {
     }
 
   }
-
+        */
   //  bool gcSuccess = ProcessSingleGC(action);
   //  assert(gcSuccess);
   /*
