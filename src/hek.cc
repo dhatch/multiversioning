@@ -510,8 +510,10 @@ void hek_worker::run_txn(hek_action *txn)
         hek_status status;
         bool validated;
 
+        txn->latch = 0;
         txn->worker = this;
         txn->dependents = NULL;
+        barrier();
         get_writes(txn);
         while (true) {
                 txn->begin = CREATE_EXEC_TIMESTAMP(get_timestamp());

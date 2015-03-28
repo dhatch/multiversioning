@@ -9,6 +9,7 @@
 #include <fstream>
 #include <stdlib.h>
 #include <algorithm>
+#include <small_bank.h>
 
 /* Total space available for free lists */
 #define TOTAL_SIZE (((uint64_t)1) << 35)
@@ -64,6 +65,29 @@ static void init_ycsb(hek_config config, hek_table *table)
         table->finish_init();
 }
 
+static void init_small_bank(hek_config config, hek_table **tables)
+{
+        uint32_t i, j, record_size;
+        char *records;
+        hek_record *rec_ptr;
+        record_size = sizeof(SmallBankRecord) + sizeof(hek_record);
+        for (j = 0; j < 2; ++j) {
+                records = (char*)alloc_interleaved_all(record_size*config.num_records);
+                memset(records, 0x0, record_size*config.num_records);
+                for (i = 0; i < config.num_records; ++i) {
+                        rec_ptr = (hek_record*)(records + i*record_size);
+                        rec_ptr->next = NULL;
+                        rec_ptr->begin = 0;
+                        rec_ptr->end = HEK_INF;
+                        rec_ptr->key = i;
+                        rec_ptr->size = sizeof(SmallBankRecord);
+                        *(long*)rec_ptr->value = rand() % 100;
+                        tables[j]->force_insert(rec_ptr);
+                }
+                tables[j]->finish_init();
+        }
+}
+
 /*
  * Initialize tables. Worker threads perform actual txns, they are not involved 
  * in the initialization process.
@@ -73,7 +97,7 @@ static void init_tables(hek_config config, hek_table **tables)
         if (config.experiment < 3)
                 init_ycsb(config, tables[0]);
         else
-                assert(false);
+                init_small_bank(config, tables);
 }
 
 /*
@@ -143,8 +167,8 @@ static void compute_record_sizes(hek_config config)
                 record_sizes[0] = 1000;
                 record_sizes[1] = 0;
         } else {
-                record_sizes[0] = 8;
-                record_sizes[1] = 8;
+                record_sizes[0] = sizeof(SmallBankRecord);
+                record_sizes[1] = sizeof(SmallBankRecord);
         }
 }
 
@@ -328,6 +352,67 @@ static hek_action* create_ycsb_single(hek_config config, RecordGenerator *gen)
         return NULL;
 }
 
+
+static hek_action* create_small_bank_single(hek_config config,
+                                            RecordGenerator *gen)
+{
+        using namespace hek_small_bank;
+        hek_action *ret = NULL;
+        int flip;
+        void *mem;
+        std::set<uint64_t> seen_keys;
+        
+        flip = rand() % 5;
+        if (flip == 0) {                
+                if (posix_memalign(&mem, 256, sizeof(balance)) != 0) {
+                        std::cerr << "Txn initialization failed!\n";
+                        assert(false);
+                }
+                uint64_t customer_id = GenUniqueKey(gen, &seen_keys);
+                ret = new (mem) balance(customer_id, NULL);
+                assert(((uint64_t)ret) % 256 == 0);
+        } else if (flip == 1) {
+                if (posix_memalign(&mem, 256, sizeof(deposit_checking)) != 0) {
+                        std::cerr << "Txn initialization failed!\n";
+                        assert(false);
+                }
+                uint64_t customer_id = GenUniqueKey(gen, &seen_keys);
+                long amount = (long)(rand() % 25);
+                ret = new (mem) deposit_checking(customer_id, amount, NULL);
+        } else if (flip == 2) {
+                if (posix_memalign(&mem, 256, sizeof(transact_saving)) != 0) {
+                        std::cerr << "Txn initialization failed!\n";
+                        assert(false);
+                }
+                uint64_t customer_id = GenUniqueKey(gen, &seen_keys);
+                long amount = (long)(rand() % 25);
+                ret = new (mem) transact_saving(customer_id, amount, NULL);
+        } else if (flip == 3) {
+                if (posix_memalign(&mem, 256, sizeof(amalgamate)) != 0) {
+                        std::cerr << "Txn initialization failed!\n";
+                        assert(false);
+                }
+                uint64_t from_customer = GenUniqueKey(gen, &seen_keys);
+                uint64_t to_customer = GenUniqueKey(gen, &seen_keys);
+                long amount = (long)(rand() % 25);
+                ret = new (mem) amalgamate(from_customer, to_customer, NULL);
+        } else if (flip == 4) {
+                if (posix_memalign(&mem, 256, sizeof(write_check)) != 0) {
+                        std::cerr << "Txn initialization failed!\n";
+                        assert(false);
+                }
+                uint64_t customer = GenUniqueKey(gen, &seen_keys);
+                long amount = (long)(rand() % 25);
+                if (rand() % 2 == 0) {
+                        amount *= -1;
+                }
+                ret = new (mem) write_check(customer, amount, NULL);
+        } else {
+                assert(false);
+        }
+        return ret;
+}
+
 /*
  * Create a batch of ycsb txns. Responsible for creating a batch struct and 
  * initializing an array of ptrs to track the txns.
@@ -353,14 +438,33 @@ static hek_batch create_ycsb_batch(uint32_t batch_size, hek_config config)
         return batch;
 }
 
+static hek_batch create_small_bank_batch(uint32_t batch_size, hek_config config)
+{
+        uint32_t i;
+        hek_batch batch;
+        RecordGenerator *gen;
+
+        gen = new UniformGenerator(config.num_records);
+        batch.num_txns = batch_size;
+        batch.txns = (hek_action**)alloc_mem(batch_size*sizeof(hek_action*),
+                                             MAX_CPU);
+        for (i = 0; i < batch_size; ++i)
+                batch.txns[i] = create_small_bank_single(config, gen);
+        delete(gen);
+        return batch;
+}
+
 /*
  * Create a batch of txns. Responsible for creating either YCSB or SmallBank 
  * txns.
  */
 static hek_batch create_single_batch(uint32_t batch_size, hek_config config)
 {
-        assert(config.experiment < 3);	/* Can't handle small bank for now */
-        return create_ycsb_batch(batch_size, config);
+        assert(config.experiment <= 4);
+        if (config.experiment < 3)
+                return create_ycsb_batch(batch_size, config);
+        else
+                return create_small_bank_batch(batch_size, config);
 }
 
 /*

@@ -86,4 +86,54 @@ class hek_readonly_action : public hek_action {
         virtual hek_status Run();
 } __attribute__((__packed__, __aligned__(256)));
 
+namespace hek_small_bank {
+        class balance : public hek_action {
+        private:
+                volatile long total_balance;
+                char *meta_data;
+        public:
+                balance(uint64_t customer_id, char *meta_data);
+                virtual hek_status Run();                
+        } __attribute__((__packed__, __aligned__(256)));
+
+        class deposit_checking : public hek_action {
+        private:
+                long amount;
+                char *meta_data;
+        public:
+                deposit_checking(uint64_t customer_id, long amount,
+                                 char *meta_data);
+                virtual hek_status Run();                
+        } __attribute__((__packed__, __aligned__(256)));
+
+        class transact_saving : public hek_action {
+        private:
+                long amount;
+                char *meta_data;
+        public:
+                transact_saving(uint64_t cusomter_id, long amount,
+                                char *meta_data);
+                virtual hek_status Run();                
+        } __attribute__((__packed__, __aligned__(256)));
+
+        class amalgamate : public hek_action {
+        private:
+                char *meta_data;
+        public:
+                amalgamate(uint64_t from_customer, uint64_t to_customer,
+                           char *meta_data);
+                virtual hek_status Run();
+                
+        } __attribute__((__packed__, __aligned__(256)));
+
+        class write_check : public hek_action {
+        private:
+                long amount;
+                char *meta_data;
+        public:
+                write_check(uint64_t customer, long amount, char *meta_data);
+                virtual hek_status Run();
+        } __attribute__((__packed__, __aligned__(256)));
+};
+
 #endif // HEK_ACTION_H_

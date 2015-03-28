@@ -206,25 +206,46 @@ void RMWAction::DoWrites()
 bool RMWAction::Run()
 {
 
-        uint32_t i, j, num_reads, num_writes;
+        uint32_t i, j, num_reads, num_writes, num_fields;
         assert(recordSize == 1000);
         num_reads = __readset.size();
         num_writes = __writeset.size();
+        num_fields = YCSB_RECORD_SIZE / 100;
         uint64_t counter = 0;
         for (i = 0; i < num_reads; ++i) {
                 char *field_ptr = (char*)Read(i);
-                for (j = 0; j < 10; ++j) 
-                        counter += *((uint64_t*)&field_ptr[j*100]);
-                
+                if (SMALL_RECORDS) {
+                        counter += *((uint64_t*)field_ptr);
+                } else {
+                        for (j = 0; j < num_fields; ++j) 
+                                counter += *((uint64_t*)&field_ptr[j*100]);
+                }
         }
+        for (i = 0; i < num_writes; ++i) {
+                if (__writeset[i].is_rmw) {
+                        char *field_ptr = (char*)ReadWrite(i);
+                        if (SMALL_RECORDS) {
+                                counter += *((uint64_t*)field_ptr);
+                        } else {
+                                for (j = 0; j < num_fields; ++j)
+                                        counter += *((uint64_t*)&field_ptr[j*100]);
+                        }
+                }
+        }
+
         for (i = 0; i < num_writes; ++i) {
                 assert(__writeset[i].is_rmw);
                 char *read_ptr = (char*)ReadWrite(i);
                 char *write_ptr = (char*)GetWriteRef(i);
-                memcpy(write_ptr, read_ptr, 1000);
-                for (j = 0; j < 10; ++j)
-                        *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
-                //                                *((uint64_t*)&read_ptr[j*100]);
+                if (SMALL_RECORDS) {
+                        *((uint64_t*)write_ptr) =
+                                counter + *((uint64_t*)read_ptr);
+                } else {
+                        memcpy(write_ptr, read_ptr, YCSB_RECORD_SIZE);
+                        for (j = 0; j < num_fields; ++j)
+                                *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
+                        //              *((uint64_t*)&read_ptr[j*100]);
+                }
         }
 
         return true;

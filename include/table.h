@@ -18,6 +18,7 @@ struct TableConfig {
   int endCpu;
   uint64_t freeListSz;
   uint64_t valueSz;
+        uint32_t recordSize;
 };
 
 class Table {
@@ -92,7 +93,7 @@ class Table {
 
   uint32_t RecordSize()
   {
-          return 256;
+          return conf.valueSz;
   }
 };
 

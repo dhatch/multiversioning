@@ -278,6 +278,7 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
                 record_size = config.tables[table_id]->RecordSize() - sizeof(uint64_t);
                 memcpy(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
                        record_size);
+                assert(record_size == 1000);
                 barrier();
 //                barrier();
 //                *RECORD_TID_PTR(value) = tid;

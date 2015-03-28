@@ -138,23 +138,24 @@ occ_txn_status mix_occ_action::Run()
 
 bool RMWOCCAction::DoReads()
 {
-        uint32_t num_writes, num_reads, i, j;
+        uint32_t num_writes, num_reads, i, j, num_fields;
         char *read_ptr, *write_ptr;
         uint64_t counter;
         
         num_reads = readset.size();
         num_writes = writeset.size();
         counter = 0;
+        num_fields = YCSB_RECORD_SIZE / 100;
         for (i = 0; i < num_reads; ++i) {
                 read_ptr = (char*)readset[i].StartRead();
-                for (j = 0; j < 10; ++j) 
+                for (j = 0; j < num_fields; ++j) 
                         counter += *((uint64_t*)&read_ptr[j*100]);
         }
         for (i = 0; i < num_writes; ++i) {
                 write_ptr = (char*)writeset[i].GetValue();
                 read_ptr = (char*)readset[i].StartRead();
-                memcpy(write_ptr, read_ptr, 1000);
-                for (j = 0; j < 10; ++j) {
+                memcpy(write_ptr, read_ptr, YCSB_RECORD_SIZE);
+                for (j = 0; j < num_fields; ++j) {
                         *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
                 }
         }

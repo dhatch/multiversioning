@@ -597,7 +597,7 @@ static Action* generate_rmw_action(RecordGenerator *gen, MVConfig config)
 {
         uint32_t num_reads, num_rmws, num_writes;
         int flip;
-        assert(RMW_COUNT <= config.txnSize);
+        //assert(RMW_COUNT <= config.txnSize);
         flip = (uint32_t)rand() % 100;
         assert(flip >= 0 && flip < 100);
         if (flip < config.read_pct) {
@@ -872,7 +872,7 @@ static void init_database(MVConfig config,
                 sched_threads[i]->Run();        
                 sched_threads[i]->WaitInit();
         }
-
+        
         for (i = 0; i < config.numWorkerThreads; ++i) {
                 exec_threads[i]->Run();
                 exec_threads[i]->WaitInit();                
@@ -882,7 +882,6 @@ static void init_database(MVConfig config,
         for (i = 0; i < config.numWorkerThreads; ++i) 
                 (&output_queue[i])->DequeueBlocking();
         barrier();
-
         std::cerr << "Done loading the database!\n";
         return;
 }
@@ -900,7 +899,7 @@ static MVScheduler** setup_scheduler_threads(MVConfig config,
         worker_start = (int)config.numCCThreads;
         worker_end = worker_start + config.numWorkerThreads - 1;
         if (config.experiment < 3) {
-                stickies_per_thread = (((uint64_t)1)<<28);
+                stickies_per_thread = (((uint64_t)1)<<27);
                 num_tables = 1;
         } else if (config.experiment < 5) {
                 stickies_per_thread = (((uint64_t)1)<<24);
@@ -966,7 +965,7 @@ void do_mv_experiment(MVConfig config)
         init_database(config, schedInputQueue, outputQueue, schedThreads,
                       execThreads);
         pin_memory();
-        elapsed_time = run_experiment(schedInputQueue, // &schedOutputQueues[config.numWorkerThreads],
+        elapsed_time = run_experiment(schedInputQueue,  //&schedOutputQueues[config.numWorkerThreads],
                                       outputQueue,
                                       input_placeholder,// 1);
                                       config.numWorkerThreads);

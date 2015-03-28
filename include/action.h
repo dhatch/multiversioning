@@ -12,6 +12,8 @@
 #include <mv_record.h>
 #include <util.h>
 
+#define YCSB_RECORD_SIZE 1000
+
 extern uint32_t NUM_CC_THREADS;
 extern uint64_t recordSize;
 
@@ -232,21 +234,21 @@ class RMWEagerAction : public EagerAction {
       uint32_t numReads = shadowReadset.size();
       uint32_t numWrites = shadowWriteset.size();
       char *read_ptr, *write_ptr;
-      
+      uint32_t num_fields = YCSB_RECORD_SIZE / 100;
       uint64_t counter = 0;
       for (uint32_t i = 0; i < numReads; ++i) {
               read_ptr = (char*)shadowReadset[i].value;
-              for (uint32_t j = 0; j < 10; ++j)
+              for (uint32_t j = 0; j < num_fields; ++j)
                       counter += *((uint64_t*)&read_ptr[j*100]);
       }
       for (uint32_t i = 0; i < numWrites; ++i) {
               read_ptr = (char*)shadowWriteset[i].value;
-              for (uint32_t j = 0; j < 10; ++j)
+              for (uint32_t j = 0; j < num_fields; ++j)
                       counter += *((uint64_t*)&read_ptr[j*100]);
       }
       for (uint32_t i = 0; i < numWrites; ++i) {
               write_ptr = (char*)shadowWriteset[i].value;
-              for (uint32_t j = 0; j < 10; ++j) 
+              for (uint32_t j = 0; j < num_fields; ++j) 
                       *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
       }
     }      

@@ -16,6 +16,7 @@ fmt_hek = "build/db --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_rec
 
 fmt_si = "build/si --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 0 --read_txn_size 5"
 
+fmt_multi_cc = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size {8} --experiment {4} --record_size {7} --distribution {5} --theta {6} --read_pct 0 --read_txn_size 10"
 
 
 def main():
@@ -36,7 +37,9 @@ def main():
 #    occ_uncontended_1000()
     hek_uncontended_1000()
 #    search_best()
-
+#    test_cc()
+#    ccontrol()
+    
 #    combine_best()
 #    small_bank_contended()
 #    small_bank_uncontended()
@@ -45,21 +48,31 @@ def main():
 #    exp_1()
 #    exp_2()
 
+
+
 def print_cc():
     clean.cc_fn("results.txt", "cc_out.txt")
 
+def single_cc_test(txn_size):
+    os.system("rm results.txt")
+    thread_range = [4,8,12,16,20]
+    for t in thread_range:
+        if t < 10:
+            num_txns = 200000
+        else:
+            num_txns = 1000000
+        cmd = fmt_multi_cc.format(str(t), str(num_txns), str(1000000), str(1),
+                                  str(0), str(0), str(0.0), str(1000), str(txn_size))
+        os.system(cmd)
+    os.system("cat results.txt >>  cc_" + str(txn_size) + ".txt")
+
+
 def test_cc():
-#    os.system("rm results.txt")
-    for i in range(0, 3):
-        thread_range = [2,4,6,8,10,12,14,16,18,20]
-        for t in thread_range:
-            if t < 10:
-                num_txns = 500000
-            else:
-                num_txns = 1000000
-            cmd = fmt_multi.format(str(t), str(num_txns), str(1000000), str(1),
-                                   str(0), str(0), str(0.0), str(1000))
-            os.system(cmd)
+    os.system("rm results.txt")
+    for i in range(0, 10):
+        single_cc_test(10)
+        single_cc_test(5)
+        single_cc_test(1)
     
         
 
@@ -196,7 +209,7 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
     os.system("mkdir -p outdir")
     if not os.path.exists(outdep):
 
-        val_range = gen_range(lowThreads, highThreads, 4)
+        val_range = gen_range(lowThreads, highThreads, 2)
 
         for i in val_range:
             os.system("rm results.txt")
@@ -326,17 +339,17 @@ def hek_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, dis
 
             
 def ccontrol():
-    outdir = "results/concurrency_control"
+    outdir = "results/hekaton/concurrency_control"
     for i in range(0, 5):
-        mv_expt(outdir, "mv_5.txt", 5, 5000000, 1000000, 2, 20, 0, 0, 0.0, 8, True)
-        mv_expt(outdir, "mv_10.txt", 10, 5000000, 1000000, 2, 20, 0, 0, 0.0, 8, True)
-        mv_expt(outdir, "mv_15.txt", 15, 5000000, 1000000, 2, 20, 0, 0, 0.0, 8, True)
-        mv_expt(outdir, "mv_20.txt", 20, 5000000, 1000000, 2, 20, 0, 0, 0.0, 8, True)
+        mv_expt(outdir, "mv_5.txt", 5, 5000000, 1000000, 2, 20, 0, 0, 0.0, 1000, True)
+        mv_expt(outdir, "mv_10.txt", 10, 5000000, 1000000, 2, 20, 0, 0, 0.0, 1000, True)
+        mv_expt(outdir, "mv_15.txt", 15, 5000000, 1000000, 2, 20, 0, 0, 0.0, 1000, True)
+        mv_expt(outdir, "mv_20.txt", 20, 5000000, 1000000, 2, 20, 0, 0, 0.0, 1000, True)
     
-    os.system("touch " + os.path.join(outdir, "." + "mv_5.txt"))
-    os.system("touch " + os.path.join(outdir, "." + "mv_10.txt"))
-    os.system("touch " + os.path.join(outdir, "." + "mv_15.txt"))
-    os.system("touch " + os.path.join(outdir, "." + "mv_20.txt"))
+#    os.system("touch " + os.path.join(outdir, "." + "mv_5.txt"))
+#    os.system("touch " + os.path.join(outdir, "." + "mv_10.txt"))
+#    os.system("touch " + os.path.join(outdir, "." + "mv_15.txt"))
+#    os.system("touch " + os.path.join(outdir, "." + "mv_20.txt"))
 
 
 
@@ -396,30 +409,45 @@ def uncontended_1000():
     os.system("touch " + os.path.join(outdir, "." + "locking_8r2rmw.txt"))
 
 def hek_uncontended_1000():
-    for i in range(0, 5):
-        result_dir = "results/hekaton/ycsb/uncontended/8r2rmw/"
-#        si_expt(result_dir, "si_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000)
-#        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000)
-        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
-        locking_expt(result_dir, "locking_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000)
+#    theta_range = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+#    result_dir = "results/hekaton/theta"
+#    for i in range(0, 5):
+#        for theta in theta_range:
+#            si_expt(result_dir, "si.txt", 40, 40, 3000000, 1000000, 1, 1, theta, 1000)
+#            hek_expt(result_dir, "hek.txt", 40, 40, 3000000, 1000000, 1, 1, theta, 1000)
+#            occ_expt(result_dir, "occ.txt", 40, 40, 3000000, 1000000, 1, 1, theta, 1000)
+#            locking_expt(result_dir, "locking.txt", 40, 40, 3000000, 1000000, 1, 1, theta, 1000)
 
-        result_dir = "results/hekaton/ycsb/uncontended/10rmw/"
+    for i in range (0, 10):
+        result_dir = "results/hekaton/small_bank/"
+        si_expt(result_dir, "si_small_bank.txt", 4, 40, 5000000, 1000000, 3, 1, 0.0, 1000)
+        hek_expt(result_dir, "hek_small_bank.txt", 4, 40, 5000000, 1000000, 3, 1, 0.0, 1000)
+#        si_expt(result_dir, "si_small_bank.txt", 24, 40, 5000000, 1000000, 3, 1, 0.0, 1000)
+#        hek_expt(result_dir, "hek_small_bank.txt", 24, 40, 5000000, 1000000, 3, 1, 0.0, 1000)
+
+#         occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
+#         locking_expt(result_dir, "locking_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
+# 
+#         result_dir = "results/hekaton/ycsb/contended/10rmw/"
+#         hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+#         si_expt(result_dir, "si_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+#         occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
+#         locking_expt(result_dir, "locking_10rmw.txt", 4, 40, 3000000, 1000000, 0, 1, 0.9, 1000)
+# 
+    
+#		for i in range(0, 10):
+#        result_dir = "results/hekaton/ycsb/uncontended/8r2rmw/"
+#        si_expt(result_dir, "si_8r2rmw.txt", 24, 36, 3000000, 1000000, 1, 1, 0.0, 1000)
+#        hek_expt(result_dir, "hek_8r2rmw.txt", 20, 40, 5000000, 1000000, 1, 1, 0.0, 1000)
+#        occ_expt(result_dir, "occ_8r2rmw.txt", 40, 40, 1000000, 1000000, 1, 1, 0.0, 1000)
+#        locking_expt(result_dir, "locking_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000)
+
+#        result_dir = "results/hekaton/ycsb/uncontended/10rmw/"
 #        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
-#        si_expt(result_dir, "si_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
-        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
-        locking_expt(result_dir, "locking_10rmw.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000)
-        
-        result_dir = "results/hekaton/ycsb/contended/8r2rmw/"
-        si_expt(result_dir, "si_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
-        hek_expt(result_dir, "hek_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
-        occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
-        locking_expt(result_dir, "locking_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
-        
-        result_dir = "results/hekaton/ycsb/contended/10rmw/"
-        hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
-        si_expt(result_dir, "si_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
-        occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
-        locking_expt(result_dir, "locking_10rmw.txt", 4, 40, 3000000, 1000000, 0, 1, 0.9, 1000)
+#        si_expt(result_dir, "si_10rmw.txt", 20, 36, 1000000, 1000000, 0, 1, 0.0, 1000)
+#        occ_expt(result_dir, "occ_10rmw.txt", 20, 40, 1000000, 1000000, 0, 1, 0.0, 1000)
+#        locking_expt(result_dir, "locking_10rmw.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000)
+
 
 #        mv_expt(result_dir, "mv_10rmw.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.0, 1000)
 #        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
@@ -665,15 +693,17 @@ def write_search_results(outfile, result_files):
         if not os.path.exists(result_file):
             continue
         fastest = get_fastest(result_file)
-        fastest_throughput = float(fastest["txns"])/float(fastest["time"]*1000)
+        fastest_throughput = float(fastest["txns"])/float(fastest["time"])
         if not threads in result_dict:
             result_dict[threads] = []
         result_dict[threads].append(fastest_throughput)
-
+        
+    print result_dict
     median_dict = {}
     for thread in result_dict:
-        median_dict[thread] = transform_mv_result(result_dict[thread])
+        median_dict[thread] = clean.confidence_interval(result_dict[thread])
     write_search_inner(outfile, median_dict)
+
     
 def create_file_dict(result_dir, threads):
     ret = []
@@ -685,8 +715,44 @@ def create_file_dict(result_dir, threads):
         ret.append(cur)
     return ret
 
-def write_searches_top():
-    result_dir = "results/hekaton/ycsb/bohm/0/"
+def write_mv_searches(outfile, toplevel, dirs):
+    num_threads = [4,8,12,16,20,24,28,32,36,40]
+    file_dict = []
+    for t in num_threads:
+        leaf_name = str(t) + ".txt"
+        for d in dirs:
+            dirname = os.path.join(toplevel, d)
+            fname = os.path.join(dirname, leaf_name)
+            entry = {}
+            entry["threads"] = t
+            entry["file"] = fname
+            file_dict.append(entry)
+    write_search_results(outfile, file_dict)
+
+def write_mv_searches_theta(outfile, toplevel, dirs):
+    theta_list = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
+    results = {}
+    confidences = {}
+    for t in theta_list:
+        leaf_name = str(int(10*t)) + ".txt"
+        for d in dirs:
+            dirname = os.path.join(toplevel, d)
+            fname = os.path.join(dirname, leaf_name)
+            val = get_fastest(fname)
+            throughput = float(val["txns"]) / val["time"]
+            if not t in results:
+                results[t] = []
+            results[t].append(throughput)
+            
+    print results
+    for key in results:
+        confidences[key] = clean.confidence_interval(results[key])
+    print confidences
+    write_search_inner(outfile, confidences)
+        
+
+def write_searches_top(result_dirs):
+#    result_dir = "results/hekaton/ycsb/bohm/0/"
     threads = [4,8,12,16,20,24,28,32,36,40]
     file_dict = create_file_dict(result_dir, threads)
     write_search_results("mv_out.txt", file_dict)
@@ -701,16 +767,18 @@ def check_increasing(outfile):
     if os.path.exists(outfile):
         times = clean.list_times(outfile)
         num_entries = len(times)
-        if len(times) > 2:
+        if len(times) > 3:
             t0 = times[num_entries-1]["time"]
             t1 = times[num_entries-2]["time"]
             t2 = times[num_entries-3]["time"]
-            return t0 > t1 and t1 > t2
+            return t0 > t1 and t1 > t2 
     return False
     
+    
+
 def search_best_inner(expt, theta, num_records, out_dir):    
-    thread_range = [36,40]
-    prev_best = 10
+    thread_range = [40]
+    prev_best = 0
     for t in thread_range:
         filename = str(t) + ".txt"
         outfile = os.path.join(out_dir, filename)
@@ -735,27 +803,48 @@ def search_best_inner(expt, theta, num_records, out_dir):
 
 #    top_level = "results/final/txn_size_10"
 
+def search_best_theta(expt, out_dir):
+    theta_range = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0]
+    cc_range1 = range(8, 20)
+    cc_range2 = range(8, 11)
+    for t in theta_range:
+        filename = str(int(10 * t)) + ".txt"
+        outfile = os.path.join(out_dir, filename)
+        total_threads = 40
+        if t == 0.9:
+            cc_r = cc_range2
+        else:
+            cc_r = cc_range1
+        for num_cc in cc_r:
+            num_execs = total_threads - num_cc
+            mv_expt_single(out_dir, filename, num_cc, 1000000, 1000000, 
+                           num_execs, expt, 1, t, 1000)
             
 def search_best():
 
-#    high_contention = "results/final/txn_size_10/0_9/bohm"
-    for i in range(1, 6):
-        high_contention = "results/hekaton/ycsb/contended/bohm/8r2rmw"
-        temp = os.path.join(high_contention, str(i))
-        search_best_inner(1, 0.0, 1000, temp)
 
-        high_contention = "results/hekaton/ycsb/contended/bohm/10rmw"
-        temp = os.path.join(high_contention, str(i))
-        search_best_inner(0, 0.0, 1000, temp)
- 
-        low_contention = "results/hekaton/ycsb/uncontended/bohm/10rmw"
-        temp = os.path.join(low_contention, str(i))
-        search_best_inner(0, 0.0, 1000000, temp)
- 
-        low_contention = "results/hekaton/ycsb/uncontended/bohm/8r2rmw"
-        temp = os.path.join(low_contention, str(i))
-        search_best_inner(1, 0.0, 1000000, temp)
- 
+    for i in range(1, 5):
+        
+        bohm_dir = os.path.join("results/hekaton/theta/bohm")
+        temp = os.path.join(bohm_dir, str(i))
+        search_best_theta(1, temp)
+#        
+#        high_contention = "results/hekaton/ycsb/contended/8r2rmw/bohm/"
+#        temp = os.path.join(high_contention, str(i))
+#        search_best_inner(1, 0.9, 1000000, temp)
+#
+#        high_contention = "results/hekaton/ycsb/contended/10rmw/bohm/"
+#        temp = os.path.join(high_contention, str(i))
+#        search_best_inner(0, 0.9, 1000000, temp)
+# 
+#        low_contention = "results/hekaton/ycsb/uncontended/10rmw/bohm/"
+#        temp = os.path.join(low_contention, str(i))
+#        search_best_inner(0, 0.0, 1000000, temp)
+# 
+#        low_contention = "results/hekaton/ycsb/uncontended/8r2rmw/bohm"
+#        temp = os.path.join(low_contention, str(i))
+#        search_best_inner(1, 0.0, 1000000, temp)
+# 
  
 
 #        temp = os.path.join(high_contention, str(i))

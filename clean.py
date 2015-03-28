@@ -5,6 +5,10 @@ import sys
 import math
 
 def confidence_interval(vals):
+#    vals.sort()
+#    cutoff = int(float(len(vals)) * 0.7)
+#    temp = vals[0:cutoff]
+#    vals = temp
     sample_mean = sum(vals) / float(len(vals))
     dev = 0
     for v in vals:

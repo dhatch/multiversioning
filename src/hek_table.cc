@@ -222,9 +222,8 @@ void hek_table::remove_version(hek_record *record)
         slot = get_slot(record->key);
         assert(slot->latch == 1 && slot->records == record);
         prev = stable_next(record->key, record->next);
-        if (prev != NULL && prev->end == record->begin) {
-                prev->end = HEK_INF;
-        }
+        assert(prev != NULL && prev->end == record->begin);
+        prev->end = HEK_INF;
         xchgq((volatile uint64_t*)&slot->records, (uint64_t)prev);
         xchgq(&slot->latch, 0x0);
 }
@@ -241,12 +240,10 @@ void hek_table::finalize_version(hek_record *record, uint64_t ts)
         assert(slot->latch == 1 && slot->records == record);
 
         prev = stable_next(record->key, record->next);
-        if (prev != NULL) {
-                assert(!IS_TIMESTAMP(prev->end) || prev->end != HEK_INF);
-                assert(prev->end == record->begin);
-                if (prev->end == record->begin)
-                        prev->end = ts;
-        }
+        assert(prev != NULL && !IS_TIMESTAMP(prev->end));
+        //        assert(!IS_TIMESTAMP(prev->end) || prev->end != HEK_INF);
+        assert(prev->end == record->begin);
+        prev->end = ts;
         record->begin = ts;        
         xchgq(&slot->latch, 0x0);
 }
@@ -260,6 +257,7 @@ void hek_table::force_insert(hek_record *rec)
         
         slot = get_slot(rec->key);
         assert(slot->latch == 0);
+        assert(slot->records == NULL);
         rec->next = (hek_record*)slot->records;
         slot->records = rec;
 }
