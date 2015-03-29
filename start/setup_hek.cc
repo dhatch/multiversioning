@@ -81,7 +81,7 @@ static void init_small_bank(hek_config config, hek_table **tables)
                         rec_ptr->end = HEK_INF;
                         rec_ptr->key = i;
                         rec_ptr->size = sizeof(SmallBankRecord);
-                        *(long*)rec_ptr->value = rand() % 100;
+                        GenRandomSmallBank(rec_ptr->value, 8);
                         tables[j]->force_insert(rec_ptr);
                 }
                 tables[j]->finish_init();
@@ -253,6 +253,8 @@ static hek_key create_blank_key()
                 0,		/* time */                
                 0,		/* prev_ts */
                 false,		/* written */
+                false,		/* is_rmw */
+                0,		/* txn_ts */
         };
         return ret;
 }
@@ -353,8 +355,7 @@ static hek_action* create_ycsb_single(hek_config config, RecordGenerator *gen)
 }
 
 
-static hek_action* create_small_bank_single(hek_config config,
-                                            RecordGenerator *gen)
+static hek_action* create_small_bank_single(RecordGenerator *gen)
 {
         using namespace hek_small_bank;
         hek_action *ret = NULL;
@@ -394,7 +395,6 @@ static hek_action* create_small_bank_single(hek_config config,
                 }
                 uint64_t from_customer = GenUniqueKey(gen, &seen_keys);
                 uint64_t to_customer = GenUniqueKey(gen, &seen_keys);
-                long amount = (long)(rand() % 25);
                 ret = new (mem) amalgamate(from_customer, to_customer, NULL);
         } else if (flip == 4) {
                 if (posix_memalign(&mem, 256, sizeof(write_check)) != 0) {
@@ -444,12 +444,17 @@ static hek_batch create_small_bank_batch(uint32_t batch_size, hek_config config)
         hek_batch batch;
         RecordGenerator *gen;
 
-        gen = new UniformGenerator(config.num_records);
+        if (config.distribution == 0) {
+                gen = new UniformGenerator(config.num_records);
+        } else {
+                assert(config.distribution == 1);
+                gen = new ZipfGenerator(config.num_records, config.theta);
+        }
         batch.num_txns = batch_size;
         batch.txns = (hek_action**)alloc_mem(batch_size*sizeof(hek_action*),
                                              MAX_CPU);
         for (i = 0; i < batch_size; ++i)
-                batch.txns[i] = create_small_bank_single(config, gen);
+                batch.txns[i] = create_small_bank_single(gen);
         delete(gen);
         return batch;
 }

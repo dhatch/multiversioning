@@ -218,7 +218,7 @@ void hek_worker::StartWorking()
 // A transaction's state changes from EXECUTING->PREPARING->COMMITTED/ABORTED.
 // Commit dependencies can only be added in state PREPARING.
 //
-void hek_worker::transition_begin(hek_action *txn)
+void hek_worker::transition_begin(__attribute__((unused)) hek_action *txn)
 {
         
         //        lock(&txn->latch);
@@ -367,7 +367,6 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
 {
         assert(!IS_TIMESTAMP(txn->end) && HEK_STATE(txn->end) == PREPARING);
         struct hek_record *vis_record, *read_record;
-        hek_action *preparing;
         uint64_t vis_ts, read_ts, record_key, end_ts, vis_txn_ts, read_txn_ts;
         uint32_t table_id;
 
@@ -393,7 +392,6 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
                         return add_commit_dep(txn, key, GET_TXN(vis_ts),
                                               vis_txn_ts);
                 } else if (IS_TIMESTAMP(vis_ts)) {
-                        preparing = GET_TXN(read_ts);
                         return HEK_TIME(read_txn_ts) == vis_ts;
                 }
         }

@@ -240,13 +240,15 @@ void OCCWorker::PrepareReads(OCCAction *action)
                 value = config.tables[table_id]->Get(key);
                 action->readset[i].value = value;
                 tid_ptr = (volatile uint64_t*)value;
+                
 
                 AcquireSingleLock(tid_ptr);
                 assert(IS_LOCKED(*tid_ptr));
                 action->readset[i].old_tid = GET_TIMESTAMP(*tid_ptr);
                 xchgq(tid_ptr, action->readset[i].old_tid);
-
+                
                 /*
+
                 while (true) {
                         barrier();
                         action->readset[i].old_tid = *tid_ptr;
@@ -278,7 +280,7 @@ void OCCWorker::InstallWrites(OCCAction *action, uint64_t tid)
                 record_size = config.tables[table_id]->RecordSize() - sizeof(uint64_t);
                 memcpy(RECORD_VALUE_PTR(value), action->writeset[i].GetValue(),
                        record_size);
-                assert(record_size == 1000);
+                //                assert(record_size == 1000);
                 barrier();
 //                barrier();
 //                *RECORD_TID_PTR(value) = tid;
@@ -336,7 +338,7 @@ bool OCCWorker::Validate(OCCAction *action)
                 if (!action->readset[i].ValidateRead())
                         return false;
                 */
-                
+
                 acquired = false;
                 tid_ptr = (volatile uint64_t*)action->readset[i].value;
                 if (!action->readset[i].is_rmw) 

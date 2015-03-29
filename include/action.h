@@ -13,6 +13,7 @@
 #include <util.h>
 
 #define YCSB_RECORD_SIZE 1000
+#define SPIN_DURATION 10000
 
 extern uint32_t NUM_CC_THREADS;
 extern uint64_t recordSize;
@@ -21,6 +22,12 @@ struct ycsb_record {
         char value[1000];
 };
 
+static  __attribute__((unused))
+void do_spin()
+{
+        for (uint64_t i = 0; i < SPIN_DURATION; ++i)
+                single_work();
+}
 
 /*
 struct Record {

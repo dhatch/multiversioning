@@ -13,15 +13,8 @@ occ_txn_status OCCSmallBank::Balance::Run()
         occ_txn_status status;
         SmallBankRecord *checking = (SmallBankRecord*)readset[0].GetValue();
         SmallBankRecord *savings = (SmallBankRecord*)readset[1].GetValue();
-        uint32_t num_ints = METADATA_SIZE/4;
-        uint32_t *int_meta_data = (uint32_t*)meta_data;
-        uint32_t *checking_meta = (uint32_t*)checking->meta_data;
-        uint32_t *savings_meta = (uint32_t*)savings->meta_data;
-        for (uint32_t i = 0; i < num_ints; ++i) {
-                int_meta_data[i] = checking_meta[i];
-                int_meta_data[i] += savings_meta[i];
-        }
         this->totalBalance = checking->amount + savings->amount;
+        do_spin();
         status.validation_pass = true;
         status.commit = true;
         return status;
@@ -44,7 +37,7 @@ occ_txn_status OCCSmallBank::DepositChecking::Run()
         long oldBalance = checkingBalance->amount;
         SmallBankRecord *newBalance = (SmallBankRecord*)writeset[0].GetValue();
         newBalance->amount = oldBalance + this->amount;
-        memcpy(newBalance->meta_data, meta_data, METADATA_SIZE);
+        do_spin();
         status.validation_pass = true;
         status.commit = true;
         return status;
@@ -66,7 +59,7 @@ occ_txn_status OCCSmallBank::TransactSaving::Run()
         SmallBankRecord *read = (SmallBankRecord*)readset[0].GetValue();
         SmallBankRecord *write  = (SmallBankRecord*)writeset[0].GetValue();
         write->amount = read->amount + this->amount;
-        memcpy(write->meta_data, meta_data, METADATA_SIZE);
+        do_spin();
         status.validation_pass = true;
         status.commit = true;
         return status;
@@ -97,11 +90,9 @@ occ_txn_status OCCSmallBank::Amalgamate::Run()
         fromSavings = (SmallBankRecord*)writeset[1].GetValue();
         toChecking = (SmallBankRecord*)writeset[2].GetValue();
         fromChecking->amount = 0;
-        memcpy(fromChecking->meta_data, meta_data, METADATA_SIZE);
         fromSavings->amount = 0;
-        memcpy(fromSavings->meta_data, meta_data, METADATA_SIZE);
         toChecking->amount = sum;
-        memcpy(toChecking->meta_data, meta_data, METADATA_SIZE);
+        do_spin();
         status.validation_pass = true;
         status.commit = true;
         return status;
@@ -131,7 +122,7 @@ occ_txn_status OCCSmallBank::WriteCheck::Run()
                 amount += 1;
         checking = (SmallBankRecord*)writeset[0].GetValue();
         checking->amount = balance - amount;
-        memcpy(checking->meta_data, meta_data, METADATA_SIZE);
+        do_spin();
         status.validation_pass = true;
         status.commit = true;
         return status;
@@ -151,6 +142,7 @@ bool LockingSmallBank::Balance::Run() {
   SmallBankRecord *checkingBalance = (SmallBankRecord*)ReadRef(0);
   SmallBankRecord *savingsBalance = (SmallBankRecord*)ReadRef(1);
   this->totalBalance = checkingBalance->amount + savingsBalance->amount;
+  do_spin();
   return true;
 }
 
@@ -167,6 +159,7 @@ bool LockingSmallBank::DepositChecking::Run() {
   SmallBankRecord *checkingBalance = (SmallBankRecord*)(WriteRef(0));
   checkingBalance->amount += this->amount;
   //  // memcpy(checkingBalance->timestamp, this->timestamp, 248);
+  do_spin();
   return true;
 }
 
@@ -182,6 +175,7 @@ LockingSmallBank::TransactSaving::TransactSaving(uint64_t customer,
 bool LockingSmallBank::TransactSaving::Run() {
   SmallBankRecord *savings = (SmallBankRecord*)(WriteRef(0));
   savings->amount += this->amount;
+  do_spin();
   return true;
 }
 
@@ -211,6 +205,7 @@ bool LockingSmallBank::Amalgamate::Run() {
   // // memcpy(((SmallBankRecord*)WriteRef(0))->timestamp, this->timestamp, 248);
   // // memcpy(((SmallBankRecord*)WriteRef(1))->timestamp, this->timestamp, 248);
   // // memcpy(((SmallBankRecord*)WriteRef(2))->timestamp, this->timestamp, 248);
+  do_spin();
   return true;
 }
 
@@ -234,14 +229,54 @@ bool LockingSmallBank::WriteCheck::Run() {
         }
         ((SmallBankRecord*)WriteRef(0))->amount -= amount;
         // // memcpy(((SmallBankRecord*)WriteRef(0))->timestamp, this->timestamp, 248);
+        do_spin();
         return true;
+}
+
+static void process_mv_txn(Action *action)
+{
+        int indices[NUM_CC_THREADS];
+        int index;
+        int *ptr;
+
+        uint32_t num_writes, num_reads, i, thread_id;
+        
+        for (i = 0; i < NUM_CC_THREADS; ++i) 
+                indices[i] = -1;
+        num_writes = action->__writeset.size();
+        for (i = 0; i < num_writes; ++i) {
+                thread_id = action->__writeset[i].threadId;
+                if (indices[thread_id] != -1) {
+                        index = indices[thread_id];
+                        ptr = &action->__writeset[index].next;
+                } else {
+                        ptr = &action->__write_starts[thread_id];
+                }
+                indices[thread_id] = i;
+                *ptr = i;
+        }
+
+        for (i = 0; i < NUM_CC_THREADS; ++i) 
+                indices[i] = -1;
+        num_reads = action->__readset.size();
+        for (i = 0; i < num_reads; ++i) {
+                thread_id = action->__readset[i].threadId;
+                if (indices[thread_id] != -1) {
+                        index = indices[thread_id];
+                        ptr = &action->__readset[index].next;
+                } else {
+                        ptr = &action->__read_starts[thread_id];
+                }
+                indices[thread_id] = i;
+                *ptr = i;
+        }
 }
 
 MVSmallBank::LoadCustomerRange::LoadCustomerRange(uint64_t start, uint64_t end)
   : Action() {
   assert(end >= start);
   this->numCustomers = (end - start + 1);
-
+  
   for (uint64_t i = start; i <= end; ++i) {
     long savings = rand() % 100;
     long checking = rand() % 100;
@@ -251,6 +286,7 @@ MVSmallBank::LoadCustomerRange::LoadCustomerRange(uint64_t start, uint64_t end)
     AddWriteKey(SAVINGS, i, false);
     AddWriteKey(CHECKING, i, false);
   }
+  process_mv_txn(this);
 }
 
 bool MVSmallBank::LoadCustomerRange::Run() {
@@ -270,6 +306,7 @@ MVSmallBank::Balance::Balance(uint64_t customer, char *meta_data) : Action() {
   this->meta_data = meta_data;
   AddReadKey(CHECKING, customer);
   AddReadKey(SAVINGS, customer);
+  process_mv_txn(this);
 }
 
 // Read the customer's checking and savings balance, and add their sum to
@@ -278,6 +315,8 @@ bool MVSmallBank::Balance::Run() {
   SmallBankRecord *checkingBalance = (SmallBankRecord*)Read(0); 
   SmallBankRecord *savingsBalance = (SmallBankRecord*)Read(1);
   this->totalBalance = checkingBalance->amount + savingsBalance->amount;
+  do_spin();
+  /*
   uint32_t meta_int_sz = METADATA_SIZE/4;
   uint32_t *checking_meta = (uint32_t*)checkingBalance->meta_data;
   uint32_t *savings_meta = (uint32_t*)savingsBalance->meta_data;
@@ -285,6 +324,7 @@ bool MVSmallBank::Balance::Run() {
           meta_data[i] = checking_meta[i];
           meta_data[i] += savings_meta[i];
   }
+  */
   return true;
 }
 
@@ -294,6 +334,7 @@ MVSmallBank::DepositChecking::DepositChecking(uint64_t customer, long amount,
   this->amount = amount;
   this->meta_data = meta_data;
   AddWriteKey(CHECKING, customer, true);
+  process_mv_txn(this);
 }
 
 // Deposit "amount" into the customer's checking account.
@@ -301,7 +342,8 @@ bool MVSmallBank::DepositChecking::Run() {
   SmallBankRecord *oldCheckingBalance = (SmallBankRecord*)ReadWrite(0);
   SmallBankRecord *newCheckingBalance = (SmallBankRecord*)GetWriteRef(0);
   newCheckingBalance->amount = oldCheckingBalance->amount + amount;
-  memcpy(newCheckingBalance->meta_data, meta_data, METADATA_SIZE);
+  //  memcpy(newCheckingBalance->meta_data, meta_data, METADATA_SIZE);
+  do_spin();
   return true;
 }
 
@@ -311,6 +353,7 @@ MVSmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount,
         this->amount = amount;
         this->meta_data = meta_data;
         AddWriteKey(SAVINGS, customer, true);
+        process_mv_txn(this);
 }
 
 bool MVSmallBank::TransactSaving::Run() {
@@ -318,7 +361,8 @@ bool MVSmallBank::TransactSaving::Run() {
   SmallBankRecord *oldSavings = (SmallBankRecord*)ReadWrite(0);
   SmallBankRecord *savings = (SmallBankRecord*)GetWriteRef(0);
   savings->amount = oldSavings->amount + this->amount;
-  memcpy(savings->meta_data, meta_data, METADATA_SIZE);
+  //  memcpy(savings->meta_data, meta_data, METADATA_SIZE);
+  do_spin();
   return true;
 }
 
@@ -329,6 +373,7 @@ MVSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer, uint64_t toCustomer,
         AddWriteKey(CHECKING, fromCustomer, true);
         AddWriteKey(SAVINGS, fromCustomer, true);
         AddWriteKey(CHECKING, toCustomer, true);
+        process_mv_txn(this);
 }
 
 bool MVSmallBank::Amalgamate::Run() {
@@ -344,22 +389,25 @@ bool MVSmallBank::Amalgamate::Run() {
   fromChecking->amount = 0;
   fromSavings->amount = 0;
   toChecking->amount = sum+oldChecking;
-  memcpy(fromChecking->meta_data, meta_data, METADATA_SIZE);
-  memcpy(fromSavings->meta_data, meta_data, METADATA_SIZE);
-  memcpy(toChecking->meta_data, meta_data, METADATA_SIZE);
+  //  memcpy(fromChecking->meta_data, meta_data, METADATA_SIZE);
+  //  memcpy(fromSavings->meta_data, meta_data, METADATA_SIZE);
+  //  memcpy(toChecking->meta_data, meta_data, METADATA_SIZE);
+  do_spin();
   return true;
 }
 
 MVSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount, 
-                                    char *meta_data) {
+                                    char *meta_data) : Action()
+{
   this->amount = amount;
   this->meta_data = meta_data;
   AddReadKey(SAVINGS, customer);
   AddWriteKey(CHECKING, customer, true);
+  process_mv_txn(this);
 }
 
 bool MVSmallBank::WriteCheck::Run() {
-  assert(__readset.size() == 2);
+  assert(__readset.size() == 1);
   assert(__writeset.size() == 1);
   long sum = 0;
   sum += ((SmallBankRecord*)Read(0))->amount;
@@ -369,7 +417,8 @@ bool MVSmallBank::WriteCheck::Run() {
     amount += 1;
   }
   ((SmallBankRecord*)GetWriteRef(0))->amount -= amount;
-  memcpy(((SmallBankRecord*)GetWriteRef(0))->meta_data, meta_data,
-         METADATA_SIZE);
+  //  memcpy(((SmallBankRecord*)GetWriteRef(0))->meta_data, meta_data,
+  //         METADATA_SIZE);
+  do_spin();
   return true;
 }

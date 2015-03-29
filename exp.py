@@ -209,7 +209,7 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
     os.system("mkdir -p outdir")
     if not os.path.exists(outdep):
 
-        val_range = gen_range(lowThreads, highThreads, 2)
+        val_range = gen_range(lowThreads, highThreads, 4)
 
         for i in val_range:
             os.system("rm results.txt")
@@ -409,23 +409,37 @@ def uncontended_1000():
     os.system("touch " + os.path.join(outdir, "." + "locking_8r2rmw.txt"))
 
 def hek_uncontended_1000():
-#    theta_range = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-#    result_dir = "results/hekaton/theta"
-#    for i in range(0, 5):
-#        for theta in theta_range:
-#            si_expt(result_dir, "si.txt", 40, 40, 3000000, 1000000, 1, 1, theta, 1000)
-#            hek_expt(result_dir, "hek.txt", 40, 40, 3000000, 1000000, 1, 1, theta, 1000)
-#            occ_expt(result_dir, "occ.txt", 40, 40, 3000000, 1000000, 1, 1, theta, 1000)
-#            locking_expt(result_dir, "locking.txt", 40, 40, 3000000, 1000000, 1, 1, theta, 1000)
 
-    for i in range (0, 10):
-        result_dir = "results/hekaton/small_bank/"
-        si_expt(result_dir, "si_small_bank.txt", 4, 40, 5000000, 1000000, 3, 1, 0.0, 1000)
-        hek_expt(result_dir, "hek_small_bank.txt", 4, 40, 5000000, 1000000, 3, 1, 0.0, 1000)
+#     for i in range (0, 10):
+#         result_dir = "results/hekaton/small_bank/uncontended/"
+#         si_expt(result_dir, "si_small_bank.txt", 4, 40, 1000000, 100000, 3, 1, 0.0, 1000)
+#         hek_expt(result_dir, "hek_small_bank.txt", 4, 40, 1000000, 100000, 3, 1, 0.0, 1000)
+#         occ_expt(result_dir, "occ_small_bank.txt", 4, 40, 1000000, 100000, 3, 1, 0.0, 1000)
+#         mv_expt(result_dir, "mv_small_bank.txt", 4, 1000000, 100000, 4, 36, 3, 1, 0.0, 1000)
+# 
+#         result_dir = "results/hekaton/small_bank/contended/"
+#         si_expt(result_dir, "si_small_bank.txt", 4, 40, 1000000, 25, 3, 1, 0.0, 1000)
+#         hek_expt(result_dir, "hek_small_bank.txt", 4, 40, 1000000, 25, 3, 1, 0.0, 1000)
+#         occ_expt(result_dir, "occ_small_bank.txt", 4, 40, 1000000, 25, 3, 1, 0.0, 1000)
+#         mv_expt(result_dir, "mv_small_bank.txt", 4, 1000000, 25, 4, 36, 3, 1, 0.0, 1000)
+# 
+
+    theta_range = [100000,50000,10000,5000,1000,500,100,50,10,5]
+    result_dir = "results/hekaton/small_bank/varying"
+    for i in range(0, 10):
+        for theta in theta_range:
+            si_expt(result_dir, "si.txt", 40, 40, 3000000, theta, 3, 1, 0.0, 1000)
+            hek_expt(result_dir, "hek.txt", 40, 40, 3000000, theta, 3, 1, 0.0, 1000)
+            occ_expt(result_dir, "occ.txt", 40, 40, 3000000, theta, 3, 1, 0.0, 1000)
+            mv_expt(result_dir, "mv.txt", 4, 1000000, theta, 36, 36, 3, 1, 0.0, 1000)
+
+
+#        si_expt(result_dir, "si_small_bank.txt", 4, 40, 1000000, 100, 3, 1, 0.0, 1000)
+
 #        si_expt(result_dir, "si_small_bank.txt", 24, 40, 5000000, 1000000, 3, 1, 0.0, 1000)
 #        hek_expt(result_dir, "hek_small_bank.txt", 24, 40, 5000000, 1000000, 3, 1, 0.0, 1000)
 
-#         occ_expt(result_dir, "occ_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000)
+
 #         locking_expt(result_dir, "locking_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
 # 
 #         result_dir = "results/hekaton/ycsb/contended/10rmw/"
@@ -449,7 +463,7 @@ def hek_uncontended_1000():
 #        locking_expt(result_dir, "locking_10rmw.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000)
 
 
-#        mv_expt(result_dir, "mv_10rmw.txt", 10, 1000000, 1000000, 2, 30, 0, 1, 0.0, 1000)
+
 #        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
 
 

@@ -86,6 +86,8 @@ hek_status balance::Run()
         SmallBankRecord *checking = (SmallBankRecord*)Read(0);
         SmallBankRecord *savings = (SmallBankRecord*)Read(1);
         this->total_balance = checking->amount + savings->amount;
+        do_spin();
+        return ret;
 }
 
 deposit_checking::deposit_checking(uint64_t customer_id, long amount,
@@ -110,6 +112,7 @@ hek_status deposit_checking::Run()
         SmallBankRecord *old_rec = (SmallBankRecord*)Read(0);
         SmallBankRecord *new_rec = (SmallBankRecord*)GetWriteRef(0);
         new_rec->amount = old_rec->amount + this->amount;
+        do_spin();
         return ret;
 }
 
@@ -135,6 +138,7 @@ hek_status transact_saving::Run()
         SmallBankRecord *read = (SmallBankRecord*)Read(0);
         SmallBankRecord *write = (SmallBankRecord*)GetWriteRef(0);
         write->amount = read->amount + this->amount;
+        do_spin();
         return ret;
 }
 
@@ -176,7 +180,7 @@ hek_status amalgamate::Run()
                 + to_checking->amount;
         from_checking_write->amount = 0;
         from_savings_write->amount = 0;
-
+        do_spin();
         return ret;
 }
 
@@ -211,5 +215,6 @@ hek_status write_check::Run()
         if (sum < 0)
                 amount += 1;
         write_checking->amount = balance - amount;
+        do_spin();
         return ret;
 }

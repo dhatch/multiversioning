@@ -112,10 +112,11 @@ mix_occ_action::mix_occ_action() : readonly_action()
 
 occ_txn_status mix_occ_action::Run()
 {
-        uint32_t i, j, num_reads, num_writes;
+        //        uint32_t i, j, num_reads, num_writes;
         occ_txn_status status;
         status.commit =true;
         status.validation_pass = true;
+        /*
         num_reads = readset.size();
         num_writes = writeset.size();
         for (i = 0; i < num_reads; ++i) {
@@ -131,6 +132,7 @@ occ_txn_status mix_occ_action::Run()
                         *((uint32_t*)&write_ptr[j*100]) += (i+j);
                 }
         }
+        */
         return status;
 }
 

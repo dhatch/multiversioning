@@ -696,6 +696,7 @@ static ActionBatch generate_small_bank_db(uint64_t num_customers,
                                                                 start+records_per_thread);
                 cur_action->__version = CREATE_MV_TIMESTAMP(1, i);
                 start += records_per_thread;
+                txns[i] = cur_action;
         }
         batch = {
                 txns,

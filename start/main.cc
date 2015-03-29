@@ -49,7 +49,7 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
 
   for (uint32_t i = 0; i < numTxns; ++i) {
     seenKeys.clear();
-    int flip = rand() % 100;
+    //    int flip = rand() % 100;
     if (experiment == 2) {
             GenRandomSmallBank(temp_buf, METADATA_SIZE);
         int txnType = rand() % 1;
@@ -256,6 +256,7 @@ void LockingExperiment(LockingConfig config) {
       (int)(config.numThreads-1),
       2*(uint64_t)(config.numRecords),
       recordSize,
+      (uint32_t)recordSize,
     };
 
     tables = (Table**)malloc(sizeof(Table*));
@@ -306,6 +307,7 @@ void LockingExperiment(LockingConfig config) {
       (int)(config.numThreads-1),
       (uint64_t)(config.numRecords),
       sizeof(SmallBankRecord),
+      sizeof(SmallBankRecord),
     };
 
     // Checking table config
@@ -315,6 +317,7 @@ void LockingExperiment(LockingConfig config) {
       0,
       (int)(config.numThreads-1),
       (uint64_t)(config.numRecords),
+      sizeof(SmallBankRecord),
       sizeof(SmallBankRecord),
     };
 

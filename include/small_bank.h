@@ -8,7 +8,7 @@
 #include <occ_action.h>
 #include <action.h>
 
-#define METADATA_SIZE 256
+#define METADATA_SIZE 0
 
 enum SmallBankTable {
   CHECKING = 0,
