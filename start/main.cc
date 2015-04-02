@@ -45,26 +45,25 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
   std::set<uint64_t> seenKeys; 
 
   EagerRecordInfo recordInfo;
-  char temp_buf[248];
 
   for (uint32_t i = 0; i < numTxns; ++i) {
     seenKeys.clear();
     //    int flip = rand() % 100;
     if (experiment == 2) {
-            GenRandomSmallBank(temp_buf, METADATA_SIZE);
-        int txnType = rand() % 1;
+        int txnType = rand() % 5;
+        assert(txnType >= 0 && txnType < 5);
         if (txnType == 0) {             // Balance
           uint64_t customer = (uint64_t)(rand() % numRecords);
 
           ret[i] = new LockingSmallBank::Balance(customer, numRecords, 
-                                                 temp_buf);
+                                                 NULL);
         }
         else if (txnType == 1) {        // DepositChecking
           uint64_t customer = (uint64_t)(rand() % numRecords);
           long amount = (long)(rand() % 25);
           ret[i] = new LockingSmallBank::DepositChecking(customer, amount, 
                                                          numRecords,
-                                                         temp_buf);
+                                                         NULL);
 
         }
         else if (txnType == 2) {        // TransactSaving
@@ -72,7 +71,7 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
           long amount = (long)(rand() % 25);
           ret[i] = new LockingSmallBank::TransactSaving(customer, amount, 
                                                         numRecords,
-                                                        temp_buf);
+                                                        NULL);
         }
         else if (txnType == 3) {        // Amalgamate
           uint64_t fromCustomer = (uint64_t)(rand() % numRecords);
@@ -82,7 +81,7 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
           } while (toCustomer == fromCustomer);
           ret[i] = new LockingSmallBank::Amalgamate(fromCustomer, toCustomer, 
                                                     numRecords,
-                                                    temp_buf);
+                                                    NULL);
         }
         else if (txnType == 4) {        // WriteCheck
           uint64_t customer = (uint64_t)(rand() % numRecords);
@@ -92,7 +91,7 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
           }
           ret[i] = new LockingSmallBank::WriteCheck(customer, amount, 
                                                     numRecords,
-                                                    temp_buf);
+                                                    NULL);
         }      
     }
     else if (experiment < 2) {
@@ -346,6 +345,14 @@ void LockingExperiment(LockingConfig config) {
                                            tables);
 
   // Setup input
+  EagerActionBatch *dummy = SetupLockingInput(config.txnSize, 
+                                              config.numThreads,
+                                              10000,
+                                              config.numRecords,
+                                              config.experiment,
+                                              config.distribution,
+                                              config.theta);
+          
   EagerActionBatch *batches = SetupLockingInput(config.txnSize, 
                                                 config.numThreads,
                                                 config.numTxns,
@@ -353,17 +360,33 @@ void LockingExperiment(LockingConfig config) {
                                                 config.experiment,
                                                 config.distribution,
                                                 config.theta);
+  EagerActionBatch *batches2 = SetupLockingInput(config.txnSize, 
+                                                config.numThreads,
+                                                config.numTxns,
+                                                config.numRecords,
+                                                config.experiment,
+                                                config.distribution,
+                                                config.theta);
+
   int success = pin_thread(79);
   assert(success == 0);
 
-
+  pin_memory();
   
   for (uint32_t i = 0; i < config.numThreads; ++i) {
       threads[i]->Run();
       threads[i]->WaitInit();
   }
 
-  pin_memory();
+  
+  for (uint32_t i = 0; i < config.numThreads; ++i) {
+          inputs[i]->EnqueueBlocking(dummy[i]);
+  }
+  for (uint32_t i = 0; i < config.numThreads; ++i) {
+          outputs[i]->DequeueBlocking();
+  }
+  
+
   barrier();
 
   timespec start_time, end_time, elapsed_time;
@@ -371,6 +394,7 @@ void LockingExperiment(LockingConfig config) {
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);  
   for (uint32_t i = 0; i < config.numThreads; ++i) {
     inputs[i]->EnqueueBlocking(batches[i]);
+    inputs[i]->EnqueueBlocking(batches2[i]);
   }
 
   for (uint32_t i = 0; i < config.numThreads; ++i) {
