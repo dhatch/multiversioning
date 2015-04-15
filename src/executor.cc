@@ -296,7 +296,7 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
         */
         for (int i = config.threadId; i < (int)batch.numActions;
              i += config.numExecutors) {
-                while (pendingList->Size() > 500) {
+                while (pendingList->Size() > 0) {
                         ExecPending();
                 }
 
@@ -397,8 +397,7 @@ bool Executor::ProcessSingle(Action *action) {
                 } else {      // cmp_and_swap failed
                         return false;
                 }
-        }
-        else {        // action->state == SUBSTANTIATED
+        } else {        // action->state == SUBSTANTIATED
                 return true;
         }
 }

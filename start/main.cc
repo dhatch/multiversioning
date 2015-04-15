@@ -390,7 +390,9 @@ void LockingExperiment(LockingConfig config) {
   barrier();
 
   timespec start_time, end_time, elapsed_time;
-  //  ProfilerStart("/home/jmf/multiversioning/locking.prof");
+
+  if (PROFILE)
+          ProfilerStart("/home/jmf/multiversioning/locking.prof");
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);  
   for (uint32_t i = 0; i < config.numThreads; ++i) {
     inputs[i]->EnqueueBlocking(batches[i]);
@@ -401,7 +403,7 @@ void LockingExperiment(LockingConfig config) {
     outputs[i]->DequeueBlocking();
   }
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
-  //  ProfilerStop();
+  ProfilerStop();
   elapsed_time = diff_time(end_time, start_time);
 
   double elapsedMilli = 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;

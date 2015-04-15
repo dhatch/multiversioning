@@ -782,7 +782,9 @@ static void write_results(MVConfig config, timespec elapsed_time)
         result_file << "ccthreads:" << config.numCCThreads << " ";
         result_file << "workerthreads:" << config.numWorkerThreads << " ";
         result_file << "records:" << config.numRecords << " ";
-        if (config.experiment == 0) {
+        if (SMALL_RECORDS)
+                result_file << "micro ";
+        else if (config.experiment == 0) {
                 result_file << "10rmw ";
         } else if (config.experiment == 1) {
                 result_file << "8r2rmw ";

@@ -215,6 +215,7 @@ bool RMWAction::Run()
         for (i = 0; i < num_reads; ++i) {
                 char *field_ptr = (char*)Read(i);
                 if (SMALL_RECORDS) {
+                        assert(false);
                         counter += *((uint64_t*)field_ptr);
                 } else {
                         for (j = 0; j < num_fields; ++j) 
@@ -225,6 +226,7 @@ bool RMWAction::Run()
                 if (__writeset[i].is_rmw) {
                         char *field_ptr = (char*)ReadWrite(i);
                         if (SMALL_RECORDS) {
+                                assert(false);
                                 counter += *((uint64_t*)field_ptr);
                         } else {
                                 for (j = 0; j < num_fields; ++j)
@@ -238,6 +240,7 @@ bool RMWAction::Run()
                 char *read_ptr = (char*)ReadWrite(i);
                 char *write_ptr = (char*)GetWriteRef(i);
                 if (SMALL_RECORDS) {
+                        assert(false);
                         *((uint64_t*)write_ptr) =
                                 counter + *((uint64_t*)read_ptr);
                 } else {

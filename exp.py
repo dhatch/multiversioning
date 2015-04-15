@@ -35,8 +35,8 @@ def main():
 #    test_cc()
 #    exp_0()
 #    occ_uncontended_1000()
-    hek_uncontended_1000()
-#    search_best()
+#    hek_uncontended_1000()
+    search_best()
 #    test_cc()
 #    ccontrol()
     
@@ -785,13 +785,13 @@ def check_increasing(outfile):
             t0 = times[num_entries-1]["time"]
             t1 = times[num_entries-2]["time"]
             t2 = times[num_entries-3]["time"]
-            return t0 > t1 and t1 > t2 
+            return t0 > t1 and t1 > t2
     return False
     
     
 
 def search_best_inner(expt, theta, num_records, out_dir):    
-    thread_range = [40]
+    thread_range = [4,8,12,16,20,24,28,32,36,40]
     prev_best = 0
     for t in thread_range:
         filename = str(t) + ".txt"
@@ -837,28 +837,33 @@ def search_best_theta(expt, out_dir):
 def search_best():
 
 
-    for i in range(1, 5):
+    for i in range(14, 16):
         
-        bohm_dir = os.path.join("results/hekaton/theta/bohm")
-        temp = os.path.join(bohm_dir, str(i))
-        search_best_theta(1, temp)
+#        bohm_dir = os.path.join("results/hekaton/theta/bohm")
+#        temp = os.path.join(bohm_dir, str(i))
+#        search_best_theta(1, temp)
 #        
-#        high_contention = "results/hekaton/ycsb/contended/8r2rmw/bohm/"
-#        temp = os.path.join(high_contention, str(i))
-#        search_best_inner(1, 0.9, 1000000, temp)
-#
-#        high_contention = "results/hekaton/ycsb/contended/10rmw/bohm/"
-#        temp = os.path.join(high_contention, str(i))
-#        search_best_inner(0, 0.9, 1000000, temp)
-# 
-#        low_contention = "results/hekaton/ycsb/uncontended/10rmw/bohm/"
-#        temp = os.path.join(low_contention, str(i))
-#        search_best_inner(0, 0.0, 1000000, temp)
-# 
-#        low_contention = "results/hekaton/ycsb/uncontended/8r2rmw/bohm"
-#        temp = os.path.join(low_contention, str(i))
-#        search_best_inner(1, 0.0, 1000000, temp)
-# 
+
+        high_contention = "results/hekaton/ycsb/contended/10rmw/bohm/"
+        temp = os.path.join(high_contention, str(i))
+        search_best_inner(0, 0.9, 1000000, temp)
+
+
+
+        high_contention = "results/hekaton/ycsb/contended/8r2rmw/bohm/"
+        temp = os.path.join(high_contention, str(i))
+        search_best_inner(1, 0.9, 1000000, temp)
+
+ 
+        low_contention = "results/hekaton/ycsb/uncontended/10rmw/bohm/"
+        temp = os.path.join(low_contention, str(i))
+        search_best_inner(0, 0.0, 1000000, temp)
+ 
+        low_contention = "results/hekaton/ycsb/uncontended/8r2rmw/bohm"
+        temp = os.path.join(low_contention, str(i))
+        search_best_inner(1, 0.0, 1000000, temp)
+
+ 
  
 
 #        temp = os.path.join(high_contention, str(i))
