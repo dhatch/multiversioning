@@ -305,8 +305,9 @@ class LockManagerTable {
       }
       cur = cur->prev;
     }
-
+    
     info->is_held = !conflict;
+    reentrant_unlock(&bucket->latch);
     return !conflict;
   }
   

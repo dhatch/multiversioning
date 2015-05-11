@@ -78,8 +78,10 @@ void
 EagerWorker::CheckReady() {
   for (EagerAction *iter = m_queue_head; iter != NULL; iter = iter->next) {
     if (iter->num_dependencies == 0) {
-      RemoveQueue(iter);
-      DoExec(iter);
+            if (config.mgr->Lock(iter, (uint32_t)this->m_thread)) {
+                    RemoveQueue(iter);
+                    DoExec(iter);
+            }
     }
   }
 }

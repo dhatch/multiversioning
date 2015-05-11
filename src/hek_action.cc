@@ -49,18 +49,16 @@ hek_status hek_rmw_action::Run()
 
 hek_status hek_readonly_action::Run()
 {
-        /*
-        uint32_t num_reads, i;
+        uint32_t i, j, num_reads;
+        assert(readonly == true);
         num_reads = readset.size();
         for (i = 0; i < num_reads; ++i) {
-                if (i == 0) {
-
-                        
-                } else {
-
-                }
-        }
-        */
+                char *read_ptr = (char*)Read(i);
+                for (j = 0; j < 10; ++j) {
+                        uint64_t *write_p = (uint64_t*)&reads[j*100];
+                        *write_p += *((uint64_t*)&read_ptr[j*100]);
+                }                
+        }        
         hek_status temp = {true, true};
         return temp;
 }

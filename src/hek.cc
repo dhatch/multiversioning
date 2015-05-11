@@ -27,10 +27,12 @@ uint64_t hek_worker::get_timestamp()
         //        return (ts << 8);
 }
 
+/*
 uint64_t hek_worker::read_timestamp()
 {
         
 }
+*/
 
 /*
  * Initialize the record allocator. Works in two phases, first do the 
@@ -503,11 +505,13 @@ bool hek_worker::insert_writes(hek_action *txn)
         return true;
 }
 
+/*
 void hek_worker::run_readonly(hek_action *txn)
 {
         assert(txn->is_readonly == true);
         volatile uint64_t cur_time;
 }
+*/
 
 // 1. Run txn logic (may abort due to write-write conflicts)
 // 2. Validate reads

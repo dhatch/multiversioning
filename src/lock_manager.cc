@@ -401,49 +401,61 @@ bool LockManager::SortCmp(const EagerRecordInfo &key1,
 bool
 LockManager::Lock(EagerAction *txn, uint32_t cpu) {
   bool success = true;
+  if (txn->sorted == false) {
+          std::sort(txn->readset.begin(), txn->readset.end(), SortCmp);
+          std::sort(txn->writeset.begin(), txn->writeset.end(), SortCmp);
+          txn->sorted = true;
+  }
+  
   barrier();
     txn->num_dependencies = 0;
     barrier();
     txn->finished_execution = false;
-    size_t read_index = 0;
-    size_t write_index = 0;
 
-    std::sort(txn->readset.begin(), txn->readset.end(), SortCmp);
-    std::sort(txn->writeset.begin(), txn->writeset.end(), SortCmp);
+    uint32_t *read_index = &txn->read_index;
+    uint32_t *write_index = &txn->write_index;
     
     // Acquire locks in sorted order. Both read and write sets are sorted according to 
     // key we need to merge them together.
-    while (read_index < txn->readset.size() && write_index < txn->writeset.size()) {
-        assert(txn->readset[read_index] != txn->writeset[write_index]);
-        if (SortCmp(txn->readset[read_index], txn->writeset[write_index])) {
-            txn->readset[read_index].is_write = false;
-            success &= LockRecord(txn, &txn->readset[read_index], cpu);
-            read_index += 1;
+    while (*read_index < txn->readset.size() && *write_index < txn->writeset.size()) {
+        assert(txn->readset[*read_index] != txn->writeset[*write_index]);
+        if (SortCmp(txn->readset[*read_index], txn->writeset[*write_index])) {
+            txn->readset[*read_index].is_write = false;
+            success = LockRecord(txn, &txn->readset[*read_index], cpu);
+            *read_index += 1;
+            if (!success)
+                    return false;
         }
         else {
-            txn->writeset[write_index].is_write = true;
-            success &= LockRecord(txn, &txn->writeset[write_index], cpu);
-            write_index += 1;
+            txn->writeset[*write_index].is_write = true;
+            success = LockRecord(txn, &txn->writeset[*write_index], cpu);
+            *write_index += 1;
+            if (!success)
+                    return false;
         }
     }
     
     // At most one of these two loops can be executed
-    while (write_index < txn->writeset.size()) {
-        assert(read_index == txn->readset.size());
-        txn->writeset[write_index].is_write = true;
-        success &= LockRecord(txn, &txn->writeset[write_index], cpu);
-        write_index += 1;
+    while (*write_index < txn->writeset.size()) {
+        assert(*read_index == txn->readset.size());
+        txn->writeset[*write_index].is_write = true;
+        success = LockRecord(txn, &txn->writeset[*write_index], cpu);
+        *write_index += 1;
+        if (!success)
+                return false;
     }
-    while (read_index < txn->readset.size()) {        
-        assert(write_index == txn->writeset.size());
-        txn->readset[read_index].is_write = false;
-        success &= LockRecord(txn, &txn->readset[read_index], cpu);
-        read_index += 1;
+    while (*read_index < txn->readset.size()) {        
+        assert(*write_index == txn->writeset.size());
+        txn->readset[*read_index].is_write = false;
+        success = LockRecord(txn, &txn->readset[*read_index], cpu);
+        *read_index += 1;
+        if (!success)
+                return false;
     }
     
-    assert(write_index == txn->writeset.size() && 
-           read_index == txn->readset.size());
+    assert(*write_index == txn->writeset.size() && 
+           *read_index == txn->readset.size());
 
-    FinishAcquisitions(txn);
-    return success;
+    //    FinishAcquisitions(txn);
+    return true;
 }

@@ -131,6 +131,7 @@ occ_txn_status OCCSmallBank::WriteCheck::Run()
 
 LockingSmallBank::Balance::Balance(uint64_t customer, uint64_t numAccounts, 
                                    char *meta)
+        : EagerAction()
 {
   this->totalBalance = 0;
   this->meta_data = meta;
@@ -149,7 +150,9 @@ bool LockingSmallBank::Balance::Run() {
 LockingSmallBank::DepositChecking::DepositChecking(uint64_t customer,
                                                    long amount,
                                                    uint64_t numAccounts,
-                                                   char *meta) {
+                                                   char *meta)
+        : EagerAction()
+{
         this->meta_data = meta;
         this->amount = amount;
         AddWriteKey(CHECKING, customer,numAccounts);
@@ -166,7 +169,9 @@ bool LockingSmallBank::DepositChecking::Run() {
 LockingSmallBank::TransactSaving::TransactSaving(uint64_t customer,
                                                  long amount,
                                                  uint64_t numAccounts,
-                                                 char *meta) {
+                                                 char *meta)
+        : EagerAction()
+{
         this->meta_data = meta;
         this->amount = amount;
         AddWriteKey(SAVINGS, customer, numAccounts);
@@ -182,7 +187,9 @@ bool LockingSmallBank::TransactSaving::Run() {
 LockingSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer,
                                          uint64_t toCustomer,
                                          uint64_t numAccounts,
-                                         char *meta) {
+                                         char *meta)
+        : EagerAction()
+{
         this->meta_data = meta;
         AddWriteKey(CHECKING, fromCustomer, numAccounts);
         AddWriteKey(SAVINGS, fromCustomer, numAccounts);
@@ -211,7 +218,9 @@ bool LockingSmallBank::Amalgamate::Run() {
 
 LockingSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount,
                                          uint64_t numAccounts,
-                                         char *meta) {
+                                         char *meta)
+        : EagerAction()
+{
         this->amount = amount;
         this->meta_data = meta;
         AddReadKey(SAVINGS, customer, numAccounts);

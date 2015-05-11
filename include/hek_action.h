@@ -68,6 +68,7 @@ class hek_action {
         uint64_t end;
         hek_worker *worker;
         bool must_wait;
+        bool readonly;
         
         virtual hek_status Run() = 0;
 
@@ -81,7 +82,7 @@ class hek_rmw_action : public hek_action {
 } __attribute__((__packed__, __aligned__(256)));
 
 class hek_readonly_action : public hek_action {
-        volatile char read[1000];
+        volatile char reads[1000];
  public:
         virtual hek_status Run();
 } __attribute__((__packed__, __aligned__(256)));

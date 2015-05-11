@@ -159,8 +159,17 @@ class EagerAction {
 
     std::vector<struct EagerRecordInfo> shadowWriteset;
     std::vector<struct EagerRecordInfo> shadowReadset;
-    
 
+    bool sorted;
+    uint32_t read_index;
+    uint32_t write_index;
+
+    EagerAction() {
+            sorted = false;
+            read_index = 0;
+            write_index = 0;
+    };
+    
     //    timespec start_time;
     //    timespec end_time;
 
@@ -216,9 +225,14 @@ class EagerAction {
 };
 
 class readonly_eager_action : public EagerAction {
-
+        
  public:
         char __reads[1000];
+
+ readonly_eager_action() : EagerAction() {
+
+        }
+        
         virtual bool Run() {
                 uint32_t i, j, num_reads;
                 char *read_ptr;
@@ -239,6 +253,9 @@ class readonly_eager_action : public EagerAction {
 
 class RMWEagerAction : public EagerAction {
  public:
+ RMWEagerAction() : EagerAction() {
+        }
+        
   virtual bool Run() {
     if (recordSize == 8) {      // longs
       uint64_t counter = 0;
