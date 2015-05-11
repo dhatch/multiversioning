@@ -1,4 +1,7 @@
 #include <mv_action.h>
+#include <table.h>
+
+extern Table** mv_tables;
 
 Action::Action()
 {
@@ -24,6 +27,8 @@ CompositeKey Action::GenerateKey(bool is_rmw, uint32_t tableId, uint64_t key)
 
 void* Action::Read(uint32_t index)
 {
+        //        uint64_t key = __readset[index].key;
+        //        return mv_tables[0]->Get(key);
         MVRecord *record = __readset[index].value;
         if (__readonly == true &&
             GET_MV_EPOCH(__version) == GET_MV_EPOCH(record->createTimestamp)) {
@@ -36,6 +41,8 @@ void* Action::Read(uint32_t index)
 
 void* Action::GetWriteRef(uint32_t index)
 {
+        //        uint64_t key = __writeset[index].key;
+        //        return mv_tables[0]->Get(key);
         MVRecord *record = __writeset[index].value;
         assert(record->value != NULL);
         return record->value;
@@ -43,6 +50,8 @@ void* Action::GetWriteRef(uint32_t index)
 
 void* Action::ReadWrite(uint32_t index)
 {
+        //        uint64_t key = __writeset[index].key;
+        //        return mv_tables[0]->Get(key);
         assert(__writeset[index].is_rmw);
         MVRecord *record = __writeset[index].value;
         return (void*)record->recordLink->value;
@@ -107,10 +116,11 @@ bool mv_readonly::Run()
         for (i = 0; i < num_reads; ++i) {
                 char *read_ptr = (char*)Read(i);
                 for (j = 0; j < 10; ++j) {
-                        uint32_t *write_p = (uint32_t*)&__reads[j*100];
-                        *write_p += *((uint32_t*)&read_ptr[j*100]);
+                        uint64_t *write_p = (uint64_t*)&__reads[j*100];
+                        *write_p += *((uint64_t*)&read_ptr[j*100]);
                 }                
         }
+        
         return true;
 }
 

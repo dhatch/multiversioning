@@ -296,7 +296,7 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
         */
         for (int i = config.threadId; i < (int)batch.numActions;
              i += config.numExecutors) {
-                while (pendingList->Size() > 500) {
+                while (pendingList->Size() > 75) {
                         ExecPending();
                 }
 
@@ -415,9 +415,7 @@ bool Executor::check_ready(Action *action)
         num_writes = action->__writeset.size();
         for (i = 0; i < num_reads; ++i) {
                 assert(action->__readset[i].value != NULL);
-                // barrier();
                 depend_action = action->__readset[i].value->writer;
-                // barrier();
                 if (depend_action != NULL &&
                     depend_action->__state != SUBSTANTIATED &&
                     !ProcessSingle(depend_action)) {
@@ -429,11 +427,9 @@ bool Executor::check_ready(Action *action)
                 if (action->__writeset[i].is_rmw) {
                         prev = action->__writeset[i].value->recordLink;
                         assert(prev != NULL);
-                        // barrier();
                         depend_action = prev->writer;
-                        // barrier();
                         if (depend_action != NULL &&
-                            depend_action->__state != SUBSTANTIATED &&
+                            depend_action->__state != SUBSTANTIATED && 
                             !ProcessSingle(depend_action)) {
                                 ready = false;
                         }

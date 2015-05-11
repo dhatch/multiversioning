@@ -215,6 +215,28 @@ class EagerAction {
     }
 };
 
+class readonly_eager_action : public EagerAction {
+
+ public:
+        char __reads[1000];
+        virtual bool Run() {
+                uint32_t i, j, num_reads;
+                char *read_ptr;
+
+                assert(recordSize == 1000);
+                num_reads = shadowReadset.size();
+                for (i = 0; i < num_reads; ++i) {
+                        read_ptr = (char*)shadowReadset[i].value;
+                        for (j = 0; j < 10; ++j) {
+                                uint64_t *write_p = (uint64_t*)&__reads[j*100];
+                                *write_p += *((uint64_t*)&read_ptr[j*100]);
+                        }
+                                                                         
+                }                
+                return true;
+        }
+};
+
 class RMWEagerAction : public EagerAction {
  public:
   virtual bool Run() {

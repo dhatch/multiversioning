@@ -19,6 +19,38 @@
 
 static uint64_t dbSize = ((uint64_t)1<<36);
 
+Table** mv_tables;
+
+static void setup_ycsb_occ_tables(uint32_t numRecords, uint32_t num_threads)
+{
+        TableConfig tbl_config;
+        //        Table **tables;
+        uint64_t *big_int, i, j;
+        char buf[1000];
+        //        assert(config.experiment < 3);
+        tbl_config = create_table_config(0, numRecords, 0,
+                                         num_threads, numRecords,
+                                         recordSize);
+        mv_tables = (Table**)malloc(sizeof(Table*));
+        mv_tables[0] = new(0) Table(tbl_config);
+        for ( i = 0; i < numRecords; ++i) {
+                big_int = (uint64_t*)buf;
+                if (recordSize == 1000) {
+                        //                        assert(OCC_RECORD_SIZE(recordSize) == 1008);
+                        for (j = 0; j < 125; ++j) 
+                                big_int[j] = (uint64_t)rand();
+                        big_int[0] = 0;
+                        mv_tables[0]->Put(i, buf);
+                } else if (recordSize == 8) {
+                        //                        assert(OCC_RECORD_SIZE(recordSize) == 16);
+                        big_int[0] = 0;
+                        big_int[1] = i;
+                        mv_tables[0]->Put(i, buf);
+                }
+        }
+        mv_tables[0]->SetInit();
+}
+
 static void CreateQueues(int cpuNumber, uint32_t subCount, 
                          SimpleQueue<ActionBatch>*** OUT_PUB_QUEUES,
                          SimpleQueue<ActionBatch>*** OUT_SUB_QUEUES) {
@@ -498,7 +530,7 @@ static Action* generate_single_rmw_action(RecordGenerator *generator,
         int indices[NUM_CC_THREADS];
         int index;
         int *ptr;
-                
+        
         action = new RMWAction((uint64_t)rand());
         for(i = 0; i < NUM_CC_THREADS; ++i)
                 indices[i] = -1;
@@ -558,12 +590,30 @@ static Action* generate_readonly(RecordGenerator *gen, MVConfig config)
         uint64_t key;
         CompositeKey mv_key;
         std::set<uint64_t> seen_keys;
+        int indices[NUM_CC_THREADS];
+        int index;
+        int *ptr;
+
+        for (i = 0; i < NUM_CC_THREADS; ++i)
+                indices[i] = -1;
+        UniformGenerator uniform_gen(config.numRecords);
         act = new mv_readonly();
         for (i = 0; i < config.read_txn_size; ++i) {
-                key = GenUniqueKey(gen, &seen_keys);
+                if (i < 10)
+                        key = GenUniqueKey(gen, &seen_keys);
+                else
+                        key = GenUniqueKey(&uniform_gen, &seen_keys);
                 mv_key = create_mv_key(0, key, false);
                 act->__readset.push_back(mv_key);
                 act->__combinedHash |= (((uint64_t)1)<<mv_key.threadId);
+                if (indices[mv_key.threadId] != -1) {
+                        index = indices[mv_key.threadId];
+                        ptr = &act->__readset[index].next;
+                } else {
+                        ptr = &act->__read_starts[mv_key.threadId];
+                }
+                indices[mv_key.threadId] = i;
+                *ptr = i;
         }
         return act;
 }
@@ -960,6 +1010,8 @@ void do_mv_experiment(MVConfig config)
         schedThreads = setup_scheduler_threads(config, &schedInputQueue,
                                                &schedOutputQueues,
                                                schedGCQueues);
+        setup_ycsb_occ_tables(config.numRecords, config.numCCThreads+config.numWorkerThreads);
+
         mv_setup_input_array(&input_placeholder, config);
         execThreads = setup_executors(config, schedOutputQueues, outputQueue,
                                       schedGCQueues);

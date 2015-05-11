@@ -27,6 +27,11 @@ uint64_t hek_worker::get_timestamp()
         //        return (ts << 8);
 }
 
+uint64_t hek_worker::read_timestamp()
+{
+        
+}
+
 /*
  * Initialize the record allocator. Works in two phases, first do the 
  * allocation, then link up everything.
@@ -370,7 +375,7 @@ bool hek_worker::validate_single(hek_action *txn, hek_key *key)
         uint64_t vis_ts, read_ts, record_key, end_ts, vis_txn_ts, read_txn_ts;
         uint32_t table_id;
 
-        if (SNAPSHOT_ISOLATION)
+        if (SNAPSHOT_ISOLATION || txn->readonly == true)
                 end_ts = HEK_TIME(txn->begin);
         else 
                 end_ts = HEK_TIME(txn->end);
@@ -496,6 +501,12 @@ bool hek_worker::insert_writes(hek_action *txn)
         }
 
         return true;
+}
+
+void hek_worker::run_readonly(hek_action *txn)
+{
+        assert(txn->is_readonly == true);
+        volatile uint64_t cur_time;
 }
 
 // 1. Run txn logic (may abort due to write-write conflicts)

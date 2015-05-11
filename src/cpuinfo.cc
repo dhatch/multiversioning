@@ -127,7 +127,7 @@ alloc_mem(size_t size, int cpu) {
     return malloc(size);
   }
   else {
-    //    return malloc(size);
+          //          return malloc(size);
 
           int numa_node = numa_node_of_cpu(cpu);
           numa_set_strict(1);
@@ -183,6 +183,7 @@ void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
 }
 
 void* alloc_interleaved_all(size_t size) {
+        //        return alloc_mem(size, 0);
   void *buf = numa_alloc_interleaved(size);
   assert(buf != NULL);
 

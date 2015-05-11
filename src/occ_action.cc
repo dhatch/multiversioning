@@ -94,8 +94,8 @@ occ_txn_status readonly_action::Run()
         for (i = 0; i < num_reads; ++i) {
                 read_ptr = (char*)readset[i].StartRead();
                 for (j = 0; j < 10; ++j) {
-                        uint32_t *write_p = (uint32_t*)&__reads[j*100];
-                        *write_p += *((uint32_t*)&read_ptr[j*100]);
+                        uint64_t *write_p = (uint64_t*)&__reads[j*100];
+                        *write_p += *((uint64_t*)&read_ptr[j*100]);
                 }
                 if (readset[i].FinishRead() == false) {
                         status.validation_pass = false;

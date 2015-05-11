@@ -31,10 +31,40 @@ int NumProcs;
 uint32_t numLockingRecords;
 uint64_t recordSize;
 
+readonly_eager_action* create_readonly_eager(uint64_t numRecords,
+                                             RecordGenerator *gen,
+                                             uint32_t txnSize) 
+{
+        readonly_eager_action *action;
+        uint32_t i;
+        uint64_t key;
+        std::set<uint64_t> seen_keys;
+        UniformGenerator uniform_gen(numRecords);
+        EagerRecordInfo record_info;
+        
+        action = new readonly_eager_action();
+        for (i = 0; i < txnSize; ++i) {
+                if (i < 10) {
+                        key = GenUniqueKey(gen, &seen_keys);
+                } else {
+                        key = GenUniqueKey(&uniform_gen, &seen_keys);
+                }
+                record_info.is_write = false;
+                record_info.record.key = key;
+                record_info.record.hash = record_info.record.Hash() % numRecords;
+                action->readset.push_back(record_info);
+                action->shadowReadset.push_back(record_info);
+        }
+        return action;
+}
+
 EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
                                              uint64_t numRecords, 
                                              uint32_t experiment,
-                                             RecordGenerator *gen) { 
+                                             uint32_t read_pct,
+                                             uint32_t read_txn_size,
+                                             RecordGenerator *gen) {
+        assert(read_pct <= 100);
   std::cout << "Num records: " << numRecords << "\n";
   std::cout << "Txn size: " << txnSize << "\n";
   numLockingRecords = numRecords;
@@ -48,7 +78,7 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
 
   for (uint32_t i = 0; i < numTxns; ++i) {
     seenKeys.clear();
-    //    int flip = rand() % 100;
+    int flip = rand() % 100;
     if (experiment == 2) {
         int txnType = rand() % 5;
         assert(txnType >= 0 && txnType < 5);
@@ -95,49 +125,53 @@ EagerAction** CreateSingleLockingActionBatch(uint32_t numTxns, uint32_t txnSize,
         }      
     }
     else if (experiment < 2) {
+            EagerAction *action = NULL;
+            if (flip < read_pct) {
+                    action = create_readonly_eager(numRecords, gen, read_txn_size);
+            } else {
+                    action = new RMWEagerAction();    
+                    for (uint32_t j = 0; j < txnSize; ++j) {
+                            while (true) {
+                                    uint64_t key = gen->GenNext();
+                                    if (seenKeys.find(key) == seenKeys.end()) {
+                                            seenKeys.insert(key);
+                                            recordInfo.is_write = true;
+                                            recordInfo.record.key = key;
+                                            recordInfo.record.hash = recordInfo.record.Hash() % numRecords;
+                                            if (experiment == 0) {
+                                                    //                    if (flip < 50) {
+                                                    //                            action->readset.push_back(recordInfo);
+                                                    //                            action->shadowReadset.push_back(recordInfo);
+                                                    //                    } else if (j < 5) {
 
-      EagerAction *action = new RMWEagerAction();    
-      for (uint32_t j = 0; j < txnSize; ++j) {
-        while (true) {
-          uint64_t key = gen->GenNext();
-          if (seenKeys.find(key) == seenKeys.end()) {
-            seenKeys.insert(key);
-            recordInfo.is_write = true;
-            recordInfo.record.key = key;
-            recordInfo.record.hash = recordInfo.record.Hash() % numRecords;
-            if (experiment == 0) {
-//                    if (flip < 50) {
-//                            action->readset.push_back(recordInfo);
-//                            action->shadowReadset.push_back(recordInfo);
-//                    } else if (j < 5) {
-
-                    recordInfo.is_write = true;
-                    action->shadowWriteset.push_back(recordInfo);
-                    action->writeset.push_back(recordInfo);
-                            //                    }
-            }
-            else if (experiment == 1) {
-//                    if (flip < 0) {
-//                            recordInfo.is_write = false;
-//                            action->readset.push_back(recordInfo);
-//                            action->shadowReadset.push_back(recordInfo);
-                    if (j < 2) {
-                            recordInfo.is_write = true;
-                            action->writeset.push_back(recordInfo);
-                            action->shadowWriteset.push_back(recordInfo);
-                    } else {
-                            recordInfo.is_write = false;
-                            action->readset.push_back(recordInfo);
-                            action->shadowReadset.push_back(recordInfo);
-                    }
-            }
+                                                    recordInfo.is_write = true;
+                                                    action->shadowWriteset.push_back(recordInfo);
+                                                    action->writeset.push_back(recordInfo);
+                                                    //                    }
+                                            }
+                                            else if (experiment == 1) {
+                                                    //                    if (flip < 0) {
+                                                    //                            recordInfo.is_write = false;
+                                                    //                            action->readset.push_back(recordInfo);
+                                                    //                            action->shadowReadset.push_back(recordInfo);
+                                                    if (j < 2) {
+                                                            recordInfo.is_write = true;
+                                                            action->writeset.push_back(recordInfo);
+                                                            action->shadowWriteset.push_back(recordInfo);
+                                                    } else {
+                                                            recordInfo.is_write = false;
+                                                            action->readset.push_back(recordInfo);
+                                                            action->shadowReadset.push_back(recordInfo);
+                                                    }
+                                            }
             
 
-          }
-          break;
-        }
+                                    }
+                                    break;
+                            }
 
-      }
+                    }
+            }
       //    std::sort(action->writeset.begin(), action->writeset.end(), LockManager::SortCmp);
       ret[i] = action;
     }
@@ -162,7 +196,8 @@ EagerActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads,
                                     uint32_t numTxns, uint32_t numRecords, 
                                     uint32_t experiment,
                                     uint32_t distribution,
-                                    double theta)
+                                    double theta, uint32_t read_pct,
+                                    uint32_t read_txn_size)
 {
   RecordGenerator *gen = NULL;
   if (distribution == 0) {
@@ -177,7 +212,7 @@ EagerActionBatch* SetupLockingInput(uint32_t txnSize, uint32_t numThreads,
   for (uint32_t i = 0; i < numThreads; ++i) {
     EagerAction **actions = 
       CreateSingleLockingActionBatch(txnsPerThread, txnSize, numRecords, 
-                                     experiment,
+                                     experiment, read_pct, read_txn_size,
                                      gen);
     ret[i] = {
       txnsPerThread,
@@ -350,8 +385,10 @@ void LockingExperiment(LockingConfig config) {
                                               10000,
                                               config.numRecords,
                                               config.experiment,
-                                              config.distribution,
-                                              config.theta);
+                                              config.distribution, 
+                                              config.theta,
+                                              config.read_pct,
+                                              config.read_txn_size);
           
   EagerActionBatch *batches = SetupLockingInput(config.txnSize, 
                                                 config.numThreads,
@@ -359,14 +396,19 @@ void LockingExperiment(LockingConfig config) {
                                                 config.numRecords,
                                                 config.experiment,
                                                 config.distribution,
-                                                config.theta);
+                                                config.theta,
+                                                config.read_pct,
+                                                config.read_txn_size);
+
   EagerActionBatch *batches2 = SetupLockingInput(config.txnSize, 
                                                 config.numThreads,
                                                 config.numTxns,
                                                 config.numRecords,
                                                 config.experiment,
                                                 config.distribution,
-                                                config.theta);
+                                                 config.theta,
+                                                 config.read_pct,
+                                                 config.read_txn_size);
 
   int success = pin_thread(79);
   assert(success == 0);

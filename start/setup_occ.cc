@@ -67,9 +67,14 @@ readonly_action* generate_readonly(OCCConfig config, RecordGenerator *gen)
         int i;
         uint64_t key;
         std::set<uint64_t> seen_keys;
+        UniformGenerator uniform_gen(config.numRecords);
+        
         act = new readonly_action();
         for (i = 0; i < config.read_txn_size; ++i) {
-                key = GenUniqueKey(gen, &seen_keys);
+                if (i < 10) 
+                        key = GenUniqueKey(gen, &seen_keys);
+                else
+                        key = GenUniqueKey(&uniform_gen, &seen_keys);
                 act->AddReadKey(0, key, false);
         }
         return act;

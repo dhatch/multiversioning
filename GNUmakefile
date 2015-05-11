@@ -1,5 +1,5 @@
 CFLAGS=-O2 -g -Wall -Wextra -Werror -std=c++0x -DPROFILE=0 -Wno-sign-compare 
-CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=1
+CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0
 LIBS=-lnuma -lpthread -lrt -lcityhash -lprofiler
 CXX=g++
 

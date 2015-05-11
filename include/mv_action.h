@@ -130,6 +130,7 @@ class InsertAction : public Action {
 
 class mv_readonly : public Action {
  protected:
+        //        volatile uint64_t __sum;
         char __reads[1000];
  public:
         mv_readonly();
