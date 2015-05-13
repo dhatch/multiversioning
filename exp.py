@@ -6,15 +6,15 @@ import os.path
 import clean
 
 
-fmt_locking = "build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --read_pct 1 --read_txn_size 10000"
+fmt_locking = "build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --read_pct {7} --read_txn_size 10000"
 
-fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size 10 --experiment {4} --record_size {7} --distribution {5} --theta {6} --read_pct 0 --read_txn_size 10"
+fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size 10 --experiment {4} --record_size {7} --distribution {5} --theta {6} --read_pct {8} --read_txn_size 10000"
 
-fmt_occ = "build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 1 --read_txn_size 10000"
+fmt_occ = "build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct {7} --read_txn_size 10000"
 
-fmt_hek = "build/db --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 0 --read_txn_size 5"
+fmt_hek = "build/db --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct {7} --read_txn_size 10000"
 
-fmt_si = "build/si --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct 0 --read_txn_size 5"
+fmt_si = "build/si --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct {7} --read_txn_size 5"
 
 fmt_multi_cc = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size {8} --experiment {4} --record_size {7} --distribution {5} --theta {6} --read_pct 0 --read_txn_size 10"
 
@@ -178,7 +178,7 @@ def mv_expt_single(outdir, filename, ccThreads, txns, records, workers, expt,
     os.system("rm results.txt")
     cmd = fmt_multi.format(str(ccThreads), str(txns), str(records),
                            str(workers), str(expt), str(distribution),
-                           str(theta), str(rec_size))
+                           str(theta), str(rec_size), str(0))
     os.system(cmd)
     os.system("cat results.txt >>" + outfile)
     saved_dir = os.getcwd()
@@ -200,7 +200,7 @@ def mv_single(outdir, filename, ccThreads, txns, records, worker_threads, expt,
     os.chdir(saved_dir)
     
         
-def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads, expt, distribution, theta, rec_size, only_worker=False):
+def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads, expt, distribution, theta, rec_size, pct, only_worker=False):
     outfile = os.path.join(outdir, filename)
     outdep = os.path.join(outdir, "." + filename)
 
@@ -213,7 +213,7 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
 
         for i in val_range:
             os.system("rm results.txt")
-            cmd = fmt_multi.format(str(ccThreads), str(txns), str(records), str(i), str(expt), str(distribution), str(theta), str(rec_size))
+            cmd = fmt_multi.format(str(ccThreads), str(txns), str(records), str(i), str(expt), str(distribution), str(theta), str(rec_size), str(pct))
             os.system(cmd)
             os.system("cat results.txt >>" + outfile)
             clean.clean_fn("mv", outfile, temp, only_worker)
@@ -223,7 +223,7 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
             os.chdir(saved_dir)
 
 
-def locking_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size):
+def locking_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size, read_pct):
     outfile = os.path.join(outdir, filename)
     
     temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
@@ -235,7 +235,7 @@ def locking_expt(outdir, filename, lowThreads, highThreads, txns, records, expt,
         val_range = gen_range(lowThreads, highThreads, 4)
         for i in val_range:
             os.system("rm locking.txt")
-            cmd = fmt_locking.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size))
+            cmd = fmt_locking.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size), str(read_pct))
             os.system(cmd)
             os.system("cat locking.txt >>" + outfile)
             clean.clean_fn("locking", outfile, temp)
@@ -244,7 +244,7 @@ def locking_expt(outdir, filename, lowThreads, highThreads, txns, records, expt,
             os.system("gnuplot plot.plt")
             os.chdir(saved_dir)
 
-def occ_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size):
+def occ_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size, read_pct):
     outfile = os.path.join(outdir, filename)
     
     temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
@@ -257,7 +257,7 @@ def occ_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, dis
         val_range = gen_range(lowThreads, highThreads, 4)
         for i in val_range:
             os.system("rm occ.txt")
-            cmd = fmt_occ.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size))
+            cmd = fmt_occ.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size), str(read_pct))
             os.system(cmd)
             os.system("cat occ.txt >>" + outfile)
             clean.clean_fn("occ", outfile, temp)
@@ -303,7 +303,7 @@ def si_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, dist
             os.chdir(saved_dir)
 
 
-def hek_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size):
+def hek_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size, read_pct):
     outfile = os.path.join(outdir, filename)
     temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
 
@@ -328,7 +328,7 @@ def hek_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, dis
         val_range = gen_range(lowThreads, highThreads, 4)
         for i in val_range:
             os.system("rm hek.txt")
-            cmd = fmt_hek.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size))
+            cmd = fmt_hek.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size), str(read_pct))
             os.system(cmd)
             os.system("cat hek.txt >>" + outfile)
             clean.clean_fn("occ", outfile, temp)
@@ -410,14 +410,15 @@ def uncontended_1000():
 
 def hek_uncontended_1000():
 
-#     for i in range (0, 10):
+     for i in range (0, 20):
 #         result_dir = "results/hekaton/small_bank/uncontended/"
 #         si_expt(result_dir, "si_small_bank.txt", 4, 40, 1000000, 100000, 3, 1, 0.0, 1000)
 #         hek_expt(result_dir, "hek_small_bank.txt", 4, 40, 1000000, 100000, 3, 1, 0.0, 1000)
 #         occ_expt(result_dir, "occ_small_bank.txt", 4, 40, 1000000, 100000, 3, 1, 0.0, 1000)
 #         mv_expt(result_dir, "mv_small_bank.txt", 4, 1000000, 100000, 4, 36, 3, 1, 0.0, 1000)
 # 
-#         result_dir = "results/hekaton/small_bank/contended/"
+         result_dir = "results/hekaton/small_bank/contended/"
+         locking_expt(result_dir, "pess_small_bank.txt", 24, 32, 3000000, 50, 2, 1, 0.0, 1000, 0.0)
 #         si_expt(result_dir, "si_small_bank.txt", 4, 40, 1000000, 25, 3, 1, 0.0, 1000)
 #         hek_expt(result_dir, "hek_small_bank.txt", 4, 40, 1000000, 25, 3, 1, 0.0, 1000)
 #         occ_expt(result_dir, "occ_small_bank.txt", 4, 40, 1000000, 25, 3, 1, 0.0, 1000)
@@ -425,13 +426,37 @@ def hek_uncontended_1000():
 # 
 
 #    theta_range = [100000,50000,10000,5000,1000,500,100,50,10,5]
-#    result_dir = "results/hekaton/small_bank/varying"
-    for i in range(0, 10):
+
+#     result_dir = "results/hekaton/small_bank/varying"
+#     read_pct_range = [50]
+#     num_readonly = 1000
+# 
+#     for i in range(0, 5):
+#         result_dir = "results/hekaton/ycsb/contended/10rmw/"
+#         occ_expt(result_dir, "silo_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000, 0.0)
+#         locking_expt(result_dir, "pess_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000, 0.0)
+# 
+#         result_dir = "results/hekaton/ycsb/contended/8r2rmw/"
+#         occ_expt(result_dir, "silo_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000, 0.0)
+#         locking_expt(result_dir, "pess_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.9, 1000, 0.0)
+# 
+#         result_dir = "results/hekaton/ycsb/uncontended/10rmw/"
+#         occ_expt(result_dir, "silo_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000, 0.0)
+#         locking_expt(result_dir, "pess_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.0, 1000, 0.0)
+# 
+#         result_dir = "results/hekaton/ycsb/uncontended/8r2rmw/"
+#         occ_expt(result_dir, "silo_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000, 0.0)
+#         locking_expt(result_dir, "pess_8r2rmw.txt", 4, 40, 1000000, 1000000, 1, 1, 0.0, 1000, 0.0)
+# 
+#         
+        
+
+
 #         for theta in theta_range:
 #             si_expt(result_dir, "si.txt", 40, 40, 3000000, theta, 3, 1, 0.0, 1000)
 #             hek_expt(result_dir, "hek.txt", 40, 40, 3000000, theta, 3, 1, 0.0, 1000)
 #             occ_expt(result_dir, "occ.txt", 40, 40, 3000000, theta, 3, 1, 0.0, 1000)
-#             mv_expt(result_dir, "mv.txt", 4, 1000000, theta, 36, 36, 3, 1, 0.0, 1000)
+
 
 
 #        si_expt(result_dir, "si_small_bank.txt", 4, 40, 1000000, 100, 3, 1, 0.0, 1000)
@@ -442,13 +467,23 @@ def hek_uncontended_1000():
 
 #         locking_expt(result_dir, "locking_8r2rmw.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000)
 # 
-         result_dir = "results/hekaton/ycsb/contended/10rmw_scan/"
-#         hek_expt(result_dir, "hek_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
-#         si_expt(result_dir, "si_10rmw.txt", 4, 40, 1000000, 1000000, 0, 1, 0.9, 1000)
-#         occ_expt(result_dir, "occ_10rmw.txt", 4, 40, 100000, 1000000, 0, 1, 0.9, 1000)
-         locking_expt(result_dir, "locking_10rmw.txt", 4, 40, 100000, 1000000, 0, 1, 0.9, 1000)
+#          result_dir = "results/hekaton/ycsb/uncontended/10rmw_scan/"
+#          for pct in read_pct_range:
+#              num_txns = int(100.0 * float(1000.0) / float(pct))
 # 
-    
+#  
+#              if pct == 1:
+#                  hek_expt(result_dir, "hek_10rmw.txt", 40, 40, 100000, 1000000, 0, 1, 0.0, 1000, pct)
+# #                  occ_expt(result_dir, "occ_10rmw.txt", 40, 40, 100000, 1000000, 0, 1, 0.0, 1000, pct)
+# #                  mv_expt(result_dir, "mv_10rmw.txt", 14, 100000, 1000000, 26, 26, 0, 1, 0.0, 1000, pct)
+#              else:
+#                  hek_expt(result_dir, "hek_10rmw.txt", 40, 40, 10000, 1000000, 0, 1, 0.0, 1000, pct)
+# #                  occ_expt(result_dir, "occ_10rmw.txt", 40, 40, 10000, 1000000, 0, 1, 0.0, 1000, pct)
+# #                  mv_expt(result_dir, "mv_10rmw.txt", 14, 10000, 1000000, 26, 26, 0, 1, 0.0, 1000, pct)
+#                  
+# #             locking_expt(result_dir, "pess_10rmw.txt", 40, 40, num_txns, 1000000, 0, 1, 0.0, 1000, pct)
+# # 
+#     
 #		for i in range(0, 10):
 #        result_dir = "results/hekaton/ycsb/uncontended/8r2rmw/"
 #        si_expt(result_dir, "si_8r2rmw.txt", 24, 36, 3000000, 1000000, 1, 1, 0.0, 1000)
@@ -464,7 +499,7 @@ def hek_uncontended_1000():
 
 
 
-#        mv_expt(result_dir, "mv_8r2rmw.txt", 10, 1000000, 1000000, 2, 30, 1, 1, 0.0, 1000)
+
 
 
 #    for i in range(0, 5):
@@ -791,15 +826,15 @@ def check_increasing(outfile):
     
 
 def search_best_inner(expt, theta, num_records, out_dir):    
-    thread_range = [40]
+    thread_range = [4,8,12,16,20,24,28,32,36,40]
     prev_best = 0
     for t in thread_range:
         filename = str(t) + ".txt"
         outfile = os.path.join(out_dir, filename)
-        if prev_best > 2:
+        if prev_best > 3:
             ccthreads = prev_best-2
         else:
-            ccthreads = 1
+            ccthreads = 2
         while ccthreads < t and not check_increasing(outfile):
             worker_threads = t-ccthreads
 #            if ccthreads < 4:
@@ -808,7 +843,7 @@ def search_best_inner(expt, theta, num_records, out_dir):
 #                num_txns = 500000
 #            else:
 #                num_txns = 1000000
-            num_txns = 1000000
+            num_txns = 3000000
             mv_expt_single(out_dir, filename, ccthreads, num_txns, num_records,
                            worker_threads, expt, 1, theta, 1000)
 
@@ -835,25 +870,14 @@ def search_best_theta(expt, out_dir):
                            num_execs, expt, 1, t, 1000)
             
 def search_best():
-
-
     for i in range(1, 5):
-        
-        bohm_dir = os.path.join("results/hekaton/theta/bohm")
-        temp = os.path.join(bohm_dir, str(i))
-        search_best_theta(1, temp)
-#        
-#        high_contention = "results/hekaton/ycsb/contended/8r2rmw/bohm/"
-#        temp = os.path.join(high_contention, str(i))
-#        search_best_inner(1, 0.9, 1000000, temp)
-#
-#        high_contention = "results/hekaton/ycsb/contended/10rmw/bohm/"
-#        temp = os.path.join(high_contention, str(i))
-#        search_best_inner(0, 0.9, 1000000, temp)
-# 
-#        low_contention = "results/hekaton/ycsb/uncontended/10rmw/bohm/"
-#        temp = os.path.join(low_contention, str(i))
-#        search_best_inner(0, 0.0, 1000000, temp)
+        high_contention = "results/hekaton/small_bank/contended/bohm/"
+        temp = os.path.join(high_contention, str(i))
+        search_best_inner(3, 0.0, 50, temp)
+ 
+        low_contention = "results/hekaton/small_bank/uncontended/bohm/"
+        temp = os.path.join(low_contention, str(i))
+        search_best_inner(3, 0.0, 100000, temp)
 # 
 #        low_contention = "results/hekaton/ycsb/uncontended/8r2rmw/bohm"
 #        temp = os.path.join(low_contention, str(i))

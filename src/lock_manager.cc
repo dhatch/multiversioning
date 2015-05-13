@@ -394,7 +394,7 @@ bool LockManager::SortCmp(const EagerRecordInfo &key1,
     return key1.record.tableId > key2.record.tableId;
   }
   else {
-    return key1.record.hash > key2.record.hash;
+    return key1.record.key > key2.record.key;
   }
 }
 

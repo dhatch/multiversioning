@@ -270,6 +270,7 @@ static hek_action* generate_readonly(hek_config config, RecordGenerator *gen)
         hek_readonly_action *ret;
         hek_key to_add;
         std::set<uint64_t> seen_keys;
+        UniformGenerator uniform_gen(config.num_records);
         void *mem;
         
         num_reads = config.read_txn_size;
@@ -278,10 +279,13 @@ static hek_action* generate_readonly(hek_config config, RecordGenerator *gen)
                 std::cerr << "Txn initialization failed!\n";
                 assert(false);
         }
-        ret = new (mem) hek_readonly_action();
+        ret = new (mem) hek_readonly_action();        
         assert(((uint64_t)ret) % 256 == 0);
         for (i = 0; i < num_reads; ++i) {
-                to_add.key = GenUniqueKey(gen, &seen_keys);
+                if (i < 10)
+                        to_add.key = GenUniqueKey(gen, &seen_keys);
+                else
+                        to_add.key = GenUniqueKey(&uniform_gen, &seen_keys);
                 to_add.txn = ret;
                 to_add.table_id = 0;
                 ret->readset.push_back(to_add);
@@ -500,7 +504,7 @@ static vector<hek_batch*> setup_txns(hek_config config)
 {
         uint32_t warmup_batch_sz;
         vector<hek_batch*> ret;
-        warmup_batch_sz = 10000;
+        warmup_batch_sz = 1000;
         ret.push_back(create_single_round(config, warmup_batch_sz));
         ret.push_back(create_single_round(config, config.num_txns));
         ret.push_back(create_single_round(config, config.num_txns));
@@ -594,6 +598,7 @@ static void write_results(struct hek_result result, hek_config config)
         result_file << "time:" << elapsed_milli << " txns:" << result.num_txns;
         result_file << " threads:" << config.num_threads << " hek ";
         result_file << "records:" << config.num_records << " ";
+        result_file << "read_pct:" << config.read_pct << " ";
         if (config.experiment == 0) 
                 result_file << "10rmw" << " ";
         else if (config.experiment == 1)

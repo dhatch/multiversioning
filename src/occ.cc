@@ -231,7 +231,7 @@ void OCCWorker::PrepareReads(OCCAction *action)
         uint32_t num_reads, table_id;
         uint64_t key;
         void *value;
-        volatile uint64_t *tid_ptr;
+        //        volatile uint64_t *tid_ptr;
         
         num_reads = action->readset.size();
         for (uint32_t i = 0; i < num_reads; ++i) {
@@ -239,15 +239,18 @@ void OCCWorker::PrepareReads(OCCAction *action)
                 key = action->readset[i].key;
                 value = config.tables[table_id]->Get(key);
                 action->readset[i].value = value;
+
+                                /*                
                 tid_ptr = (volatile uint64_t*)value;
-                
+
+
 
                 AcquireSingleLock(tid_ptr);
                 assert(IS_LOCKED(*tid_ptr));
                 action->readset[i].old_tid = GET_TIMESTAMP(*tid_ptr);
                 xchgq(tid_ptr, action->readset[i].old_tid);
-                
-                /*
+
+
 
                 while (true) {
                         barrier();
@@ -257,7 +260,6 @@ void OCCWorker::PrepareReads(OCCAction *action)
                                 break;
                 } 
                 */
-
         }
 }
 
@@ -326,18 +328,17 @@ void OCCWorker::RecycleBufs(OCCAction *action)
 bool OCCWorker::Validate(OCCAction *action)
 {
         uint32_t num_reads, i;
-        volatile uint64_t *tid_ptr;
-        bool valid, acquired;
-        uint64_t ts;
+        //        volatile uint64_t *tid_ptr;
+        //        bool valid, acquired;
+        //        uint64_t ts;
         
-        valid = true;
         num_reads = action->readset.size();
         barrier();
         for (i = 0; i < num_reads; ++i) {
-                /*
                 if (!action->readset[i].ValidateRead())
                         return false;
-                */
+
+                /*
 
                 acquired = false;
                 tid_ptr = (volatile uint64_t*)action->readset[i].value;
@@ -357,6 +358,7 @@ bool OCCWorker::Validate(OCCAction *action)
                 }
                 if (!valid)
                         return false;
+                */
 
         }
         return true;

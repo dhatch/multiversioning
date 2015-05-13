@@ -173,7 +173,7 @@ class LockManagerTable {
         do {
           descendant = temp;
           descendant->is_held = true;
-          fetch_and_decrement(&descendant->dependency->num_dependencies);        
+          fetch_and_decrement(&descendant->dependency->num_dependencies);
         } while (GetNext(descendant, &temp) && !temp->is_write);
       }
     }  
@@ -199,10 +199,29 @@ class LockManagerTable {
     }
   }
 
+  EagerRecordInfo* SearchRead(LockBucket *bucket, EagerRecordInfo *info) {
+          assert(bucket->head != NULL && bucket->tail != NULL);
+          assert(info->is_write == false);
+          
+          EagerRecordInfo *iter;
+          iter = bucket->head;
+          while (iter != NULL) {
+                  if (iter->is_write == false &&
+                      iter->record.tableId == info->record.tableId &&
+                      iter->record.key == info->record.key)
+                          return iter;
+                  else
+                          iter = iter->next;
+          }
+          return NULL;
+  }
+  
   void AppendInfo(EagerRecordInfo *info, LockBucket *bucket) {
     assert((bucket->head == NULL && bucket->tail == NULL) || 
            (bucket->head != NULL && bucket->tail != NULL));
 
+    EagerRecordInfo *read_next;
+    
     info->next = NULL;
     info->prev = NULL;
 
@@ -211,14 +230,24 @@ class LockManagerTable {
       info->prev = NULL;
       bucket->head = info;
       bucket->tail = info;
-    }
-    else {
+    } else {
       assert(bucket->head != NULL);
-      bucket->tail->next = info;
-      info->prev = bucket->tail;
+      if (info->is_write == false &&
+          (read_next = SearchRead(bucket, info)) != NULL &&
+          bucket->tail != read_next) {
+              assert(read_next->is_write == false);
+              read_next->next->prev = info;
+              info->next = read_next->next;
+              info->prev = read_next;
+              read_next->next = info;
+      } else {
+              bucket->tail->next = info;
+              info->prev = bucket->tail;
+              bucket->tail = info;
+      }
     }
 
-    bucket->tail = info;
+    //    bucket->tail = info;
     assert(bucket->head != NULL && bucket->tail != NULL);
   }
   
@@ -283,13 +312,14 @@ class LockManagerTable {
   }
   
 
-  bool Lock(EagerRecordInfo *info, uint32_t cpu) {
+  bool Lock(EagerRecordInfo *info, uint32_t cpu __attribute__((unused))) {
     assert(cpu > 0);
     bool conflict = false;
     LockBucket *bucket = GetBucketRef(info->record);
         
-    reentrant_lock(&bucket->latch, cpu);
-    assert(bucket->latch>>32 == cpu);
+    //    reentrant_lock(&bucket->latch, cpu);
+    lock(&bucket->latch);
+    //    assert(bucket->latch>>32 == cpu);
     info->latch = &bucket->latch;    
 
     AppendInfo(info, bucket);
@@ -307,7 +337,8 @@ class LockManagerTable {
     }
     
     info->is_held = !conflict;
-    reentrant_unlock(&bucket->latch);
+    //    reentrant_unlock(&bucket->latch);
+    unlock(&bucket->latch);
     return !conflict;
   }
   
@@ -315,13 +346,14 @@ class LockManagerTable {
     reentrant_unlock(info->latch);
   }
 
-  void Unlock(EagerRecordInfo *info, uint32_t cpu) {
+  void Unlock(EagerRecordInfo *info, uint32_t cpu __attribute__((unused))) {
 
     assert(info->is_held);
 
     LockBucket *bucket = GetBucketRef(info->record);    
-    reentrant_lock(&bucket->latch, cpu);
-    assert(bucket->latch>>32 == cpu);
+    //    reentrant_lock(&bucket->latch, cpu);
+    lock(&bucket->latch);
+    //    assert(bucket->latch>>32 == cpu);
 
     if (info->is_write) {
       AdjustWrite(info);
@@ -331,8 +363,8 @@ class LockManagerTable {
     }
 
     RemoveInfo(info, bucket);
-
-    reentrant_unlock(&bucket->latch);
+    unlock(&bucket->latch);
+    //    reentrant_unlock(&bucket->latch);
   }
 
   // Get a pointer to the head of linked list of records.

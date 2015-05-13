@@ -47,6 +47,11 @@ hek_status hek_rmw_action::Run()
         return temp;        
 }
 
+hek_readonly_action::hek_readonly_action() : hek_action()
+{
+        readonly = true;
+}
+
 hek_status hek_readonly_action::Run()
 {
         uint32_t i, j, num_reads;

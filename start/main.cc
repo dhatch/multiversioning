@@ -454,6 +454,7 @@ void LockingExperiment(LockingConfig config) {
   resultFile << "time:" << elapsedMilli << " txns:" << config.numTxns << " ";
   resultFile << "threads:" << config.numThreads << " locking ";
   resultFile << "records:" << config.numRecords << " ";
+  resultFile << "read_pct:" << config.read_pct << " ";
   if (config.experiment == 0) {
     resultFile << "10rmw" << " ";
   }

@@ -16,9 +16,9 @@ void* occ_composite_key::GetValue() const
 
 void* occ_composite_key::StartRead()
 {
+
         volatile uint64_t *tid_ptr;
         tid_ptr = (volatile uint64_t*)value;
-        /*
         while (true) {
                 barrier();
                 this->old_tid = *tid_ptr;
@@ -26,13 +26,16 @@ void* occ_composite_key::StartRead()
                 if (!IS_LOCKED(this->old_tid))
                         break;
         }
-        */
         return (void*)&tid_ptr[1];
+
+        //        return (void*)&((uint64_t*)value)[1];
 }
 
 bool occ_composite_key::FinishRead()
 {
+        return true;
         /*
+        assert(!IS_LOCKED(this->old_tid));
         volatile uint64_t tid;
         bool is_valid = false;
         barrier();        
@@ -41,8 +44,8 @@ bool occ_composite_key::FinishRead()
         is_valid = (tid == this->old_tid);
         assert(!is_valid || !IS_LOCKED(tid));
         return is_valid;
-        */
-        return true;
+                //        return true;
+                */
 }
 
 uint64_t occ_composite_key::GetTimestamp()
@@ -147,16 +150,24 @@ bool RMWOCCAction::DoReads()
         num_reads = readset.size();
         num_writes = writeset.size();
         counter = 0;
-        num_fields = YCSB_RECORD_SIZE / 100;
+        num_fields = 10;
         for (i = 0; i < num_reads; ++i) {
                 read_ptr = (char*)readset[i].StartRead();
+                barrier();
                 for (j = 0; j < num_fields; ++j) 
                         counter += *((uint64_t*)&read_ptr[j*100]);
+                barrier();
+                if (readset[i].FinishRead() == false) 
+                        return false;
         }
         for (i = 0; i < num_writes; ++i) {
                 write_ptr = (char*)writeset[i].GetValue();
                 read_ptr = (char*)readset[i].StartRead();
-                memcpy(write_ptr, read_ptr, YCSB_RECORD_SIZE);
+                barrier();
+                memcpy(write_ptr, read_ptr, 1000);
+                if (readset[i].FinishRead() == false)
+                        return false;
+                barrier();
                 for (j = 0; j < num_fields; ++j) {
                         *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
                 }

@@ -378,6 +378,7 @@ void write_occ_output(struct occ_result result, OCCConfig config)
         result_file << "time:" << elapsed_milli << " txns:" << result.num_txns;
         result_file << " threads:" << config.numThreads << " occ ";
         result_file << "records:" << config.numRecords << " ";
+        result_file << "read_pct:" << config.read_pct << " ";
         if (config.experiment == 0) 
                 result_file << "10rmw" << " ";
         else if (config.experiment == 1)
@@ -463,13 +464,14 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         timespec start_time, end_time;
         uint32_t i, j;
         struct occ_result result;
+                std::cerr << "Num batches " << num_batches << "\n";
         for (i = 0; i < config.numThreads; ++i) {
                 workers[i]->Run();
                 workers[i]->WaitInit();
         }
 
         dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
-        std::cerr << "Num batches " << num_batches << "\n";
+
         std::cerr << "Done dry run\n";
         if (PROFILE)
                 ProfilerStart("occ.prof");

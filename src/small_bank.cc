@@ -11,8 +11,8 @@ OCCSmallBank::Balance::Balance(uint64_t customer, char *meta_data)
 occ_txn_status OCCSmallBank::Balance::Run()
 {
         occ_txn_status status;
-        SmallBankRecord *checking = (SmallBankRecord*)readset[0].GetValue();
-        SmallBankRecord *savings = (SmallBankRecord*)readset[1].GetValue();
+        SmallBankRecord *checking = (SmallBankRecord*)readset[0].StartRead();
+        SmallBankRecord *savings = (SmallBankRecord*)readset[1].StartRead();
         this->totalBalance = checking->amount + savings->amount;
         do_spin();
         status.validation_pass = true;
@@ -33,7 +33,7 @@ occ_txn_status OCCSmallBank::DepositChecking::Run()
 {
         occ_txn_status status;
         SmallBankRecord *checkingBalance =
-                (SmallBankRecord*)readset[0].GetValue();
+                (SmallBankRecord*)readset[0].StartRead();
         long oldBalance = checkingBalance->amount;
         SmallBankRecord *newBalance = (SmallBankRecord*)writeset[0].GetValue();
         newBalance->amount = oldBalance + this->amount;
@@ -56,7 +56,7 @@ OCCSmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount,
 occ_txn_status OCCSmallBank::TransactSaving::Run()
 {
         occ_txn_status status;
-        SmallBankRecord *read = (SmallBankRecord*)readset[0].GetValue();
+        SmallBankRecord *read = (SmallBankRecord*)readset[0].StartRead();
         SmallBankRecord *write  = (SmallBankRecord*)writeset[0].GetValue();
         write->amount = read->amount + this->amount;
         do_spin();
@@ -83,9 +83,9 @@ occ_txn_status OCCSmallBank::Amalgamate::Run()
         occ_txn_status status;
         long sum = 0;
         SmallBankRecord *fromChecking, *fromSavings, *toChecking;
-        sum += ((SmallBankRecord*)readset[0].GetValue())->amount;
-        sum += ((SmallBankRecord*)readset[1].GetValue())->amount;
-        sum += ((SmallBankRecord*)readset[2].GetValue())->amount;
+        sum += ((SmallBankRecord*)readset[0].StartRead())->amount;
+        sum += ((SmallBankRecord*)readset[1].StartRead())->amount;
+        sum += ((SmallBankRecord*)readset[2].StartRead())->amount;
         fromChecking = (SmallBankRecord*)writeset[0].GetValue();
         fromSavings = (SmallBankRecord*)writeset[1].GetValue();
         toChecking = (SmallBankRecord*)writeset[2].GetValue();
@@ -113,9 +113,9 @@ occ_txn_status OCCSmallBank::WriteCheck::Run()
         occ_txn_status status;
         SmallBankRecord *checking;
         long sum, balance;
-        balance = ((SmallBankRecord*)readset[1].GetValue())->amount;
+        balance = ((SmallBankRecord*)readset[1].StartRead())->amount;
         sum = 0;
-        sum += ((SmallBankRecord*)readset[0].GetValue())->amount;
+        sum += ((SmallBankRecord*)readset[0].StartRead())->amount;
         sum += ((SmallBankRecord*)readset[1].GetValue())->amount;
         sum -= amount;
         if (sum < 0)
@@ -137,6 +137,7 @@ LockingSmallBank::Balance::Balance(uint64_t customer, uint64_t numAccounts,
   this->meta_data = meta;
   AddReadKey(CHECKING, customer, numAccounts);
   AddReadKey(SAVINGS, customer, numAccounts);
+  assert(sorted == false);
 }
 
 bool LockingSmallBank::Balance::Run() {
@@ -156,6 +157,7 @@ LockingSmallBank::DepositChecking::DepositChecking(uint64_t customer,
         this->meta_data = meta;
         this->amount = amount;
         AddWriteKey(CHECKING, customer,numAccounts);
+          assert(sorted == false);
 }
 
 bool LockingSmallBank::DepositChecking::Run() {
@@ -175,6 +177,7 @@ LockingSmallBank::TransactSaving::TransactSaving(uint64_t customer,
         this->meta_data = meta;
         this->amount = amount;
         AddWriteKey(SAVINGS, customer, numAccounts);
+          assert(sorted == false);
 }
 
 bool LockingSmallBank::TransactSaving::Run() {
@@ -194,6 +197,7 @@ LockingSmallBank::Amalgamate::Amalgamate(uint64_t fromCustomer,
         AddWriteKey(CHECKING, fromCustomer, numAccounts);
         AddWriteKey(SAVINGS, fromCustomer, numAccounts);
         AddWriteKey(CHECKING, toCustomer, numAccounts);
+          assert(sorted == false);
 }
 
 bool LockingSmallBank::Amalgamate::Run() {
@@ -225,6 +229,7 @@ LockingSmallBank::WriteCheck::WriteCheck(uint64_t customer, long amount,
         this->meta_data = meta;
         AddReadKey(SAVINGS, customer, numAccounts);
         AddWriteKey(CHECKING, customer, numAccounts);
+          assert(sorted == false);
 }
 
 bool LockingSmallBank::WriteCheck::Run() {

@@ -14,6 +14,13 @@ barrier() {
   asm volatile("":::"memory");
 }
 
+// An indivisible unit of work. 
+inline void
+single_work() 
+{
+  asm volatile("nop;":::"memory");
+}
+
 
 inline bool
 cmp_and_swap(volatile uint64_t *to_write,
@@ -75,12 +82,12 @@ try_lock(volatile uint64_t *word)
 // Spin lock implementation. XXX: Is test-n-test-n-set better?
 inline void
 lock(volatile uint64_t *word) {
-  while (true) {
-    if ((*word == 0) && (xchgq(word, 1) == 0)) {
-      break;
-    }
-    do_pause();
-  }
+        while (true) {
+                if ((*word == 0) && (xchgq(word, 1) == 0)) {
+                        break;
+                }
+                do_pause();
+        }
 }
 
 inline void
@@ -122,12 +129,6 @@ fetch_and_decrement(volatile uint64_t *variable)
 }    
 
 
-// An indivisible unit of work. 
-inline void
-single_work() 
-{
-  asm volatile("nop;":::"memory");
-}
 
 // Use this function to read the timestamp counter. 
 // Don't bother with using serializing instructions like cpuid and others,

@@ -832,6 +832,7 @@ static void write_results(MVConfig config, timespec elapsed_time)
         result_file << "ccthreads:" << config.numCCThreads << " ";
         result_file << "workerthreads:" << config.numWorkerThreads << " ";
         result_file << "records:" << config.numRecords << " ";
+        result_file << "read_pct:" << config.read_pct << " ";
         if (config.experiment == 0) {
                 result_file << "10rmw ";
         } else if (config.experiment == 1) {
@@ -1001,6 +1002,8 @@ void do_mv_experiment(MVConfig config)
         SimpleQueue<ActionBatch> *outputQueue;
         std::vector<ActionBatch> input_placeholder;
         timespec elapsed_time;
+
+        std::cout << "Read txn size:" << config.read_txn_size << "\n";
         
         MVScheduler::NUM_CC_THREADS = (uint32_t)config.numCCThreads;
         NUM_CC_THREADS = (uint32_t)config.numCCThreads;
