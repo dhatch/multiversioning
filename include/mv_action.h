@@ -2,6 +2,7 @@
 #define MV_ACTION_H_
 
 #include <action.h>
+#include <db.h>
 
 #define RECYCLE_QUEUE_SIZE 64 
 #define MV_EPOCH_MASK 0xFFFFFFFF00000000
@@ -9,6 +10,79 @@
 #define CREATE_MV_TIMESTAMP(epoch, timestamp) ((((uint64_t)epoch)<<32) | timestamp)
 
 extern uint32_t NUM_CC_THREADS;
+
+struct big_key {
+        uint64_t key;
+        uint32_t table_id;
+        
+        bool operator==(const big_key &other) const {
+                return other.table_id == this->table_id &&
+                other.key == this->key;
+        }
+
+        bool operator!=(const big_key &other) const {
+                return !(*this == other);
+        }
+  
+        bool operator<(const big_key &other) const {
+                return ((this->table_id < other.table_id) || 
+                        (
+                         (this->table_id == other.table_id) &&
+                         (this->key < other.key)
+                         ));
+        }
+  
+        bool operator>(const big_key &other) const {
+                return ((this->table_id > other.table_id) ||
+                        (
+                         (this->table_id == other.table_id) &&
+                         (this->key > other.key)
+                         ));
+        }
+  
+        bool operator<=(const big_key &other) const {
+                return !(*this > other);
+        }
+  
+        bool operator>=(const big_key &other) const {
+                return !(*this < other);
+        }
+
+        static inline uint64_t Hash(const big_key *key) {
+                return Hash128to64(std::make_pair(key->key,
+                                                  (uint64_t)(key->table_id)));
+        }
+  
+        static inline uint64_t HashKey(const big_key *key) {
+                return Hash128to64(std::make_pair((uint64_t)key->table_id,
+                                                  key->key));
+        }
+};
+
+namespace std {
+
+        template <>
+                struct hash<big_key>
+                {
+                        std::size_t operator()(const big_key& k) const
+                                {
+                                        return big_key::Hash(&k);
+                                }
+                };
+};
+
+enum usage_type {
+        READ,
+        WRITE,
+        RMW,
+};
+
+struct key_index {
+        usage_type use;
+        uint32_t index;
+        bool initialized;
+};
+
 
 struct ActionBatch {
     Action **actionBuf;
@@ -153,6 +227,38 @@ class RMWAction : public Action {
  public:
         RMWAction(uint64_t seed);
         virtual bool Run();
+};
+
+using namespace std;
+
+class mv_action : public translator {
+
+        
+ protected:
+        unordered_map<big_key, key_index> reverse_index;
+        CompositeKey GenerateKey(bool is_rmw, uint32_t tableId, uint64_t key);
+        bool init;
+        
+ public:
+        uint64_t __version;
+        uint64_t __combinedHash;
+        bool __readonly;
+        std::vector<int> __write_starts;
+        std::vector<int> __read_starts;
+        std::vector<CompositeKey> __readset;
+        std::vector<CompositeKey> __writeset;
+        
+        volatile uint64_t __attribute__((aligned(CACHE_LINE))) __state;
+
+        mv_action(txn *t);
+
+        void setup_reverse_index();
+        void* write_ref(uint64_t key, uint32_t table_id);
+        void* read(uint64_t key, uint32_t table_id);
+        bool Run();
+        virtual void AddReadKey(uint32_t tableId, uint64_t key);
+        virtual void AddWriteKey(uint32_t tableId, uint64_t key, bool is_rmw);
+        bool initialized();
 };
 
 

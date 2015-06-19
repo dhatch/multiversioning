@@ -215,7 +215,6 @@ void RMWAction::DoWrites()
 
 bool RMWAction::Run()
 {
-
         uint32_t i, j, num_reads, num_writes, num_fields;
         assert(recordSize == 1000);
         num_reads = __readset.size();
@@ -259,4 +258,144 @@ bool RMWAction::Run()
         }
 
         return true;
+}
+
+mv_action::mv_action(txn *t) : translator(t)
+{
+        init = false;
+}
+
+bool mv_action::initialized()
+{
+        return init;
+}
+
+static struct big_key get_key(CompositeKey k)
+{
+        struct big_key ret;
+        ret.key = k.key;
+        ret.table_id = k.tableId;
+        return ret;
+}
+
+/*
+ * Assumes that all the entries in the transaction's read- and write-sets are 
+ * initialized.
+ */
+void mv_action::setup_reverse_index()
+{
+        uint32_t num_reads, num_writes, i;
+        struct big_key key;
+        struct key_index index;
+
+        assert(init == false);
+        num_reads = __readset.size();
+        num_writes = __writeset.size();
+
+        /* Initialize reverse index to items in the write-set. */
+        for (i = 0; i < num_writes; ++i) {
+                key = get_key(__writeset[i]);
+                index.index = i;
+                index.initialized = false;
+                if (__writeset[i].is_rmw == true)
+                        index.use = RMW;
+                else
+                        index.use = WRITE;
+                assert(reverse_index.count(key) == 0);
+                reverse_index[key] = index;
+        }
+
+        /* Initialize reverse index to items in the read-set. */
+        for (i = 0; i < num_reads; ++i) {
+                key = get_key(__readset[i]);
+                index.index = i;
+                index.initialized = true;
+                index.use = READ;
+                assert(reverse_index.count(key) == 0);
+                reverse_index[key] = index;
+        }
+
+        /* Optimize read-only txns in the execution phase. */
+        if (num_writes == 0)
+                __readonly = true;
+        else
+                __readonly = false;
+        init = true;
+}
+
+bool mv_action::Run()
+{
+        return t->Run();
+}
+
+void* mv_action::write_ref(uint64_t key, uint32_t table_id)
+{
+        struct big_key bkey;
+        struct key_index index;
+       
+        assert(init == true);
+        bkey.key = key;
+        bkey.table_id = table_id;        
+        assert(reverse_index.count(bkey) == 1);
+        index = reverse_index[bkey];
+        assert(index.use == WRITE || index.use == RMW);
+        return __writeset[index.index].value->value;
+}
+
+void* mv_action::read(uint64_t key, uint32_t table_id)
+{
+        struct big_key bkey;
+        struct key_index index;
+        MVRecord *record, *snapshot;
+        void *ret;
+        
+        assert(init == true);
+        bkey.key = key;
+        bkey.table_id = table_id;
+        assert(reverse_index.count(bkey) == 1);
+        index = reverse_index[bkey];
+        assert(index.use == READ || index.use == RMW);
+        if (index.use == READ) {
+                record = __readset[index.index].value;
+                if (__readonly == true &&
+                    (
+                     GET_MV_EPOCH(__version) ==
+                     GET_MV_EPOCH(record->createTimestamp)
+                     )) {
+                        snapshot = record->epoch_ancestor;
+                        ret = (void*)snapshot->value;
+                } else {
+                        ret = (void*)__readset[index.index].value->value;
+                }
+        } else {	// index.use == RMW
+                assert(__readonly == false);
+                ret = __writeset[index.index].value->value;
+        }
+        return ret;
+}
+
+CompositeKey mv_action::GenerateKey(bool is_rmw, uint32_t tableId, uint64_t key)
+{
+        CompositeKey toAdd(is_rmw, tableId, key);
+        uint32_t threadId =
+                CompositeKey::HashKey(&toAdd) % NUM_CC_THREADS;
+        toAdd.threadId = threadId;
+        this->__combinedHash |= ((uint64_t)1) << threadId;
+        return toAdd;
+}
+
+
+void mv_action::AddReadKey(uint32_t tableId, uint64_t key)
+{
+        CompositeKey to_add;
+        to_add = GenerateKey(false, tableId, key);
+        __readset.push_back(to_add);
+}
+
+void mv_action::AddWriteKey(uint32_t tableId, uint64_t key, bool is_rmw)
+{
+        CompositeKey to_add;
+        to_add = GenerateKey(is_rmw, tableId, key);
+        __writeset.push_back(to_add);
+        __readonly = false;
 }
