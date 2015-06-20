@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdlib>
 
+#include <db.h>
 #include <mv_action.h>
 #include <occ_action.h>
 #include <action.h>
@@ -18,6 +19,56 @@ enum SmallBankTable {
 struct SmallBankRecord {
         long amount;
         char meta_data[METADATA_SIZE];
+};
+
+namespace SmallBank {
+
+        class Balance : public txn {
+        private:
+                long totalBalance;
+                uint64_t customer_id;
+        public:
+                Balance(uint64_t customer_id);
+                virtual bool Run();
+        };
+
+        class DepositChecking : public txn {
+        private:
+                long amount;
+                uint64_t customer_id;
+        
+        public:
+                DepositChecking(uint64_t customer, long amount);               
+                virtual bool Run();
+        };
+
+        class TransactSaving : public txn {    
+        private:
+                long amount;
+                uint64_t customer_id;
+                
+        public:
+                TransactSaving(uint64_t customer, long amount);
+                virtual bool Run();
+        };
+
+        class Amalgamate : public txn {
+                char *meta_data;
+                uint64_t from_customer;
+                uint64_t to_customer;
+        public:
+                Amalgamate(uint64_t fromCustomer, uint64_t toCustomer);
+                virtual bool Run();
+        };
+  
+        class WriteCheck : public txn {
+        private:
+                long check_amount;
+                uint64_t customer_id;
+        public:
+                WriteCheck(uint64_t customer, long check_amount);
+                virtual bool Run();
+        };  
 };
 
 namespace OCCSmallBank {

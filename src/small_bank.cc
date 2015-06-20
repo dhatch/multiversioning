@@ -1,5 +1,95 @@
 #include <small_bank.h>
 
+SmallBank::Balance::Balance(uint64_t customer_id)
+{
+        this->totalBalance = 0;
+        this->customer_id = customer_id;
+}
+
+bool SmallBank::Balance::Run()
+{
+        SmallBankRecord *checking =
+                (SmallBankRecord*)get_read_ref(customer_id, CHECKING);
+        SmallBankRecord *savings =
+                (SmallBankRecord*)get_read_ref(customer_id, SAVINGS);
+        this->totalBalance = checking->amount + savings->amount;
+        do_spin();
+        return true;        
+}
+
+SmallBank::DepositChecking::DepositChecking(uint64_t customer, long amount)
+{
+        this->customer_id = customer;
+        this->amount = amount;
+}
+
+bool SmallBank::DepositChecking::Run()
+{
+        SmallBankRecord *checking;
+
+        checking = (SmallBankRecord*)get_write_ref(customer_id, CHECKING);
+        checking->amount += this->amount;
+        do_spin();
+        return true;        
+}
+
+SmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount)
+{
+        this->amount = amount;
+        this->customer_id = customer;
+}
+
+bool SmallBank::TransactSaving::Run()
+{
+        SmallBankRecord *savings;
+        savings = (SmallBankRecord*)get_write_ref(customer_id, SAVINGS);
+        savings->amount += this->amount;
+        do_spin();
+        return true;
+}
+
+SmallBank::Amalgamate::Amalgamate(uint64_t from_customer, uint64_t to_customer)
+{
+        this->from_customer = from_customer;
+        this->to_customer = to_customer;
+}
+
+bool SmallBank::Amalgamate::Run()
+{
+        SmallBankRecord *from_checking, *from_savings, *to_checking;
+
+        from_checking =
+                (SmallBankRecord*)get_write_ref(from_customer, CHECKING);
+        from_savings =
+                (SmallBankRecord*)get_write_ref(from_customer, SAVINGS);
+        to_checking =
+                (SmallBankRecord*)get_write_ref(to_customer, CHECKING);
+        to_checking->amount += from_checking->amount + from_savings->amount;
+        from_checking->amount = 0;
+        from_savings->amount = 0;
+        do_spin();
+        return true;
+}
+
+SmallBank::WriteCheck::WriteCheck(uint64_t customer_id, long amount)
+{
+        this->customer_id = customer_id;
+        this->check_amount = check_amount;
+}
+
+bool SmallBank::WriteCheck::Run()
+{
+        SmallBankRecord *checking, *savings;
+
+        checking = (SmallBankRecord*)get_write_ref(customer_id, CHECKING);
+        savings = (SmallBankRecord*)get_read_ref(customer_id, SAVINGS);
+        if (checking->amount + savings->amount - check_amount < 0)
+                check_amount += 1;
+        checking->amount -= check_amount;
+        do_spin();
+        return true;
+}
+
 OCCSmallBank::Balance::Balance(uint64_t customer, char *meta_data)
 {
         this->totalBalance = 0;
@@ -7,7 +97,7 @@ OCCSmallBank::Balance::Balance(uint64_t customer, char *meta_data)
         AddReadKey(CHECKING, customer, false);
         AddReadKey(SAVINGS, customer, false);
 }
-
+        
 occ_txn_status OCCSmallBank::Balance::Run()
 {
         occ_txn_status status;

@@ -60,7 +60,6 @@ struct big_key {
 };
 
 namespace std {
-
         template <>
                 struct hash<big_key>
                 {
