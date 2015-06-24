@@ -34,9 +34,6 @@ txn* generate_small_bank_action(uint32_t num_records, bool read_only)
         else 
                 mod = 5;        
         txn_type = rand() % mod;
-
-        // XXX CHANGE THIS
-        txn_type = 0;
         if (txn_type == 0) {
                 customer = (uint64_t)(rand() % num_records);
                 t = new SmallBank::Balance(customer);
