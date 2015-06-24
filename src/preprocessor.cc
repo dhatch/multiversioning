@@ -175,7 +175,6 @@ void MVScheduler::ProcessWriteset(mv_action *action)
                         GetMVRecord(action->__readset[i], action->__version);
                 action->__readset[i].value = ref;
                 r_index = action->__readset[i].next;
-                
         }
 
         while (w_index != -1) {

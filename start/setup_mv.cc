@@ -739,6 +739,7 @@ static mv_action* generate_mv_action(txn *txn)
 
         /* Get the transaction's rw-sets. */
         action = new mv_action(txn);
+        txn->set_translator(action);
         convert_keys(action, txn);
 
         /* 
@@ -746,6 +747,7 @@ static mv_action* generate_mv_action(txn *txn)
          */
         do_preprocessing(action->__writeset, action->__write_starts);
         do_preprocessing(action->__readset, action->__read_starts);
+        action->setup_reverse_index();
         return action;        
 }
 
@@ -793,12 +795,21 @@ static ActionBatch generate_db(workload_config conf)
         txn **loader_txns;
         uint32_t num_txns, i;
         ActionBatch ret;
-        
+
+        uint64_t timestamp;
+
+        timestamp = CREATE_MV_TIMESTAMP(1, i);
+
+        loader_txns = NULL;
         num_txns = generate_input(conf, &loader_txns);
+        assert(loader_txns != NULL);
         ret.numActions = num_txns;
         ret.actionBuf = (mv_action**)malloc(sizeof(mv_action*)*num_txns);
-        for (i = 0; i < num_txns; ++i) 
+        for (i = 0; i < num_txns; ++i) {
                 ret.actionBuf[i] = generate_mv_action(loader_txns[i]);
+                timestamp = CREATE_MV_TIMESTAMP(1, i);
+                ret.actionBuf[i]->__version = timestamp;
+        }
         return ret;
 }
 
@@ -1129,7 +1140,7 @@ void DoHashes(int numProcs, int numRecords, int epochSize, int numEpochs,
 
   int successPin = pin_thread(79);
   if (successPin != 0) {
-    assert(false);
+      assert(false);
   }
 
   timespec start_time, end_time;

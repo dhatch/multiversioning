@@ -83,7 +83,7 @@ void SmallBank::Balance::get_reads(struct big_key *array)
         array[0].key = this->customer_id;
         array[0].table_id = CHECKING;
         array[1].key = this->customer_id;
-        array[0].table_id = SAVINGS;
+        array[1].table_id = SAVINGS;
 }
 
 SmallBank::DepositChecking::DepositChecking(uint64_t customer, long amount)
@@ -110,7 +110,7 @@ uint32_t SmallBank::DepositChecking::num_rmws()
 void SmallBank::DepositChecking::get_rmws(struct big_key *array)
 {
         array[0].key = this->customer_id;
-        array[1].table_id = CHECKING;
+        array[0].table_id = CHECKING;
 }
 
 SmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount)

@@ -34,6 +34,9 @@ txn* generate_small_bank_action(uint32_t num_records, bool read_only)
         else 
                 mod = 5;        
         txn_type = rand() % mod;
+
+        // XXX CHANGE THIS
+        txn_type = 0;
         if (txn_type == 0) {
                 customer = (uint64_t)(rand() % num_records);
                 t = new SmallBank::Balance(customer);
@@ -149,7 +152,7 @@ txn* generate_ycsb_action(RecordGenerator *gen, workload_config config)
         return generate_ycsb_rmw(gen, num_rmws, num_reads);
 }
 
-txn** generate_small_bank_input(workload_config conf)
+uint32_t generate_small_bank_input(workload_config conf, txn ***loaders)
 {
         using namespace SmallBank;
         
@@ -160,18 +163,22 @@ txn** generate_small_bank_input(workload_config conf)
         /* Each txn performs 1000 insertions. */
         num_txns = conf.num_records / 1000;
         remainder = conf.num_records % 1000;
+        if (remainder > 0)
+                num_txns += 1;
         ret = (txn**)malloc(sizeof(txn*)*num_txns);
         for (i = 0; i < num_txns; ++i) {
                 start = 1000*i;
-                end = start + 1000;
-                if (i == num_txns - 1)
-                        end += remainder;
+                if (remainder > 0 && i == num_txns - 1)
+                        end = start + remainder;
+                else
+                        end = start + 1000;
                 ret[i] = new LoadCustomerRange(start, end);
         }
-        return ret;
+        *loaders = ret;
+        return num_txns;
 }
 
-txn** generate_ycsb_input(workload_config conf)
+uint32_t generate_ycsb_input(workload_config conf, txn ***loaders)
 {
         using namespace SmallBank;
         uint32_t num_txns, i, remainder;
@@ -181,22 +188,27 @@ txn** generate_ycsb_input(workload_config conf)
         /* Each txn performs 1000 insertions. */
         num_txns = conf.num_records / 1000;
         remainder = conf.num_records % 1000;
+        if (remainder > 0)
+                num_txns += 1;
         ret = (txn**)malloc(sizeof(txn*)*num_txns);
         for (i = 0; i < num_txns; ++i) {
                 start = 1000*i;
-                end = start + 1000;
-                if (i == num_txns - 1)
-                        end += remainder;
+                if (remainder > 0 && i == num_txns - 1)
+                        end = start + remainder;
+                else 
+                        end = start + 1000;
                 ret[i] = new ycsb_insert(start, end);
         }
+        *loaders = ret;
+        return num_txns;
 }
 
 uint32_t generate_input(workload_config conf, txn ***loaders)
 {
         if (conf.experiment == 3 || conf.experiment == 4) {
-                generate_small_bank_input(conf);
+                return generate_small_bank_input(conf, loaders);
         } else if (conf.experiment < 3) {
-
+                return generate_ycsb_input(conf, loaders);
         } else {
                 assert(false);
         }

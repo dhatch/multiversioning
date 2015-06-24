@@ -3,6 +3,8 @@
 
 extern Table** mv_tables;
 
+
+
 Action::Action()
 {
         this->__version = 0;
@@ -262,7 +264,15 @@ bool RMWAction::Run()
 
 mv_action::mv_action(txn *t) : translator(t)
 {
-        init = false;
+        this->__version = 0;
+        this->__combinedHash = 0;
+        this->__readonly = false;
+        this->__state = STICKY;
+        for (uint32_t i = 0; i < NUM_CC_THREADS; ++i) {
+                this->__write_starts.push_back(-1);
+                this->__read_starts.push_back(-1);
+        }
+        this->init = false;
 }
 
 bool mv_action::initialized()
@@ -388,6 +398,7 @@ CompositeKey mv_action::GenerateKey(bool is_rmw, uint32_t tableId, uint64_t key)
 void mv_action::add_read_key(uint32_t tableId, uint64_t key)
 {
         CompositeKey to_add;
+        assert(tableId == 0 || tableId == 1);
         to_add = GenerateKey(false, tableId, key);
         __readset.push_back(to_add);
 }
@@ -395,6 +406,7 @@ void mv_action::add_read_key(uint32_t tableId, uint64_t key)
 void mv_action::add_write_key(uint32_t tableId, uint64_t key, bool is_rmw)
 {
         CompositeKey to_add;
+        assert(tableId == 0 || tableId == 1);
         to_add = GenerateKey(is_rmw, tableId, key);
         __writeset.push_back(to_add);
         __readonly = false;
