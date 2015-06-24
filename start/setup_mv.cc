@@ -19,6 +19,7 @@ static uint64_t dbSize = ((uint64_t)1<<36);
 
 Table** mv_tables;
 
+/*
 static void setup_ycsb_occ_tables(uint32_t numRecords, uint32_t num_threads)
 {
         TableConfig tbl_config;
@@ -48,6 +49,7 @@ static void setup_ycsb_occ_tables(uint32_t numRecords, uint32_t num_threads)
         }
         mv_tables[0]->SetInit();
 }
+*/
 
 static void CreateQueues(int cpuNumber, uint32_t subCount, 
                          SimpleQueue<ActionBatch>*** OUT_PUB_QUEUES,
@@ -456,6 +458,7 @@ static MVScheduler** SetupSchedulers(int numProcs,
   return schedArray;
 }
 
+/*
 static CompositeKey create_mv_key(uint32_t table_id, uint64_t key, bool is_rmw)
 {
         CompositeKey mv_key(is_rmw, table_id, key);
@@ -465,7 +468,7 @@ static CompositeKey create_mv_key(uint32_t table_id, uint64_t key, bool is_rmw)
         mv_key.next = -1;
         return mv_key;
 }
-/*
+
 static txn* generate_small_bank_action(uint32_t num_records, bool read_only)
 {
         txn *t;
@@ -778,7 +781,6 @@ static void mv_setup_input_array(std::vector<ActionBatch> *input,
                                  MVConfig mv_config, workload_config w_config)
 {
         uint32_t num_epochs;
-        RecordGenerator *gen;
         ActionBatch batch;
         uint32_t i;
         
@@ -797,8 +799,6 @@ static ActionBatch generate_db(workload_config conf)
         ActionBatch ret;
 
         uint64_t timestamp;
-
-        timestamp = CREATE_MV_TIMESTAMP(1, i);
 
         loader_txns = NULL;
         num_txns = generate_input(conf, &loader_txns);

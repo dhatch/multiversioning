@@ -34,7 +34,7 @@ bool ycsb_insert::Run()
 
 uint32_t ycsb_insert::num_writes()
 {
-        return (uint32_t)(end - start + 1);
+        return (uint32_t)(end - start);
 }
 
 void ycsb_insert::get_writes(struct big_key *array)
@@ -49,6 +49,8 @@ void ycsb_insert::get_writes(struct big_key *array)
 ycsb_readonly::ycsb_readonly(vector<uint64_t> reads)
 {
         uint32_t num_reads, i;
+        
+        num_reads = reads.size();
         for (i = 0; i < num_reads; ++i)
                 this->reads.push_back(reads[i]);
 }
@@ -80,6 +82,9 @@ void ycsb_readonly::get_reads(struct big_key *array)
 ycsb_rmw::ycsb_rmw(vector<uint64_t> reads, vector<uint64_t> writes)
 {
         uint32_t num_reads, num_writes, i;
+
+        num_reads = reads.size();
+        num_writes = writes.size();
         for (i = 0; i < num_reads; ++i) 
                 this->reads.push_back(reads[i]);
         for (i = 0; i < num_writes; ++i) 
@@ -147,4 +152,5 @@ bool ycsb_rmw::Run()
                 for (j = 0; j < 10; ++j)
                         *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
         }
+        return true;
 }

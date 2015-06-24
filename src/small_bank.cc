@@ -182,7 +182,7 @@ void SmallBank::Amalgamate::get_rmws(struct big_key *array)
 SmallBank::WriteCheck::WriteCheck(uint64_t customer_id, long amount)
 {
         this->customer_id = customer_id;
-        this->check_amount = check_amount;
+        this->check_amount = amount;
 }
 
 bool SmallBank::WriteCheck::Run()

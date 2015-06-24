@@ -37,17 +37,17 @@ uint32_t txn::num_rmws()
         return 0;
 }
 
-void txn::get_reads(struct big_key *array)
+void txn::get_reads(__attribute__((unused)) struct big_key *array)
 {
         return;
 }
 
-void txn::get_writes(struct big_key *array)
+void txn::get_writes(__attribute__((unused)) struct big_key *array)
 {
         return;
 }
 
-void txn::get_rmws(struct big_key *array)
+void txn::get_rmws(__attribute__((unused)) struct big_key *array)
 {
         return;
 }
