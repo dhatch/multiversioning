@@ -385,14 +385,14 @@ CompositeKey mv_action::GenerateKey(bool is_rmw, uint32_t tableId, uint64_t key)
 }
 
 
-void mv_action::AddReadKey(uint32_t tableId, uint64_t key)
+void mv_action::add_read_key(uint32_t tableId, uint64_t key)
 {
         CompositeKey to_add;
         to_add = GenerateKey(false, tableId, key);
         __readset.push_back(to_add);
 }
 
-void mv_action::AddWriteKey(uint32_t tableId, uint64_t key, bool is_rmw)
+void mv_action::add_write_key(uint32_t tableId, uint64_t key, bool is_rmw)
 {
         CompositeKey to_add;
         to_add = GenerateKey(is_rmw, tableId, key);

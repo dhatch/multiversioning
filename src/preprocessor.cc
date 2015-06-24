@@ -12,7 +12,6 @@
 #include <cstring>
 #include <deque>
 
-
 using namespace std;
 
 uint32_t MVScheduler::NUM_CC_THREADS = 1;
@@ -53,7 +52,7 @@ void MVActionHasher::StartWorking() {
   }
 }
 
-void MVActionHasher::ProcessAction(Action *action, uint32_t epoch,
+void MVActionHasher::ProcessAction(mv_action *action, uint32_t epoch,
                                    uint32_t txnCounter) {
   action->__combinedHash =  0;
   action->__version = (((uint64_t)epoch << 32) | txnCounter);
@@ -159,7 +158,7 @@ uint32_t MVScheduler::GetCCThread(CompositeKey key) {
  * to track the version of each record written by the transaction. The version
  * is equal to the transaction's timestamp.
  */
-void MVScheduler::ProcessWriteset(Action *action)
+void MVScheduler::ProcessWriteset(mv_action *action)
 {
 
         while (alloc->Warning()) {
@@ -188,7 +187,7 @@ void MVScheduler::ProcessWriteset(Action *action)
 }
 
 
-inline void MVScheduler::ScheduleTransaction(Action *action) {
+inline void MVScheduler::ScheduleTransaction(mv_action *action) {
   if ((action->__combinedHash & txnMask) != 0) {
           ProcessWriteset(action);
   }

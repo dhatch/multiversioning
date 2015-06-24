@@ -11,80 +11,16 @@
 
 extern uint32_t NUM_CC_THREADS;
 
-struct big_key {
-        uint64_t key;
-        uint32_t table_id;
-        
-        bool operator==(const big_key &other) const {
-                return other.table_id == this->table_id &&
-                other.key == this->key;
-        }
-
-        bool operator!=(const big_key &other) const {
-                return !(*this == other);
-        }
-  
-        bool operator<(const big_key &other) const {
-                return ((this->table_id < other.table_id) || 
-                        (
-                         (this->table_id == other.table_id) &&
-                         (this->key < other.key)
-                         ));
-        }
-  
-        bool operator>(const big_key &other) const {
-                return ((this->table_id > other.table_id) ||
-                        (
-                         (this->table_id == other.table_id) &&
-                         (this->key > other.key)
-                         ));
-        }
-  
-        bool operator<=(const big_key &other) const {
-                return !(*this > other);
-        }
-  
-        bool operator>=(const big_key &other) const {
-                return !(*this < other);
-        }
-
-        static inline uint64_t Hash(const big_key *key) {
-                return Hash128to64(std::make_pair(key->key,
-                                                  (uint64_t)(key->table_id)));
-        }
-  
-        static inline uint64_t HashKey(const big_key *key) {
-                return Hash128to64(std::make_pair((uint64_t)key->table_id,
-                                                  key->key));
-        }
-};
-
-namespace std {
-        template <>
-                struct hash<big_key>
-                {
-                        std::size_t operator()(const big_key& k) const
-                                {
-                                        return big_key::Hash(&k);
-                                }
-                };
-};
-
-enum usage_type {
-        READ,
-        WRITE,
-        RMW,
-};
-
 struct key_index {
         usage_type use;
         uint32_t index;
         bool initialized;
 };
 
+class mv_action;
 
 struct ActionBatch {
-    Action **actionBuf;
+    mv_action **actionBuf;
     uint32_t numActions;
 };
 
@@ -255,8 +191,8 @@ class mv_action : public translator {
         void* write_ref(uint64_t key, uint32_t table_id);
         void* read(uint64_t key, uint32_t table_id);
         bool Run();
-        virtual void AddReadKey(uint32_t tableId, uint64_t key);
-        virtual void AddWriteKey(uint32_t tableId, uint64_t key, bool is_rmw);
+        virtual void add_read_key(uint32_t tableId, uint64_t key);
+        virtual void add_write_key(uint32_t tableId, uint64_t key, bool is_rmw);
         bool initialized();
 };
 

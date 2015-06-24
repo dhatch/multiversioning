@@ -7,7 +7,7 @@
 #include <cpuinfo.h>
 #include <iostream>
 
-class Action;
+class mv_action;
 class Record;
 
 extern uint64_t recordSize;
@@ -17,25 +17,25 @@ typedef struct _MVRecord_ MVRecord;
 
 struct _MVRecord_ {
   
-  static uint64_t INFINITY;        
+        static uint64_t INFINITY;        
 
-  uint64_t createTimestamp;
-  uint64_t deleteTimestamp;
-  uint64_t key;
+        uint64_t createTimestamp;
+        uint64_t deleteTimestamp;
+        uint64_t key;
         
-  // The transaction responsible for creating a value associated with the 
-  // record.
-  Action *writer;
+        // The transaction responsible for creating a value associated with the 
+        // record.
+        mv_action *writer;
         
-  // The actual value of the record.
-  Record *value;        
+        // The actual value of the record.
+        Record *value;        
 
-  MVRecord *link;        
-  MVRecord *recordLink;
+        MVRecord *link;        
+        MVRecord *recordLink;
         MVRecord *epoch_ancestor;
-  MVRecord *allocLink;
+        MVRecord *allocLink;
 
-  uint32_t writingThread;
+        uint32_t writingThread;
 } __attribute__((__packed__));
 
 /*

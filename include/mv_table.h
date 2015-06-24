@@ -44,7 +44,7 @@ class MVTablePartition {
   // param version: Version of the record to write out.
   // 
   // return value: true if the write is successful, false otherwise. 
-  bool WriteNewVersion(CompositeKey &pkey, Action *action, uint64_t version);
+  bool WriteNewVersion(CompositeKey &pkey, mv_action *action, uint64_t version);
 
 
   MVRecord* GetMVRecord(const CompositeKey &pkey, uint64_t version);
@@ -108,8 +108,8 @@ class MVTable {
   // 
   // return value: true if we're able to insert a new version for the record. 
   //                               May fail if the allocator runs out of memory.
-  bool WriteNewVersion(uint32_t partition, CompositeKey& pkey, 
-                       Action *action, uint64_t timestamp);   
+  bool WriteNewVersion(uint32_t partition, CompositeKey& pkey,
+                       mv_action *action, uint64_t timestamp);   
 
   MVTablePartition* GetPartition(uint32_t partition) {
     return tablePartitions[partition];

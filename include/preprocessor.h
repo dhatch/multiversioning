@@ -10,7 +10,7 @@
 extern uint64_t recordSize;
 
 class CompositeKey;
-class Action;
+class mv_action;
 class MVRecordAllocator;
 class MVTablePartition;
 
@@ -46,7 +46,7 @@ class MVActionHasher : public Runnable {
   
   virtual void Init();
   
-  static inline void ProcessAction(Action *action, uint32_t epoch, 
+  static inline void ProcessAction(mv_action *action, uint32_t epoch, 
                                    uint32_t txnCounter);
 
  public:
@@ -123,8 +123,8 @@ class MVScheduler : public Runnable {
 
  protected:
         virtual void StartWorking();
-        void ProcessWriteset(Action *action);
-        void ScheduleTransaction(Action *action);
+        void ProcessWriteset(mv_action *action);
+        void ScheduleTransaction(mv_action *action);
         //    void Leader(uint32_t epoch);
         //    void Subordinate(uint32_t epoch);
     virtual void Init();

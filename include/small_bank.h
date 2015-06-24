@@ -23,6 +23,19 @@ struct SmallBankRecord {
 
 namespace SmallBank {
 
+        class LoadCustomerRange : public txn {
+        private:
+                std::vector<long> balances;
+                std::vector<uint64_t> customers;
+                
+        public:
+                LoadCustomerRange(uint64_t customer_start,
+                                  uint64_t customer_end);
+                virtual bool Run();
+                virtual uint32_t num_writes();
+                virtual void get_writes(struct big_key *array);
+        };
+        
         class Balance : public txn {
         private:
                 long totalBalance;
@@ -30,6 +43,8 @@ namespace SmallBank {
         public:
                 Balance(uint64_t customer_id);
                 virtual bool Run();
+                virtual uint32_t num_reads();
+                virtual void get_reads(struct big_key *array);
         };
 
         class DepositChecking : public txn {
@@ -40,6 +55,8 @@ namespace SmallBank {
         public:
                 DepositChecking(uint64_t customer, long amount);               
                 virtual bool Run();
+                virtual uint32_t num_rmws();
+                virtual void get_rmws(struct big_key *array);
         };
 
         class TransactSaving : public txn {    
@@ -50,6 +67,8 @@ namespace SmallBank {
         public:
                 TransactSaving(uint64_t customer, long amount);
                 virtual bool Run();
+                virtual uint32_t num_rmws();
+                virtual void get_rmws(struct big_key *array);
         };
 
         class Amalgamate : public txn {
@@ -59,6 +78,8 @@ namespace SmallBank {
         public:
                 Amalgamate(uint64_t fromCustomer, uint64_t toCustomer);
                 virtual bool Run();
+                virtual uint32_t num_rmws();
+                virtual void get_rmws(struct big_key *array);
         };
   
         class WriteCheck : public txn {
@@ -68,6 +89,11 @@ namespace SmallBank {
         public:
                 WriteCheck(uint64_t customer, long check_amount);
                 virtual bool Run();
+
+                virtual uint32_t num_reads();
+                virtual uint32_t num_rmws();
+                virtual void get_reads(struct big_key *array);
+                virtual void get_rmws(struct big_key *array);
         };  
 };
 

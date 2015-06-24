@@ -1,15 +1,13 @@
 #include <config.h>
 #include <common.h>
 #include <mv_action.h>
-#include <small_bank.h>
 #include <concurrent_queue.h>
 #include <preprocessor.h>
 #include <executor.h>
-#include <uniform_generator.h>
-#include <zipf_generator.h>
 #include <iostream>
 #include <fstream>
 #include <gperftools/profiler.h>
+#include <setup_workload.h>
 
 #define INPUT_SIZE 1024
 #define OFFSET 0
@@ -467,53 +465,48 @@ static CompositeKey create_mv_key(uint32_t table_id, uint64_t key, bool is_rmw)
         mv_key.next = -1;
         return mv_key;
 }
-
-static Action* generate_small_bank_action(uint32_t num_records, bool read_only)
+/*
+static txn* generate_small_bank_action(uint32_t num_records, bool read_only)
 {
-        Action *action;
+        txn *t;
         char *temp_buf;
         int mod, txn_type;
         long amount;
         uint64_t customer, from_customer, to_customer;
-        if (read_only == true) {
+        if (read_only == true) 
                 mod = 1;
-        } else {
+        else
                 mod = 5;
-        }
-        temp_buf = (char*)malloc(METADATA_SIZE);
-        GenRandomSmallBank(temp_buf, METADATA_SIZE);
         txn_type = rand() % mod;
         if (txn_type == 0) {
                 customer = (uint64_t)(rand() % num_records);
-                action = new MVSmallBank::Balance(customer, temp_buf);
+                t = new SmallBank::Balance(customer);
         } else if (txn_type == 1) {
                 customer = (uint64_t)(rand() % num_records);
                 amount = (long)(rand() % 25);
-                action = new MVSmallBank::DepositChecking(customer, amount,
-                                                       temp_buf);
+                t = new SmallBank::DepositChecking(customer, amount);
         } else if (txn_type == 2) {
                 customer = (uint64_t)(rand() % num_records);
                 amount = (long)(rand() % 25);
-                action = new MVSmallBank::TransactSaving(customer, amount,
-                                                      temp_buf);
+                t = new SmallBank::TransactSaving(customer, amount);
         } else if (txn_type == 3) {
                 from_customer = (uint64_t)(rand() % num_records);
                 do {
                         to_customer = (uint64_t)(rand() % num_records);
                 } while (to_customer == from_customer);
-                action = new MVSmallBank::Amalgamate(from_customer, to_customer,
-                                                   temp_buf);
+                t = new SmallBank::Amalgamate(from_customer,
+                                                     to_customer);
         } else if (txn_type == 4) {
                 customer = (uint64_t)(rand() % num_records);
                 amount = (long)(rand() % 25);
                 if (rand() % 2 == 0) {
                         amount *= -1;
                 }
-                action = new MVSmallBank::WriteCheck(customer, amount, temp_buf);
+                t = new SmallBank::WriteCheck(customer, amount);
         } else {
                 assert(false);
         }
-        return action;
+        return t;
 }
 
 
@@ -665,6 +658,7 @@ static Action* generate_rmw_action(RecordGenerator *gen, MVConfig config)
         }
         return generate_single_rmw_action(gen, num_writes, num_rmws, num_reads);
 }
+*/
 
 static uint32_t get_num_epochs(MVConfig config)
 {
@@ -676,29 +670,102 @@ static uint32_t get_num_epochs(MVConfig config)
         return num_epochs;
 }
 
-static ActionBatch mv_create_action_batch(RecordGenerator *gen, MVConfig config,
+/*
+ * Pre-process each txn's read- and write-sets. 
+ * 
+ * XXX Ideally, this should happen _online_, and "route" transactions to the
+ * appropriate concurrency control threads, but we're doing it offline because 
+ * it's good enough for experiments.
+ */
+static void do_preprocessing(vector<CompositeKey> &keys, vector<int> &starts)
+{
+        CompositeKey mv_key;
+        int indices[NUM_CC_THREADS], index, *ptr;
+        uint32_t i, num_keys;
+
+        for (i = 0; i < NUM_CC_THREADS; ++i)
+                indices[i] = -1;
+        num_keys = keys.size();
+        for (i = 0; i < num_keys; ++i) {
+                mv_key = keys[i];
+                if (indices[mv_key.threadId] != -1) {
+                        index = indices[mv_key.threadId];
+                        ptr = &keys[index].next;
+                } else {
+                        ptr = &starts[mv_key.threadId];
+                }
+                indices[mv_key.threadId] = i;
+                *ptr = i;
+        }
+}
+
+static void convert_keys(mv_action *action, txn *txn)
+{
+        uint32_t i, num_reads, num_rmws, num_writes, num_entries;
+        struct big_key *array;
+
+        /* Alloc an array to poke txn information. */
+        num_reads = txn->num_reads();
+        num_rmws = txn->num_rmws();
+        num_writes = txn->num_writes();
+        if (num_reads >= num_rmws && num_reads >= num_writes) 
+                num_entries = num_reads;
+        else if (num_rmws >= num_writes) 
+                num_entries = num_rmws;
+        else 
+                num_entries = num_writes;
+        array = (struct big_key*)malloc(sizeof(struct big_key)*num_entries);
+                
+        /* Handle writes. */
+        txn->get_writes(array);
+        for (i = 0; i < num_writes; ++i)
+                action->add_write_key(array[i].table_id, array[i].key, false);
+
+        /* Handle rmws. */
+        txn->get_rmws(array);
+        for (i = 0; i < num_rmws; ++i)
+                action->add_write_key(array[i].table_id, array[i].key, true);
+        
+        /* Handle reads. */
+        txn->get_reads(array);
+        for (i = 0; i < num_reads; ++i)
+                action->add_read_key(array[i].table_id, array[i].key);
+        free(array);
+}
+
+static mv_action* generate_mv_action(txn *txn)
+{
+        mv_action *action;
+
+        /* Get the transaction's rw-sets. */
+        action = new mv_action(txn);
+        convert_keys(action, txn);
+
+        /* 
+         * Pre-process rw-sets for more concurrency control phase parallelism. 
+         */
+        do_preprocessing(action->__writeset, action->__write_starts);
+        do_preprocessing(action->__readset, action->__read_starts);
+        return action;        
+}
+
+static ActionBatch mv_create_action_batch(MVConfig config,
+                                          workload_config w_config,
                                           uint32_t epoch)
 {
         ActionBatch batch;
-        Action *action;
+        mv_action *action;
+        txn *txn;
         uint32_t i;
         uint64_t timestamp;
         batch.numActions = config.epochSize;
-        batch.actionBuf = (Action**)malloc(sizeof(Action*)*config.epochSize);
+        batch.actionBuf =
+                (mv_action**)malloc(sizeof(mv_action*)*config.epochSize);
         assert(batch.actionBuf != NULL);
         for (i = 0; i < config.epochSize; ++i) {
                 timestamp = CREATE_MV_TIMESTAMP(epoch, i);
-                if (config.experiment == 3) {
-                        action = generate_small_bank_action(config.numRecords,
-                                                            false);
-                } else if (config.experiment == 4) {
-                        action = generate_small_bank_action(config.numRecords,
-                                                            true);
-                } else if (config.experiment < 3) {
-                        action = generate_rmw_action(gen, config);
-                } else {
-                        assert(false);
-                }
+                txn = generate_transaction(w_config);
+                action = generate_mv_action(txn);
                 action->__version = timestamp;
                 batch.actionBuf[i] = action;
         }
@@ -706,42 +773,58 @@ static ActionBatch mv_create_action_batch(RecordGenerator *gen, MVConfig config,
 }
 
 static void mv_setup_input_array(std::vector<ActionBatch> *input,
-                                 MVConfig config)
+                                 MVConfig mv_config, workload_config w_config)
 {
         uint32_t num_epochs;
         RecordGenerator *gen;
         ActionBatch batch;
         uint32_t i;
-        if (config.distribution == 0) {
-                gen = new UniformGenerator((uint32_t)config.numRecords);
-        } else if (config.distribution == 1) {
-                gen = new ZipfGenerator((uint64_t)config.numRecords,
-                                        config.theta);
-        }
-        num_epochs = get_num_epochs(config);
-
+        
+        num_epochs = get_num_epochs(mv_config);
         for (i = 0; i < num_epochs + MV_DRY_RUNS; ++i) {
-                batch = mv_create_action_batch(gen, config, i+2);
+                batch = mv_create_action_batch(mv_config, w_config, i+2);
                 input->push_back(batch);
         }
         std::cerr << "Done setting up mv input!\n";
 }
 
+static ActionBatch generate_db(workload_config conf)
+{
+        txn **loader_txns;
+        uint32_t num_txns, i;
+        ActionBatch ret;
+        
+        num_txns = generate_input(conf, &loader_txns);
+        ret.numActions = num_txns;
+        ret.actionBuf = (mv_action**)malloc(sizeof(mv_action*)*num_txns);
+        for (i = 0; i < num_txns; ++i) 
+                ret.actionBuf[i] = generate_mv_action(loader_txns[i]);
+        return ret;
+}
+
+/*
 static ActionBatch generate_small_bank_db(uint64_t num_customers,
                                           uint32_t num_threads)
 {
+        using namespace SmallBank;
+        
         ActionBatch batch;
         uint32_t i;
-        uint64_t records_per_thread, remainder, start;
-        Action *cur_action, **txns;
+        uint64_t records_per_thread, remainder, start, end;
+        mv_action **actions;
+        txn *txn;
         records_per_thread = num_customers / num_threads;
         remainder = num_customers % num_threads;
-        txns = (Action**)malloc(sizeof(Action*)*num_threads);
+        actions = (mv_action**)malloc(sizeof(mv_action*)*num_threads);
         start = 0;
         for (i = 0; i < num_threads; ++i) {
                 if (i == num_threads - 1) {
                         records_per_thread += remainder;
                 }
+                end = start + records_per_thread;
+                txn = new LoadCustomerRange(customer_
+                txn = new SmallBank::LoadCustomerRange(customer_setart, 
+                                                       start+records_pre_thread);
                 cur_action = new MVSmallBank::LoadCustomerRange(start,
                                                                 start+records_per_thread);
                 cur_action->__version = CREATE_MV_TIMESTAMP(1, i);
@@ -754,6 +837,7 @@ static ActionBatch generate_small_bank_db(uint64_t num_customers,
         };
         return batch;        
 }
+
 
 static InsertAction* generate_single_insert_txn(uint64_t start_record,
                                                 uint64_t end_record)
@@ -814,7 +898,8 @@ static ActionBatch generate_ycsb_db(uint64_t numRecords, uint32_t numThreads)
         batch.numActions = numThreads;
         return batch;
 }
-
+*/
+ 
 static void write_results(MVConfig config, timespec elapsed_time)
 {
         uint32_t num_epochs;
@@ -892,6 +977,7 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
         return elapsed_time;
 }
 
+/*
 static ActionBatch setup_loader_txns(MVConfig config)
 {
         ActionBatch batch;
@@ -906,8 +992,10 @@ static ActionBatch setup_loader_txns(MVConfig config)
         }
         return batch;
 }
+*/
 
 static void init_database(MVConfig config,
+                          workload_config w_conf,
                           SimpleQueue<ActionBatch> *input_queue,
                           SimpleQueue<ActionBatch> *output_queue,
                           MVScheduler **sched_threads,
@@ -919,12 +1007,11 @@ static void init_database(MVConfig config,
         int pin_success;
         pin_success = pin_thread(79);
         assert(pin_success == 0);
-        init_batch = setup_loader_txns(config);
+        init_batch = generate_db(w_conf);
         for (i = 0; i < config.numCCThreads; ++i) {
                 sched_threads[i]->Run();        
                 sched_threads[i]->WaitInit();
         }
-        
         for (i = 0; i < config.numWorkerThreads; ++i) {
                 exec_threads[i]->Run();
                 exec_threads[i]->WaitInit();                
@@ -992,40 +1079,39 @@ static Executor** setup_executors(MVConfig config,
         return execs;
 }
 
-void do_mv_experiment(MVConfig config)
+void do_mv_experiment(MVConfig mv_config, workload_config w_config)
 {
         MVScheduler **schedThreads;
         Executor **execThreads;
         SimpleQueue<ActionBatch> *schedInputQueue;
         SimpleQueue<ActionBatch> *schedOutputQueues;
-        SimpleQueue<MVRecordList> **schedGCQueues[config.numCCThreads];
+        SimpleQueue<MVRecordList> **schedGCQueues[mv_config.numCCThreads];
         SimpleQueue<ActionBatch> *outputQueue;
         std::vector<ActionBatch> input_placeholder;
         timespec elapsed_time;
 
-        std::cout << "Read txn size:" << config.read_txn_size << "\n";
+        std::cout << "Read txn size:" << mv_config.read_txn_size << "\n";
         
-        MVScheduler::NUM_CC_THREADS = (uint32_t)config.numCCThreads;
-        NUM_CC_THREADS = (uint32_t)config.numCCThreads;
-        assert(config.distribution < 2);
+        MVScheduler::NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
+        NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
+        assert(mv_config.distribution < 2);
         outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE,
-                                                    config.numWorkerThreads, 71);
-        schedThreads = setup_scheduler_threads(config, &schedInputQueue,
+                                                   mv_config.numWorkerThreads,
+                                                   71);
+        schedThreads = setup_scheduler_threads(mv_config, &schedInputQueue,
                                                &schedOutputQueues,
                                                schedGCQueues);
-        setup_ycsb_occ_tables(config.numRecords, config.numCCThreads+config.numWorkerThreads);
-
-        mv_setup_input_array(&input_placeholder, config);
-        execThreads = setup_executors(config, schedOutputQueues, outputQueue,
+        mv_setup_input_array(&input_placeholder, mv_config, w_config);
+        execThreads = setup_executors(mv_config, schedOutputQueues, outputQueue,
                                       schedGCQueues);
-        init_database(config, schedInputQueue, outputQueue, schedThreads,
-                      execThreads);
+        init_database(mv_config, w_config, schedInputQueue, outputQueue,
+                      schedThreads, execThreads);
         pin_memory();
         elapsed_time = run_experiment(schedInputQueue,  //&schedOutputQueues[config.numWorkerThreads],
                                       outputQueue,
                                       input_placeholder,// 1);
-                                      config.numWorkerThreads);
-        write_results(config, elapsed_time);
+                                      mv_config.numWorkerThreads);
+        write_results(mv_config, elapsed_time);
 }
 
 /*

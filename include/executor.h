@@ -7,7 +7,7 @@
 #include <set>
 
 struct ActionListNode {
-  Action *action;
+  mv_action *action;
   ActionListNode *next;
   ActionListNode *prev;
 };
@@ -81,7 +81,6 @@ class PendingActionList {
   ActionListNode *cursor;
   
   uint32_t size;
-  std::set<Action*> seen;
 
  public:
   void* operator new(std::size_t sz, int cpu) {
@@ -90,7 +89,7 @@ class PendingActionList {
 
   PendingActionList(uint32_t freeListSize);
 
-  void EnqueuePending(Action *action);
+  void EnqueuePending(mv_action *action);
   void DequeuePending(ActionListNode *listNode);
 
   void ResetCursor();
@@ -156,15 +155,15 @@ class Executor : public Runnable {
   void ExecPending();
 
   void ProcessBatch(const ActionBatch &batch);
-  bool ProcessSingle(Action *action);
-  bool ProcessTxn(Action *action);
+  bool ProcessSingle(mv_action *action);
+  bool ProcessTxn(mv_action *action);
 
   void RecycleData();
 
 
   uint32_t DoPendingGC();
-  bool ProcessSingleGC(Action *action);
-  bool check_ready(Action *action);
+  bool ProcessSingleGC(mv_action *action);
+  bool check_ready(mv_action *action);
 
   virtual uint64_t next_ptr();
  public:

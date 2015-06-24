@@ -3,6 +3,6 @@
 
 #include <config.h>
 
-extern void do_mv_experiment(MVConfig config);
+extern void do_mv_experiment(MVConfig mv_xconfig, workload_config w_config);
 
 #endif // SETUP_MV_H_

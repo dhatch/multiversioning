@@ -15,16 +15,12 @@ PendingActionList::PendingActionList(uint32_t freeListSize) {
   this->size = 0;
 }
 
-inline void PendingActionList::EnqueuePending(Action *action) {
+inline void PendingActionList::EnqueuePending(mv_action *action) {
   assert((head != NULL && tail != NULL && size > 0) || 
          (head == NULL && tail == NULL && size == 0));
 
   assert(freeList != NULL);
   assert(action != NULL);
-
-  assert(this->seen.find(action) == this->seen.end());
-  this->seen.insert(action);
-  assert(this->seen.find(action) != this->seen.end());
 
   ActionListNode *node = freeList;
   freeList = freeList->next;  
@@ -300,7 +296,7 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
                         ExecPending();
                 }
 
-                Action *cur = batch.actionBuf[i];
+                mv_action *cur = batch.actionBuf[i];
                 if (!ProcessSingle(cur)) {
                         pendingList->EnqueuePending(cur);
                 }
@@ -346,7 +342,7 @@ uint32_t Executor::DoPendingGC() {
   }
 }
 
-bool Executor::ProcessSingleGC(Action *action) {
+bool Executor::ProcessSingleGC(mv_action *action) {
   assert(action->__state == SUBSTANTIATED);
   uint32_t numWrites = action->__writeset.size();
   bool ret = true;
@@ -379,7 +375,7 @@ bool Executor::ProcessSingleGC(Action *action) {
   return ret;
 }
 
-bool Executor::ProcessSingle(Action *action) {
+bool Executor::ProcessSingle(mv_action *action) {
         assert(action != NULL);
         volatile uint64_t state;
         barrier();
@@ -403,11 +399,11 @@ bool Executor::ProcessSingle(Action *action) {
         }
 }
 
-bool Executor::check_ready(Action *action)
+bool Executor::check_ready(mv_action *action)
 {
         uint32_t num_reads, num_writes, i;
         bool ready;
-        Action *depend_action;
+        mv_action *depend_action;
         MVRecord *prev;
         
         ready = true;
@@ -438,7 +434,7 @@ bool Executor::check_ready(Action *action)
         return ready;
 }
 
-bool Executor::ProcessTxn(Action *action) {
+bool Executor::ProcessTxn(mv_action *action) {
         assert(action != NULL && action->__state == PROCESSING);
         if (action->__readonly == true) {
                 assert(action->__writeset.size() == 0);

@@ -30,6 +30,21 @@ static struct option long_options[] = {
   {NULL, no_argument, NULL, 16},
 };
 
+enum distribution_t {
+        UNIFORM = 0,
+        ZIPFIAN,
+};
+
+struct workload_config
+{
+        uint32_t num_records;
+        uint32_t txn_size;
+        uint32_t experiment;
+        distribution_t distribution;        
+        double theta;
+        uint32_t read_pct;
+        uint32_t read_txn_size;
+};
 
 enum ConcurrencyControl {
   MULTIVERSION = 0,
@@ -129,12 +144,18 @@ class ExperimentConfig {
   OCCConfig occConfig;
   MVConfig mvConfig;    
   hek_config hek_conf;
+  workload_config w_conf;
   
   ExperimentConfig(int argc, char **argv) {
     ReadArgs(argc, argv);
     InitConfig();
   }
-
+  
+  workload_config get_workload_config()
+  {
+          return this->w_conf;
+  }
+  
   void InitConfig() {
     int ccType = -1;
     if ((argMap.count(CC_TYPE) == 0) || 
@@ -143,7 +164,7 @@ class ExperimentConfig {
       std::cerr << "Undefined concurrency control type\n";
       exit(-1);
     }
-    
+
     if (ccType == MULTIVERSION) {
       if (argMap.count(NUM_CC_THREADS) == 0 ||
           argMap.count(NUM_TXNS) == 0 ||
@@ -325,7 +346,22 @@ class ExperimentConfig {
             
     } else {
             assert(false);
-    }    
+    }
+
+    /* Initialize workload config. */
+    this->w_conf.num_records = (uint32_t)atoi(argMap[NUM_RECORDS]);
+    this->w_conf.txn_size = (uint32_t)atoi(argMap[TXN_SIZE]);
+    this->w_conf.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
+    this->w_conf.distribution = (distribution_t)atoi(argMap[DISTRIBUTION]);
+    assert(this->w_conf.distribution == UNIFORM ||
+           this->w_conf.distribution == ZIPFIAN);
+    this->w_conf.theta = 0.0;
+    if (this->w_conf.distribution == ZIPFIAN) {
+            assert(argMap.count(THETA) > 0);
+            this->w_conf.theta = (double)atof(argMap[THETA]);
+    }
+    this->w_conf.read_pct = (uint32_t)atoi(argMap[READ_PCT]);
+    this->w_conf.read_txn_size = (uint32_t)atoi(argMap[READ_TXN_SIZE]);    
   }
 
   void ReadArgs(int argc, char **argv) {

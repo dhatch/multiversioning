@@ -4,7 +4,34 @@
 #include <db.h>
 #include <vector>
 
+#define YCSB_RECORD_SIZE 1000
+
 using namespace std;
+
+class ycsb_insert : public txn {
+ private:
+        uint64_t start;
+        uint64_t end;
+
+        void gen_rand(char *array);
+        
+ public:
+        ycsb_insert(uint64_t start, uint64_t end);
+        virtual bool Run();
+        virtual uint32_t num_writes();
+        virtual void get_writes(struct big_key *array);
+};
+
+class ycsb_readonly : public txn {
+ private:
+        volatile uint64_t accumulated;
+        vector<uint64_t> reads;
+ public:
+        ycsb_readonly(vector<uint64_t> reads);
+        virtual bool Run();
+        virtual uint32_t num_reads();
+        virtual void get_reads(struct big_key *array);
+};
 
 class ycsb_rmw : public txn {
  private:
@@ -14,6 +41,10 @@ class ycsb_rmw : public txn {
  public:
         ycsb_rmw(vector<uint64_t> reads, vector<uint64_t> writes);
         virtual bool Run();
+        virtual uint32_t num_reads();
+        virtual uint32_t num_rmws();
+        virtual void get_reads(struct big_key *array);
+        virtual void get_rmws(struct big_key *array);
 };
 
 #endif // YCSB_H_

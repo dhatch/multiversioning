@@ -492,7 +492,7 @@ int main(int argc, char **argv) {
                   recordSize = sizeof(SmallBankRecord);
           else
                   assert(false);
-          do_mv_experiment(cfg.mvConfig);
+          do_mv_experiment(cfg.mvConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == LOCKING) {
           recordSize = cfg.lockConfig.recordSize;
