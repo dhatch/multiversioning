@@ -215,3 +215,97 @@ occ_txn_status RMWOCCAction::Run()
         status.validation_pass = DoReads();
         return status;
 }
+
+uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
+{
+        volatile uint64_t *tid_ptr;
+        uint32_t record_size;
+        uint64_t ret;
+        void *value;
+
+        value = this->tables[table_id]->Get(key);
+        record_size = this->tables[table_id]->RecordSize();
+        tid_ptr = (volatile uint64_t*)value;
+        while (true) {
+                barrier();
+                ret = *tid_ptr;
+                barrier();
+                if (!IS_LOCKED(ret)) {
+                        memcpy(RECORD_VALUE_PTR(record),
+                               RECORD_VALUE_PTR(value), record_size);
+                        return ret;
+                }
+        }
+}
+
+uint64_t OCCAction::stable_ref(uint64_t key, uint32_t table_id, void **ret)
+{
+        uint64_t tid;
+        volatile uint64_t *tid_ptr;
+        
+        value = this->tables[table_id]->Get(key);
+        *ret = value;
+        tid_ptr = (volatile uint64_t*)value;
+        while (true) {
+                barrier();
+                tid = *tid_ptr;
+                barrier();
+                if (!IS_LOCKED(tid)) 
+                        return tid;
+        }
+}
+
+bool OCCAction::validate()
+{
+
+}
+
+void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
+{
+        uint64_t tid;
+        void *record;
+        uint32_t i, num_writes;
+        occ_composite_key *comp_key;
+        
+        /* 
+         * 1) Get a record from record buffer. 
+         * 2) Add the record.
+         * 3) If this is an RMW, copy the value of the record.
+         * 4) Return the record.
+         */
+
+        record = this->record_alloc->GetRecord(table_id);
+        num_writes = this->writeset.size();
+        comp_key = NULL;
+        for (i = 0; i < num_writes; ++i) {
+                if (writeset[i].key == key && writeset[i].tableId == table_id) {
+                        comp_key = &writeset[i];
+                        break;
+                }                
+        }
+        assert(comp_key != NULL);
+        if (writeset[i].is_rmw == true) {
+                tid = stable_copy(key, table_id, record);
+                comp_key->old_tid = tid;
+        }
+        comp_key->value = record;
+        return RECORD_VALUE_PTR(record);
+}
+
+void* OCCAction::read(uint64_t key, uint32_t table_id)
+{
+        uint64_t tid;
+        void *record;
+        uint32_t i, num_reads;
+
+        occ_composite_key *comp_key;
+        num_reads = this->readset.size();
+        comp_key = NULL;
+        for (i = 0; i < num_reads; ++i) {
+                if (readset[i].key == key && [i].tableId == table_id)
+                        comp_key = &readset[i];
+        }
+
+        tid = stable_ref(key, table_id, &value);
+        return RECORD_VALUE_PTR(value);                
+}

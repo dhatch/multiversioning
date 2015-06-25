@@ -2,6 +2,7 @@
 #define OCC_ACTION_H_
 
 #include <action.h>
+#include <db.h>
 
 #define TIMESTAMP_MASK (0xFFFFFFFFFFFFFFF0)
 #define EPOCH_MASK (0xFFFFFFFF00000000)
@@ -62,17 +63,21 @@ class occ_composite_key {
 };
 
 
-class OCCAction {
+class OCCAction : public translator {
+ private:
+        txn *txn;
+        RecordBuffer *record_alloc;
+        Table **tables;
+        
  public:
         uint64_t __tid;
         std::vector<occ_composite_key> readset;
         std::vector<occ_composite_key> writeset;
-
         std::vector<occ_composite_key> shadow_writeset;
-        
-        // XXX don't require this field anymore. Manually lookup hash tables for
-        // refs to records.
-        // std::vector<void*> write_records; 
+
+        virtual void *write_ref(uint64_t key, uint32_t table);
+        virtual void *read(uint64_t key, uint32_t table);
+        virtual void *set_allocator(RecordBuffer *buf);
         
         virtual occ_txn_status Run() = 0;
         void AddReadKey(uint32_t table_id, uint64_t key, bool is_rmw);
