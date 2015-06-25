@@ -3,8 +3,6 @@
 
 extern Table** mv_tables;
 
-
-
 Action::Action()
 {
         this->__version = 0;
@@ -340,26 +338,55 @@ bool mv_action::Run()
 
 void* mv_action::write_ref(uint64_t key, uint32_t table_id)
 {
-        struct big_key bkey;
-        struct key_index index;
-       
+        //        struct big_key bkey;
+        //        struct key_index index;
+        uint32_t num_writes, i;
+        
         assert(init == true);
-        bkey.key = key;
-        bkey.table_id = table_id;        
-        assert(reverse_index.count(bkey) == 1);
-        index = reverse_index[bkey];
-        assert(index.use == WRITE || index.use == RMW);
-        return __writeset[index.index].value->value;
+        num_writes = this->__writeset.size();
+        //        assert(num_writes < 10);
+        for (i = 0; i < num_writes; ++i) {
+                if (this->__writeset[i].key == key &&
+                    this->__writeset[i].tableId == table_id)
+                        return this->__writeset[i].value->value;
+        }
+        assert(false);
+        return NULL;
 }
 
 void* mv_action::read(uint64_t key, uint32_t table_id)
 {
-        struct big_key bkey;
-        struct key_index index;
+        //        struct big_key bkey;
+        //        struct key_index index;
         MVRecord *record, *snapshot;
+        uint32_t i, num_reads;
         void *ret;
         
         assert(init == true);
+        record = NULL;
+        num_reads = this->__readset.size();
+        //        assert(num_reads < 10);
+        for (i = 0; i < num_reads; ++i) {
+                if (this->__readset[i].key == key &&
+                    this->__readset[i].tableId == table_id) {
+                        record = this->__readset[i].value;
+                        break;
+                }
+        }
+        assert(record != NULL);
+        if (this->__readonly == true &&
+            (
+             GET_MV_EPOCH(this->__version) ==
+             GET_MV_EPOCH(record->createTimestamp)
+             )) {
+                snapshot = record->epoch_ancestor;
+                ret = (void*)snapshot->value;
+        } else {
+                ret = (void*)record->value;
+        }
+        return ret;
+
+        /*
         bkey.key = key;
         bkey.table_id = table_id;
         assert(reverse_index.count(bkey) == 1);
@@ -382,6 +409,7 @@ void* mv_action::read(uint64_t key, uint32_t table_id)
                 ret = __writeset[index.index].value->value;
         }
         return ret;
+        */
 }
 
 CompositeKey mv_action::GenerateKey(bool is_rmw, uint32_t tableId, uint64_t key)

@@ -1,6 +1,8 @@
 #include <executor.h>
 #include <algorithm>
 
+extern uint32_t GLOBAL_RECORD_SIZE;
+
 PendingActionList::PendingActionList(uint32_t freeListSize) {
   freeList = (ActionListNode*)malloc(sizeof(ActionListNode)*freeListSize);
   memset(freeList, 0x00, sizeof(ActionListNode)*freeListSize);
@@ -405,6 +407,7 @@ bool Executor::check_ready(mv_action *action)
         bool ready;
         mv_action *depend_action;
         MVRecord *prev;
+        void *new_data, *old_data;
         
         ready = true;
         num_reads = action->__readset.size();
@@ -428,6 +431,15 @@ bool Executor::check_ready(mv_action *action)
                             depend_action->__state != SUBSTANTIATED && 
                             !ProcessSingle(depend_action)) {
                                 ready = false;
+                        } else {
+                                /* 
+                                 * XXX This is super hacky. Need to separate 
+                                 * record allocation from version allocation to 
+                                 * make it work -- "engineering work". 
+                                 */
+                                new_data = action->__writeset[i].value->value;
+                                old_data = prev->value;
+                                memcpy(new_data, old_data, GLOBAL_RECORD_SIZE);
                         }
                 }
         }

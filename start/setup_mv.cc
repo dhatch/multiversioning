@@ -16,6 +16,7 @@
 #define MV_DRY_RUNS 5
 
 static uint64_t dbSize = ((uint64_t)1<<36);
+uint32_t GLOBAL_RECORD_SIZE;
 
 Table** mv_tables;
 
@@ -1101,8 +1102,16 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
         std::vector<ActionBatch> input_placeholder;
         timespec elapsed_time;
 
-        std::cout << "Read txn size:" << mv_config.read_txn_size << "\n";
-        
+        /* 
+         * XXX Need this for copying old versions of records if a txn performs 
+         * an RMW. Ideally, we need to separate record allocation from version 
+         * allocation to make it work properly. "Engineering effort". See 
+         * src/executor.cc.
+         */
+        if (w_config.experiment < 3)
+                GLOBAL_RECORD_SIZE = 1000;
+        else
+                GLOBAL_RECORD_SIZE = 8;
         MVScheduler::NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
         NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
         assert(mv_config.distribution < 2);
