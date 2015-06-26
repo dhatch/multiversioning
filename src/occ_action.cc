@@ -361,6 +361,7 @@ void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
                         comp_key->old_tid = tid;
                 }
                 comp_key->value = record;
+                comp_key->is_initialized = true;
         } 
         return RECORD_VALUE_PTR(comp_key->value);
 }
@@ -384,10 +385,11 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
         }
         assert(comp_key != NULL);
 
-        if (comp_key->is_initialized) {
+        if (comp_key->is_initialized == false) {
                 tid = stable_copy(key, table_id, record);
                 comp_key->old_tid = tid;
                 comp_key->value = record;
+                comp_key->is_initialized = true;
         } else {
                 record = comp_key->value;
         }        
@@ -480,7 +482,6 @@ bool OCCAction::run()
 void OCCAction::cleanup()
 {
         uint32_t i, num_writes, num_reads;
-        
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 assert(this->writeset[i].is_locked == false);
