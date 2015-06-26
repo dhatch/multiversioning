@@ -68,10 +68,20 @@ class Table {
     }    
     ((TableRecord*)(data + (conf.freeListSz-1)*recordSz))->next = NULL;    
     freeList = (TableRecord*)data;
-    default_value = GetRecord();
-    memset(default_value->value, 0x0, conf.valueSz);
+    //    default_value = GetRecord();
+    //    memset(default_value->value, 0x0, conf.valueSz);
   }
 
+  virtual void PutEmpty(uint64_t key)
+  {
+    uint64_t index = 
+      Hash128to64(std::make_pair(conf.tableId, key)) % conf.numBuckets;
+    TableRecord *rec = GetRecord();
+    rec->next = buckets[index];
+    rec->key = key;
+    buckets[index] = rec;
+  }
+  
   virtual void Put(uint64_t key, void *value)
   {
     uint64_t index = 
@@ -107,7 +117,7 @@ class Table {
           if (rec != NULL) {
                   return (void*)(rec->value);
           } else {
-                  Put(key, default_value->value);
+                  PutEmpty(key);
                   return Get(key);
           }
   }

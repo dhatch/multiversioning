@@ -16,7 +16,7 @@
 #define MV_DRY_RUNS 5
 
 static uint64_t dbSize = ((uint64_t)1<<36);
-uint32_t GLOBAL_RECORD_SIZE;
+extern uint32_t GLOBAL_RECORD_SIZE;
 
 Table** mv_tables;
 

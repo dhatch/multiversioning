@@ -142,7 +142,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                 buf_config = {
                         numTables,
                         recordSizes,
-                        100,
+                        5000,
                         i,
                 };                
                 workers[i] = new(i) OCCWorker(worker_config, buf_config);
@@ -164,7 +164,7 @@ Table** setup_occ_tables(uint32_t num_tables, uint32_t *num_records)
                 conf.startCpu = 0;
                 conf.endCpu = 71;
                 conf.freeListSz = 2*num_records[i];
-                conf.valueSz = GLOBAL_RECORD_SIZE;
+                conf.valueSz = GLOBAL_RECORD_SIZE + 8;
                 conf.recordSize = 0;
                 tables[i] = new(0) Table(conf);
         }

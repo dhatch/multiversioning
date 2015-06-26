@@ -50,6 +50,8 @@ occ_composite_key::occ_composite_key(uint32_t table_id, uint64_t key,
         this->tableId = table_id;
         this->key = key;
         this->is_rmw = is_rmw;
+        this->is_locked = false;
+        this->is_initialized = false;
 }
 
 void* occ_composite_key::GetValue() const
@@ -465,7 +467,7 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
                         max_tid = cur_tid;
         }
         max_tid += 0x10;
-        last_tid = max_tid;
+        this->tid = max_tid;
         assert(!IS_LOCKED(max_tid));
         return max_tid;
 }
@@ -494,7 +496,7 @@ void OCCAction::cleanup()
 
 void OCCAction::install_single_write(occ_composite_key &comp_key)
 {
-        assert(!IS_LOCKED(this->tid) == false);
+        assert(IS_LOCKED(this->tid) == false);
 
         void *value;
         uint64_t old_tid;
@@ -507,6 +509,7 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
         memcpy(RECORD_VALUE_PTR(value), RECORD_VALUE_PTR(comp_key.value),
                record_size - sizeof(uint64_t));
         xchgq((volatile uint64_t*)value, this->tid);
+        comp_key.is_locked = false;
 }
 
 void OCCAction::install_writes()

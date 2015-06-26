@@ -21,6 +21,8 @@
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 
+uint32_t GLOBAL_RECORD_SIZE;
+
 Database DB(2);
 
 uint64_t dbSize = ((uint64_t)1<<36);
@@ -485,6 +487,9 @@ int main(int argc, char **argv) {
   srand(time(NULL));
   ExperimentConfig cfg(argc, argv);
   std::cout << cfg.ccType << "\n";
+
+  
+  
   if (cfg.ccType == MULTIVERSION) {
           if (cfg.mvConfig.experiment < 3) 
                   recordSize = cfg.mvConfig.recordSize;
@@ -492,6 +497,11 @@ int main(int argc, char **argv) {
                   recordSize = sizeof(SmallBankRecord);
           else
                   assert(false);
+          if (cfg.mvConfig.experiment < 3)
+                  GLOBAL_RECORD_SIZE = 1000;
+          else
+                  GLOBAL_RECORD_SIZE = 8;
+
           do_mv_experiment(cfg.mvConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == LOCKING) {
@@ -504,6 +514,11 @@ int main(int argc, char **argv) {
           recordSize = cfg.occConfig.recordSize;
           assert(cfg.occConfig.distribution < 2);
           assert(recordSize == 8 || recordSize == 1000);
+          if (cfg.occConfig.experiment < 3)
+                  GLOBAL_RECORD_SIZE = 1000;
+          else
+                  GLOBAL_RECORD_SIZE = 8;
+
           occ_experiment(cfg.occConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == HEK) {

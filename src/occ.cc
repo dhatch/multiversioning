@@ -96,6 +96,7 @@ void OCCWorker::RunSingle(OCCAction *action)
                         barrier();
                         epoch = *config.epoch_ptr;
                         barrier();
+                        
                         action->validate();
                         this->last_tid = action->compute_tid(epoch,
                                                              this->last_tid);
@@ -104,6 +105,7 @@ void OCCWorker::RunSingle(OCCAction *action)
                         break;
                         
                 } catch(const occ_validation_exception &e) {
+                        assert(false);
                         action->release_locks();
                         action->cleanup();
                 }
