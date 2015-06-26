@@ -283,7 +283,7 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
 {
         volatile uint64_t *tid_ptr;
         uint32_t record_size;
-        uint64_t ret;
+        uint64_t ret, after_read;
         void *value;
 
         value = this->tables[table_id]->Get(key);
