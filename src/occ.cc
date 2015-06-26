@@ -49,14 +49,10 @@ void OCCWorker::TxnRunner()
         
         output.batch = NULL;
         while (true) {
-                barrier();
-                config.num_completed = 0;
-                barrier();
                 input = config.inputQueue->DequeueBlocking();
-                for (i = 0; i < input.batchSize; ++i) {
+                for (i = 0; i < input.batchSize; ++i) 
                         RunSingle(input.batch[i]);
-                }
-                output.batchSize = config.num_completed;
+                output.batchSize = input.batchSize;
                 config.outputQueue->EnqueueBlocking(output);
         }
 }
@@ -86,17 +82,19 @@ uint64_t OCCWorker::NumCompleted()
 void OCCWorker::RunSingle(OCCAction *action)
 {
         volatile uint32_t epoch;
+        uint32_t num_retries;
 
+        num_retries = 0;
         action->set_tables(this->config.tables);
         action->set_allocator(this->bufs);
         while (true) {
                 try {
+                        num_retries += 1;
                         action->run();
                         action->acquire_locks();
                         barrier();
                         epoch = *config.epoch_ptr;
-                        barrier();
-                        
+                        barrier();                        
                         action->validate();
                         this->last_tid = action->compute_tid(epoch,
                                                              this->last_tid);
@@ -105,8 +103,8 @@ void OCCWorker::RunSingle(OCCAction *action)
                         break;
                         
                 } catch(const occ_validation_exception &e) {
-                        assert(false);
-                        action->release_locks();
+                        if (e.err == VALIDATION_ERR)
+                                action->release_locks();
                         action->cleanup();
                 }
         }
@@ -167,12 +165,14 @@ RecordBuffers::RecordBuffers(struct RecordBuffersConfig conf)
                 record_lists[i] = (struct RecordBuffy*)temp;
                 temp += conf.record_sizes[i]*conf.num_buffers;
         }
+        this->num_records = conf.num_buffers;
 }
 
 void* RecordBuffers::GetRecord(uint32_t tableId)
 {
         RecordBuffy *ret;
-        assert(record_lists[tableId] != NULL);
+        assert(record_lists[tableId] != NULL && num_records > 0);
+        num_records -= 1;
         ret = record_lists[tableId];
         record_lists[tableId] = ret->next;
         ret->next = NULL;
@@ -185,4 +185,5 @@ void RecordBuffers::ReturnRecord(uint32_t tableId, void *record)
         ret = (RecordBuffy*)record;
         ret->next = record_lists[tableId];
         record_lists[tableId] = ret;
+        num_records += 1;
 }

@@ -16,8 +16,17 @@
 #define RECORD_TID_PTR(rec_ptr) ((volatile uint64_t*)rec_ptr)
 #define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
 #define OCC_RECORD_SIZE(value_sz) (sizeof(uint64_t)+value_sz)
+#define REAL_RECORD_SIZE(value_sz) (value_sz - sizeof(uint64_t))
 
-class occ_validation_exception : public std::exception {        
+enum validation_err_t {
+        READ_ERR,
+        VALIDATION_ERR,
+};
+
+class occ_validation_exception : public std::exception {
+ public:
+        occ_validation_exception(validation_err_t err) { this->err = err; }
+        validation_err_t err;
 };
 
 struct RecordBuffersConfig {
@@ -40,6 +49,7 @@ class RecordBuffers {
         static void LinkBufs(struct RecordBuffy *start,
                              uint32_t buf_size,
                              uint32_t num_bufs);
+        uint32_t num_records;
  public:
         void* operator new(std::size_t sz, int cpu)
         {
@@ -49,6 +59,7 @@ class RecordBuffers {
         RecordBuffers(struct RecordBuffersConfig conf);        
         void* GetRecord(uint32_t tableId);
         void ReturnRecord(uint32_t tableId, void *record);
+        uint32_t NumRecords() { return this->num_records; };
 };
 
 

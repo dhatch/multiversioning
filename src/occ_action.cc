@@ -115,7 +115,7 @@ bool occ_composite_key::ValidateRead()
 }
 
 void OCCAction::add_read_key(uint32_t tableId, uint64_t key) 
-{
+{        
         occ_composite_key k(tableId, key, false);
         readset.push_back(k);
 }
@@ -283,11 +283,11 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
 {
         volatile uint64_t *tid_ptr;
         uint32_t record_size;
-        uint64_t ret, after_read;
+        uint64_t ret;
         void *value;
 
         value = this->tables[table_id]->Get(key);
-        record_size = this->tables[table_id]->RecordSize();
+        record_size = REAL_RECORD_SIZE(this->tables[table_id]->RecordSize());
         tid_ptr = (volatile uint64_t*)value;
         while (true) {
                 barrier();
@@ -302,7 +302,8 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
                         if (after_read == ret)
                                 return ret;
                         else
-                                throw occ_validation_exception();
+                                throw occ_validation_exception(READ_ERR);
+                        return ret;
                 }
         }
 }
@@ -322,7 +323,7 @@ void OCCAction::validate_single(occ_composite_key &comp_key)
 
         if ((GET_TIMESTAMP(cur_tid) != comp_key.old_tid) ||
             (IS_LOCKED(cur_tid) && !comp_key.is_rmw))
-                throw occ_validation_exception();
+                throw occ_validation_exception(VALIDATION_ERR);
 }
 
 void OCCAction::validate()
@@ -343,9 +344,8 @@ void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
         uint64_t tid;
         void *record;
         uint32_t i, num_writes;
-        occ_composite_key *comp_key;
-        
-        record = this->record_alloc->GetRecord(table_id);
+        occ_composite_key *comp_key;        
+
         num_writes = this->writeset.size();
         comp_key = NULL;
         for (i = 0; i < num_writes; ++i) {
@@ -356,12 +356,13 @@ void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
         }
         assert(comp_key != NULL);
         if (comp_key->is_initialized == false) {
+                record = this->record_alloc->GetRecord(table_id);
+                comp_key->is_initialized = true;
+                comp_key->value = record;
                 if (writeset[i].is_rmw == true) {
                         tid = stable_copy(key, table_id, record);
                         comp_key->old_tid = tid;
                 }
-                comp_key->value = record;
-                comp_key->is_initialized = true;
         } 
         return RECORD_VALUE_PTR(comp_key->value);
 }
@@ -373,25 +374,23 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
         uint32_t i, num_reads;
         occ_composite_key *comp_key;
 
-        record = this->record_alloc->GetRecord(table_id);
+
         num_reads = this->readset.size();
         comp_key = NULL;
         for (i = 0; i < num_reads; ++i) {
                 if (this->readset[i].key == key &&
                     this->readset[i].tableId == table_id) {
-                        comp_key = &this->writeset[i];
+                        comp_key = &this->readset[i];
                         break;
                 }                
         }
         assert(comp_key != NULL);
-
         if (comp_key->is_initialized == false) {
+                record = this->record_alloc->GetRecord(table_id);
+                comp_key->is_initialized = true;
+                comp_key->value = record;
                 tid = stable_copy(key, table_id, record);
                 comp_key->old_tid = tid;
-                comp_key->value = record;
-                comp_key->is_initialized = true;
-        } else {
-                record = comp_key->value;
         }        
         return RECORD_VALUE_PTR(comp_key->value);
 }
@@ -433,7 +432,7 @@ void OCCAction::release_locks()
 
 void OCCAction::cleanup_single(occ_composite_key &comp_key)
 {
-        assert(comp_key.value != NULL);
+        //        assert(comp_key.value != NULL);
         this->record_alloc->ReturnRecord(comp_key.tableId, comp_key.value);
         comp_key.value = NULL;
         comp_key.is_initialized = false;        
