@@ -3,209 +3,90 @@
 #include <common.h>
 #include <set>
 #include <small_bank.h>
-#include <uniform_generator.h>
-#include <zipf_generator.h>
 #include <gperftools/profiler.h>
 #include <fstream>
+#include <setup_workload.h>
+
+extern uint32_t GLOBAL_RECORD_SIZE;
+
+OCCAction* setup_occ_action(txn *txn)
+{
+        OCCAction *action;
+        struct big_key *array;
+        uint32_t num_reads, num_writes, num_rmws, max, i;
+        
+        action = new OCCAction(txn);
+        txn->set_translator(action);
+        num_reads = txn->num_reads();
+        num_writes = txn->num_writes();
+        num_rmws = txn->num_rmws();
+
+        if (num_reads >= num_writes && num_reads >= num_rmws) 
+                max = num_reads;
+        else if (num_writes >= num_rmws)
+                max = num_writes;
+        else
+                max = num_rmws;
+        array = (struct big_key*)malloc(sizeof(struct big_key)*max);
+
+        txn->get_reads(array);
+        for (i = 0; i < num_reads; ++i) 
+                action->add_read_key(array[i].table_id, array[i].key);
+        txn->get_rmws(array);
+        for (i = 0; i < num_rmws; ++i) 
+                action->add_write_key(array[i].table_id, array[i].key, true);
+        txn->get_writes(array);
+        for (i = 0; i < num_writes; ++i) {
+                action->add_write_key(array[i].table_id, array[i].key, false);
+        }        
+        free(array);
+        return action;
+}
 
 OCCAction** create_single_occ_action_batch(uint32_t batch_size,
-                                           OCCConfig config,
-                                           RecordGenerator *gen)
+                                           workload_config w_config)
 {
         uint32_t i;
         OCCAction **ret;
+        txn *txn;
+        
         ret = (OCCAction**)alloc_mem(batch_size*sizeof(OCCAction*), 71);
         assert(ret != NULL);
         memset(ret, 0x0, batch_size*sizeof(OCCAction*));
         for (i = 0; i < batch_size; ++i) {
-                if (config.experiment == 3)
-                        ret[i] = generate_small_bank_occ_action(config.numRecords,
-                                                                false);
-                else if (config.experiment == 4)
-                        ret[i] = generate_small_bank_occ_action(config.numRecords,
-                                                                true);
-                else if (config.experiment < 3) {
-                        ret[i] = generate_occ_rmw_action(config, gen);
-                }
+                txn = generate_transaction(w_config);
+                ret[i] = setup_occ_action(txn);
         }
         return ret;
 }
 
-OCCAction* gen_occ_rmw_mix(uint32_t num_writes, uint32_t num_rmws,
-                           uint32_t num_reads, RecordGenerator *gen)
-{
-        uint64_t key;
-        std::set<uint64_t> seen_keys;
-        uint32_t i;
-        RMWOCCAction *action = new RMWOCCAction();
-        gen_random_array(action->GetData(), 1000);
-        for (i = 0; i < num_writes; ++i) {
-                key = GenUniqueKey(gen, &seen_keys);
-                action->AddWriteKey(0, key);
-                assert(action->writeset[i].tableId == 0);
-        }
-        for (i = 0; i < num_rmws; ++i) {
-                key = GenUniqueKey(gen, &seen_keys);
-                action->AddWriteKey(0, key);
-                action->AddReadKey(0, key, true);
-                assert(action->writeset[i+num_writes].tableId == 0);
-                assert(action->readset[i].tableId == 0);
-                assert(action->readset[i].is_rmw == true);
-        }
-        for (i = 0; i < num_reads; ++i) {
-                key = GenUniqueKey(gen, &seen_keys);
-                action->AddReadKey(0, key, false);       
-                assert(action->readset[i+num_rmws].tableId == 0);
-                assert(action->readset[i+num_rmws].is_rmw == false);         
-        }
-        return action;
-}
-
-readonly_action* generate_readonly(OCCConfig config, RecordGenerator *gen)
-{
-        readonly_action *act;
-        int i;
-        uint64_t key;
-        std::set<uint64_t> seen_keys;
-        UniformGenerator uniform_gen(config.numRecords);
-        
-        act = new readonly_action();
-        for (i = 0; i < config.read_txn_size; ++i) {
-                if (i < 10) 
-                        key = GenUniqueKey(gen, &seen_keys);
-                else
-                        key = GenUniqueKey(&uniform_gen, &seen_keys);
-                act->AddReadKey(0, key, false);
-        }
-        return act;
-}
-
-mix_occ_action* generate_mix(OCCConfig config, RecordGenerator *gen, bool rmw)
-{
-        mix_occ_action *act;
-        uint32_t i;
-        uint64_t key;
-        std::set<uint64_t> seen_keys;
-        act = new mix_occ_action();
-        for (i = 0; i < RMW_COUNT; ++i) {
-                key = GenUniqueKey(gen, &seen_keys);
-                if (rmw)
-                        act->AddReadKey(0, key, true);
-                act->AddWriteKey(0, key);
-        }
-        for (i = 0; i < config.txnSize - RMW_COUNT; ++i) {
-                key = GenUniqueKey(gen, &seen_keys);
-                act->AddReadKey(0, key, false);                
-        }
-        return act;
-        
-}
-
-OCCAction* generate_occ_rmw_action(OCCConfig config, RecordGenerator *gen)
-{
-        uint32_t num_reads, num_writes, num_rmws;
-        int flip;
-        flip = (uint32_t)rand() % 100;
-        assert(flip >= 0 && flip < 100);
-        if (flip < config.read_pct) {
-                return generate_readonly(config, gen);
-        } else if (config.experiment == 0) {
-                num_reads = 0;
-                num_writes = 0;
-                num_rmws = config.txnSize;
-        } else if (config.experiment == 1) {
-                assert(config.txnSize >= RMW_COUNT);
-                num_reads = config.txnSize - RMW_COUNT;
-                num_writes = 0;
-                num_rmws = RMW_COUNT;
-        } else if (config.experiment == 2) {
-                num_reads = 0;
-                num_writes = config.txnSize;
-                num_rmws = 0;
-        } else {
-                std::cerr << "Invalid experiment!\n";
-                assert(false);
-        }
-        return gen_occ_rmw_mix(num_writes, num_rmws, num_reads, gen);
-}
-
-OCCAction* generate_small_bank_occ_action(uint64_t numRecords, bool read_only)
-{        
-        OCCAction *ret = NULL;
-        char *temp_buf;
-        int mod, txn_type;
-        long amount;
-        uint64_t customer, from_customer, to_customer;
-        if (read_only == true) 
-                mod = 1;
-        else 
-                mod = 5;        
-        temp_buf = (char*)malloc(METADATA_SIZE);        
-        GenRandomSmallBank(temp_buf, METADATA_SIZE);
-        txn_type = rand() % mod;
-        if (txn_type == 0) {             // Balance
-                customer = (uint64_t)(rand() % numRecords);
-                ret = new OCCSmallBank::Balance(customer, temp_buf);
-        } else if (txn_type == 1) {        // DepositChecking
-                customer = (uint64_t)(rand() % numRecords);
-                amount = (long)(rand() % 25);
-                ret = new OCCSmallBank::DepositChecking(customer, amount,
-                                                        temp_buf);
-        } else if (txn_type == 2) {        // TransactSaving
-                customer = (uint64_t)(rand() % numRecords);
-                amount = (long)(rand() % 25);
-                ret = new OCCSmallBank::TransactSaving(customer, amount,
-                                                       temp_buf);
-        } else if (txn_type == 3) {        // Amalgamate
-                from_customer = (uint64_t)(rand() % numRecords);
-                do {
-                        to_customer = (uint64_t)(rand() % numRecords);
-                } while (to_customer == from_customer);
-                ret = new OCCSmallBank::Amalgamate(from_customer, to_customer,
-                                                   temp_buf);
-        } else if (txn_type == 4) {        // WriteCheck
-                customer = (uint64_t)(rand() % numRecords);
-                amount = (long)(rand() % 25);
-                if (rand() % 2 == 0) {
-                        amount *= -1;
-                }
-                ret = new OCCSmallBank::WriteCheck(customer, amount, temp_buf);
-        }
-        return ret;
-}
-
-OCCActionBatch** setup_occ_input(OCCConfig config, uint32_t extra_batches)
+OCCActionBatch** setup_occ_input(OCCConfig occ_config, workload_config w_conf,
+                                 uint32_t extra_batches)
 {
         OCCActionBatch **ret;
         uint32_t i, total_iters;
         OCCConfig fake_config;
         
         total_iters = 1 + 1 + extra_batches; // dry run + real run + extra
-        fake_config = config;
+        fake_config = occ_config;
         fake_config.numTxns = FAKE_ITER_SIZE;
         ret = (OCCActionBatch**)malloc(sizeof(OCCActionBatch*)*(total_iters));
-        ret[0] = setup_occ_single_input(fake_config);
-        ret[1] = setup_occ_single_input(config);
-        config.numTxns = 1000000;
+        ret[0] = setup_occ_single_input(fake_config, w_conf);
+        ret[1] = setup_occ_single_input(occ_config, w_conf);
+        occ_config.numTxns = 1000000;
         for (i = 2; i < total_iters; ++i) 
-                ret[i] = setup_occ_single_input(fake_config);
+                ret[i] = setup_occ_single_input(fake_config, w_conf);
         std::cerr << "Done setting up occ input\n";
         return ret;
 }
 
-OCCActionBatch* setup_occ_single_input(OCCConfig config)
+OCCActionBatch* setup_occ_single_input(OCCConfig config, workload_config w_conf)
 {
-        RecordGenerator *gen;
         OCCActionBatch *ret;
         uint32_t txns_per_thread, remainder, i;
         OCCAction **actions;
 
         config.numThreads -= 1;
-        gen = NULL;
-        if (config.distribution == 0) 
-                gen = new UniformGenerator(config.numRecords);
-        else if (config.distribution == 1) 
-                gen = new ZipfGenerator(config.numRecords, config.theta);
         ret = (OCCActionBatch*)malloc(sizeof(OCCActionBatch)*config.numThreads);
         txns_per_thread = (config.numTxns)/config.numThreads;
         remainder = (config.numTxns) % config.numThreads;
@@ -213,8 +94,7 @@ OCCActionBatch* setup_occ_single_input(OCCConfig config)
                 if (i == config.numThreads-1)
                         txns_per_thread += remainder;
                 actions = create_single_occ_action_batch(txns_per_thread,
-                                                         config,
-                                                         gen);
+                                                         w_conf);
                 ret[i] = {
                         txns_per_thread,
                         actions,
@@ -271,99 +151,42 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
         return workers;
 }
 
-void validate_ycsb_occ_tables(Table *table, uint64_t num_records)
+Table** setup_occ_tables(uint32_t num_tables, uint32_t *num_records)
 {
-        uint64_t *temp;
-        for (uint64_t i = 0; i < num_records; ++i) {
-                temp = (uint64_t*)table->Get(i);
-                assert(temp[0] == 0);
-                if (recordSize == 8)
-                        assert(temp[1] == i);
-                else
-                        temp[125] += 1;
-        } 
-}
-
-Table** setup_ycsb_occ_tables(OCCConfig config)
-{
-        TableConfig tbl_config;
         Table **tables;
-        uint64_t *big_int, i, j;
-        char buf[OCC_RECORD_SIZE(1000)];
-        assert(config.experiment < 3);
-        tbl_config = create_table_config(0, config.numRecords, 0,
-                                         config.numThreads-1, config.numRecords,
-                                         OCC_RECORD_SIZE(recordSize));
-        tables = (Table**)malloc(sizeof(Table*));
-        tables[0] = new(0) Table(tbl_config);
-        for ( i = 0; i < config.numRecords; ++i) {
-                big_int = (uint64_t*)buf;
-                if (recordSize == 1000) {
-                        assert(OCC_RECORD_SIZE(recordSize) == 1008);
-                        for (j = 0; j < 125; ++j) 
-                                big_int[j+1] = (uint64_t)rand();
-                        big_int[0] = 0;
-                        tables[0]->Put(i, buf);
-                } else if (recordSize == 8) {
-                        assert(OCC_RECORD_SIZE(recordSize) == 16);
-                        big_int[0] = 0;
-                        big_int[1] = i;
-                        tables[0]->Put(i, buf);
-                }
+        uint32_t i;
+        TableConfig conf;
+
+        tables = (Table**)malloc(sizeof(Table*)*num_tables);
+        for (i = 0; i < num_tables; ++i) {
+                conf.tableId = i;
+                conf.numBuckets = (uint64_t)num_records[i];
+                conf.startCpu = 0;
+                conf.endCpu = 71;
+                conf.freeListSz = 2*num_records[i];
+                conf.valueSz = GLOBAL_RECORD_SIZE;
+                conf.recordSize = 0;
+                tables[i] = new(0) Table(conf);
         }
-        tables[0]->SetInit();
-        validate_ycsb_occ_tables(tables[0], config.numRecords);
         return tables;
 }
 
-Table** setup_small_bank_occ_tables(OCCConfig config)
+static OCCActionBatch setup_db(workload_config conf)
 {
-        assert(config.experiment == 3 || config.experiment == 4);
-        Table **tables;
-        uint64_t *table_sizes;
-        uint32_t num_tables, i;
-        TableConfig savings_config, checking_config;
-        char temp[OCC_RECORD_SIZE(sizeof(SmallBankRecord))];
-        SmallBankRecord *record;
-        table_sizes = (uint64_t*)malloc(2*sizeof(uint64_t));
-        table_sizes[0] = (uint64_t)config.numRecords;
-        table_sizes[1] = (uint64_t)config.numRecords;
-        num_tables = 2;
-        savings_config =
-                create_table_config(SAVINGS, 1000000, 0,
-                                    (int)(config.numThreads-1), 1000000,
-                                    OCC_RECORD_SIZE(sizeof(SmallBankRecord)));
-        checking_config =
-                create_table_config(CHECKING, 1000000, 0,
-                                    (int)(config.numThreads-1), 1000000,
-                                    OCC_RECORD_SIZE(sizeof(SmallBankRecord)));
-        tables = (Table**)malloc(sizeof(Table*)*num_tables);    
-        tables[SAVINGS] = new(0) Table(savings_config);
-        tables[CHECKING] = new(0) Table(checking_config);
-        memset(temp, 0, OCC_RECORD_SIZE(sizeof(SmallBankRecord)));
-        for (i = 0; i < 1000000; ++i) {
-                record = (SmallBankRecord*)&temp[sizeof(uint64_t)];
-                record->amount = (long)(rand() % 100);
-                tables[SAVINGS]->Put((uint64_t)i, temp);
-                record->amount = (long)(rand() % 100);
-                tables[CHECKING]->Put((uint64_t)i, temp);
-        }
-        tables[SAVINGS]->SetInit();
-        tables[CHECKING]->SetInit();
-        return tables;
+        txn **loader_txns;
+        uint32_t num_txns, i;
+        OCCActionBatch ret;
+
+        loader_txns = NULL;
+        num_txns = generate_input(conf, &loader_txns);
+        assert(loader_txns != NULL);
+        ret.batchSize = num_txns;
+        ret.batch = (OCCAction**)malloc(sizeof(mv_action*)*num_txns);
+        for (i = 0; i < num_txns; ++i) 
+                ret.batch[i] = setup_occ_action(loader_txns[i]);
+        return ret;
 }
 
-Table** setup_occ_tables(OCCConfig config)
-{
-        Table **tables = NULL;
-        if (config.experiment < 3) {
-                tables = setup_ycsb_occ_tables(config);
-        } else if (config.experiment == 3) {
-                tables = setup_small_bank_occ_tables(config);
-        }
-        std::cerr << "Done setting up occ tables...\n";
-        return tables;
-}
 
 void write_occ_output(struct occ_result result, OCCConfig config)
 {
@@ -425,21 +248,21 @@ uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
         return num_completed;
 }
 
-/*
-static uint64_t wait_to_completion_2(SimpleQueue<OCCActionBatch> **output_queues,
-                                     OCCWorker **workers,
-                                     uint32_t num_workers)
+void populate_tables(SimpleQueue<OCCActionBatch> *input_queue,
+                    SimpleQueue<OCCActionBatch> *output_queue,
+                    OCCActionBatch input,
+                    Table **tables,
+                    uint32_t num_tables)
 {
         uint32_t i;
-        uint64_t num_completed = 0;
-        //        OCCActionBatch temp;
-        for (i = 0; i < num_workers; ++i) {
-                output_queues[i]->DequeueBlocking();
-                num_completed += workers[i]->NumCompleted();
-        }
-        return num_completed;        
+        
+        input_queue->EnqueueBlocking(input);
+        barrier();
+        output_queue->DequeueBlocking();
+        for (i = 0; i < num_tables; ++i)
+                tables[i]->SetInit();
+        
 }
-*/
 
 void dry_run(SimpleQueue<OCCActionBatch> **input_queues, 
              SimpleQueue<OCCActionBatch> **output_queues,
@@ -459,7 +282,10 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                                  OCCWorker **workers,
                                  OCCActionBatch **inputBatches,
                                  uint32_t num_batches,
-                                 OCCConfig config)
+                                 OCCConfig config,
+                                 OCCActionBatch setup_txns,
+                                 Table **tables,
+                                 uint32_t num_tables)
 {
         timespec start_time, end_time;
         uint32_t i, j;
@@ -470,6 +296,8 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                 workers[i]->WaitInit();
         }
 
+        populate_tables(inputQueues[1], outputQueues[1], setup_txns, tables,
+                        num_tables);
         dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
 
         std::cerr << "Done dry run\n";
@@ -499,7 +327,8 @@ struct occ_result run_occ_workers(SimpleQueue<OCCActionBatch> **inputQueues,
                                   OCCWorker **workers,
                                   OCCActionBatch **inputBatches,
                                   uint32_t num_batches,
-                                  OCCConfig config)
+                                  OCCConfig config, OCCActionBatch setup_txns,
+                                  Table **tables, uint32_t num_tables)
 {
         int success;
         struct occ_result result;        
@@ -507,27 +336,51 @@ struct occ_result run_occ_workers(SimpleQueue<OCCActionBatch> **inputQueues,
         success = pin_thread(79);
         assert(success == 0);
         result = do_measurement(inputQueues, outputQueues, workers,
-                                inputBatches, num_batches, config);
+                                inputBatches, num_batches, config, setup_txns,
+                                tables, num_tables);
         std::cerr << "Done experiment!\n";
         return result;
 }
 
-void occ_experiment(OCCConfig config)
+void occ_experiment(OCCConfig occ_config, workload_config w_conf)
 {
         SimpleQueue<OCCActionBatch> **input_queues, **output_queues;
         Table **tables;
         OCCWorker **workers;
         OCCActionBatch **inputs;
+        OCCActionBatch setup_txns;
+        
         struct occ_result result;
-	config.occ_epoch = OCC_EPOCH_SIZE;
-        input_queues = setup_queues<OCCActionBatch>(config.numThreads, 1024);
-        output_queues = setup_queues<OCCActionBatch>(config.numThreads, 1024);
-        tables = setup_occ_tables(config);
+        uint32_t num_records[2];
+        uint32_t num_tables;
+        
+	occ_config.occ_epoch = OCC_EPOCH_SIZE;
+        input_queues = setup_queues<OCCActionBatch>(occ_config.numThreads,
+                                                    1024);
+        output_queues = setup_queues<OCCActionBatch>(occ_config.numThreads,
+                                                     1024);
+        setup_txns = setup_db(w_conf);
+        if (occ_config.experiment < 3) {
+                num_tables = 1;
+                num_records[0] = occ_config.numRecords;
+        } else if (occ_config.experiment < 5) {
+                num_tables = 2;
+                num_records[0] = occ_config.numRecords;
+                num_records[1] = occ_config.numRecords;
+        } else {
+                assert(false);
+                tables = NULL;
+                num_tables = 0;
+        }
+        tables = setup_occ_tables(num_tables, num_records);
         workers = setup_occ_workers(input_queues, output_queues, tables,
-                                    config.numThreads, config.occ_epoch, 2);
-        inputs = setup_occ_input(config, OCC_TXN_BUFFER);
+                                    occ_config.numThreads, occ_config.occ_epoch,
+                                    2);
+
+        inputs = setup_occ_input(occ_config, w_conf, OCC_TXN_BUFFER);
         pin_memory();
         result = run_occ_workers(input_queues, output_queues, workers,
-                                 inputs, OCC_TXN_BUFFER+1, config);
-        write_occ_output(result, config);
+                                 inputs, OCC_TXN_BUFFER+1, occ_config,
+                                 setup_txns, tables, num_tables);
+        write_occ_output(result, occ_config);
 }

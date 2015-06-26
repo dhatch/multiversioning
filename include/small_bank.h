@@ -97,6 +97,7 @@ namespace SmallBank {
         };  
 };
 
+/*
 namespace OCCSmallBank {
         class Balance : public OCCAction {
         private:
@@ -145,6 +146,7 @@ namespace OCCSmallBank {
                 virtual occ_txn_status Run();
         };  
 };
+*/
 
 namespace LockingSmallBank {
   class Balance : public EagerAction {

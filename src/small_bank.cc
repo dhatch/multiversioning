@@ -219,7 +219,7 @@ void SmallBank::WriteCheck::get_rmws(struct big_key *array)
         array[0].key = this->customer_id;
         array[0].table_id = CHECKING;
 }
-
+/*
 OCCSmallBank::Balance::Balance(uint64_t customer, char *meta_data)
 {
         this->totalBalance = 0;
@@ -347,7 +347,7 @@ occ_txn_status OCCSmallBank::WriteCheck::Run()
         status.commit = true;
         return status;
 }
-
+*/
 
 LockingSmallBank::Balance::Balance(uint64_t customer, uint64_t numAccounts, 
                                    char *meta)

@@ -28,7 +28,8 @@ OCCAction* generate_small_bank_occ_action(uint64_t numRecords, bool read_only);
 
 OCCActionBatch** setup_occ_input(OCCConfig config, uint32_t iters);
 
-OCCActionBatch* setup_occ_single_input(OCCConfig config);
+OCCActionBatch* setup_occ_single_input(OCCConfig occ_config,
+                                       workload_config w_conf);
 
 OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                               SimpleQueue<OCCActionBatch> **outputQueue,
@@ -50,16 +51,20 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                                  OCCWorker **workers,
                                  OCCActionBatch **inputBatches,
                                  uint32_t num_batches,
-                                 OCCConfig config);
+                                 OCCConfig config,
+                                 OCCActionBatch setup_txns,
+                                 Table **tables,
+                                 uint32_t num_tables);
 
 struct occ_result run_occ_workers(SimpleQueue<OCCActionBatch> **inputQueues,
                                   SimpleQueue<OCCActionBatch> **outputQueues,
                                   OCCWorker **workers,
                                   OCCActionBatch *inputBatches,
                                   uint32_t num_batches,
-                                  OCCConfig config);
+                                  OCCConfig config,
+                                  OCCActionBatch setup_txns);
 
-void occ_experiment(OCCConfig config);
+void occ_experiment(OCCConfig config, workload_config conf);
 
 #endif // SETUP_OCC_H_
 

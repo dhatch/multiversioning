@@ -504,7 +504,7 @@ int main(int argc, char **argv) {
           recordSize = cfg.occConfig.recordSize;
           assert(cfg.occConfig.distribution < 2);
           assert(recordSize == 8 || recordSize == 1000);
-          occ_experiment(cfg.occConfig);
+          occ_experiment(cfg.occConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == HEK) {
           recordSize = cfg.hek_conf.record_size;

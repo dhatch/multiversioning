@@ -2,6 +2,7 @@
 #define OCC_ACTION_H_
 
 #include <action.h>
+#include <table.h>
 #include <db.h>
 
 #define TIMESTAMP_MASK (0xFFFFFFFFFFFFFFF0)
@@ -12,6 +13,44 @@
 #define GET_EPOCH(tid) ((tid & EPOCH_MASK)>>32)
 #define GET_COUNTER(tid) (GET_TIMESTAMP(tid) & ~EPOCH_MASK)
 #define IS_LOCKED(tid) ((tid & ~(TIMESTAMP_MASK)) == 1)
+#define RECORD_TID_PTR(rec_ptr) ((volatile uint64_t*)rec_ptr)
+#define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
+#define OCC_RECORD_SIZE(value_sz) (sizeof(uint64_t)+value_sz)
+
+class occ_validation_exception : public std::exception {        
+};
+
+struct RecordBuffersConfig {
+        uint32_t num_tables;
+        uint32_t *record_sizes;
+        uint32_t num_buffers;
+        int cpu;
+};
+
+struct RecordBuffy {
+        struct RecordBuffy *next;
+        char value[0];
+};
+
+class RecordBuffers {
+ private:
+        RecordBuffy **record_lists;
+        RecordBuffy **tails;
+        static void* AllocBufs(struct RecordBuffersConfig conf);
+        static void LinkBufs(struct RecordBuffy *start,
+                             uint32_t buf_size,
+                             uint32_t num_bufs);
+ public:
+        void* operator new(std::size_t sz, int cpu)
+        {
+                return alloc_mem(sz, cpu);
+        }
+
+        RecordBuffers(struct RecordBuffersConfig conf);        
+        void* GetRecord(uint32_t tableId);
+        void ReturnRecord(uint32_t tableId, void *record);
+};
+
 
 struct occ_txn_status {
         bool validation_pass;
@@ -23,9 +62,11 @@ class occ_composite_key {
  public:
         uint32_t tableId;
         uint64_t key;
-        volatile uint64_t old_tid;
+        uint64_t old_tid;
         bool is_rmw;
-        volatile void *value;
+        bool is_locked;
+        bool is_initialized;
+        void *value;
 
         occ_composite_key(uint32_t tableId, uint64_t key, bool is_rmw);
         void* GetValue() const ;
@@ -65,54 +106,39 @@ class occ_composite_key {
 
 class OCCAction : public translator {
  private:
-        txn *txn;
-        RecordBuffer *record_alloc;
+        RecordBuffers *record_alloc;
         Table **tables;
-        
- public:
-        uint64_t __tid;
+        uint64_t tid;
         std::vector<occ_composite_key> readset;
         std::vector<occ_composite_key> writeset;
         std::vector<occ_composite_key> shadow_writeset;
 
+        virtual uint64_t stable_copy(uint64_t key, uint32_t table_id,
+                                     void *record); 
+        virtual void validate_single(occ_composite_key &comp_key);
+        virtual void cleanup_single(occ_composite_key &comp_key);
+        virtual void install_single_write(occ_composite_key &comp_key);
+        
+ public:
+        
+        OCCAction(txn *txn);
+        
         virtual void *write_ref(uint64_t key, uint32_t table);
         virtual void *read(uint64_t key, uint32_t table);
-        virtual void *set_allocator(RecordBuffer *buf);
         
-        virtual occ_txn_status Run() = 0;
-        void AddReadKey(uint32_t table_id, uint64_t key, bool is_rmw);
-        void AddWriteKey(uint32_t table_id, uint64_t key);
+        virtual void set_allocator(RecordBuffers *buf);
+        virtual void set_tables(Table **tables);
+        
+        virtual bool run();
+        virtual void acquire_locks();
+        virtual void validate();
+        virtual uint64_t compute_tid(uint32_t epoch, uint64_t last_tid);
+        virtual void install_writes();
+        virtual void release_locks();
+        virtual void cleanup();
+        
+        void add_read_key(uint32_t table_id, uint64_t key);
+        void add_write_key(uint32_t table_id, uint64_t key, bool is_rmw);
 }; 
-
-class readonly_action : public OCCAction {
- protected:
-        char __reads[1000];
-                
- public:
-        readonly_action();
-        virtual occ_txn_status Run();
-};
-
-class mix_occ_action : public readonly_action {
- public:
-        mix_occ_action();
-        virtual occ_txn_status Run();
-};
-
-
-class RMWOCCAction : public OCCAction {
- private:
-        uint64_t __accumulated[1000/sizeof(uint64_t)];
-        volatile uint64_t __total;
-
-        bool DoReads();
-        void AccumulateValues();
-        void DoWrites();
- public:
-        virtual occ_txn_status Run();
-        virtual void* GetData();
-};
-
-
 
 #endif // OCC_ACTION_H_
