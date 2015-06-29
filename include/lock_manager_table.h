@@ -8,15 +8,15 @@
 #include <lock_manager.h>
 
 struct LockBucket {
-  EagerRecordInfo *head;
-  EagerRecordInfo *tail;
-  volatile uint64_t latch;
+        locking_key *head;
+        locking_key *tail;
+        volatile uint64_t latch;
 } __attribute__((__packed__, __aligned__(CACHE_LINE)));
 
 
 struct TxnQueue {
-  EagerRecordInfo *head;
-  EagerRecordInfo *tail;
+  locking_key *head;
+  locking_key *tail;
   volatile uint64_t __attribute((aligned(CACHE_LINE))) lock_word;
 
   EagerCompositeKey key;
@@ -82,344 +82,279 @@ class LockManagerTable {
 
   static const uint64_t BUCKET_SIZE = CACHE_LINE;
 
-  void WakeupReaders(EagerRecordInfo *iter, const EagerCompositeKey &key) {
-
-    assert(iter != NULL);
-    assert(iter->record == key);
-    assert(!iter->is_write);
-    
-    while (iter != NULL && iter->record == key && !iter->is_write) {
-      fetch_and_decrement(&iter->dependency->num_dependencies);
-      iter = iter->next;
-    }
-  }
-
-  void ReleaseLock(EagerRecordInfo *iter, const EagerCompositeKey &key) {
-    while (iter != NULL && iter->record != key) {
-      if (iter->record == key) {
-        if (iter->is_write) {         
-          fetch_and_decrement(&iter->dependency->num_dependencies);
-        }
-        else {
-          WakeupReaders(iter, key);
-        }
-        return;
-      }
-    }
-  }
-
-  bool Conflicting(EagerRecordInfo *info1, EagerRecordInfo *info2) {
-    return ((info1->record == info2->record) && 
-            (info1->is_write || info2->is_write));
-  }
-
-  // Find the record in the appropriate hash bucket. Assumes that the latch is 
-  // set.
-  TxnQueue* FindRecord(TxnQueue **iter, const EagerCompositeKey &key, int cpu) {
-    // Check if there is a pre-existing record
-    while (*iter != NULL) {
-      if ((*iter)->key == key) {
-        return *iter;
-      }
-      else {
-        iter = &((*iter)->next);
-      }
-    }
-    
-    // Couldn't find anything, create a new record
-    TxnQueue *toAdd = allocators[cpu]->Get();
-    toAdd->key = key;
-    toAdd->next = NULL;
-    *iter = toAdd;
-    return toAdd;
-  }
-
-  LockBucket* GetBucketRef(const EagerCompositeKey &key) {
-    // Get the table
-    char *tbl = tables[key.tableId];
-    uint64_t tblSz = tableSizes[key.tableId];
-
-    // Get the bucket in the table
-    uint64_t index = key.Hash() % tblSz;
-    char *bucketPtr = &tbl[CACHE_LINE*index];
-    return (LockBucket*)bucketPtr;
+  bool Conflicting(locking_key *key1, locking_key *key2)
+  {
+          return (*key1 == *key2) && (key1->is_write || key2->is_write);
   }
 
 
-  bool GetNext(EagerRecordInfo *info, EagerRecordInfo **next) {
-    EagerRecordInfo *cur = info->next;
-    while (cur != NULL) {
-      if (cur->record == info->record) {
-        *next = cur;
-        return true;
-      }
-      cur = cur->next;
-    }
-    *next = NULL;
-    return false;
+  LockBucket* GetBucketRef(const locking_key &key)
+  {
+          // Get the table
+          char *tbl = tables[key.table_id];
+          uint64_t tblSz = tableSizes[key.table_id];
+
+          // Get the bucket in the table
+          uint64_t index = key.Hash() % tblSz;
+          char *bucketPtr = &tbl[CACHE_LINE*index];
+          return (LockBucket*)bucketPtr;
   }
 
-  void AdjustWrite(EagerRecordInfo *info) {
-    assert(info->is_write);
-    EagerRecordInfo *descendant;
-    
-    if (GetNext(info, &descendant)) {
-      if (descendant->is_write) {
-        descendant->is_held = true;
-        fetch_and_decrement(&descendant->dependency->num_dependencies);
-      }
-      else {
-        EagerRecordInfo *temp = descendant;
-        do {
-          descendant = temp;
-          descendant->is_held = true;
-          fetch_and_decrement(&descendant->dependency->num_dependencies);
-        } while (GetNext(descendant, &temp) && !temp->is_write);
-      }
-    }  
+
+  bool GetNext(locking_key *k, locking_key **next)
+  {
+          locking_key *cur;
+
+          cur = info->next;
+          for (cur = info->next; cur != NULL; cur = cur->next)
+                  ;
+          *next = cur;
+          return *next != NULL;
   }
 
-  void AdjustRead(EagerRecordInfo *info, LockBucket *bucket) {
-
-    assert(!info->is_write);
-    EagerRecordInfo *descendant;
-    
-    EagerRecordInfo *prev = bucket->head;    
-    assert(prev != NULL);
-    while (prev->record != info->record) {
-      prev = prev->next;
-      assert(prev != NULL);
-    }
-
-    if ((prev == info) && GetNext(info, &descendant)) {
-      if (descendant->is_write) {
-        descendant->is_held = true;
-        fetch_and_decrement(&descendant->dependency->num_dependencies);        
-      }
-    }
-  }
-
-  EagerRecordInfo* SearchRead(LockBucket *bucket, EagerRecordInfo *info) {
-          assert(bucket->head != NULL && bucket->tail != NULL);
-          assert(info->is_write == false);
+  void pass_lock(locking_key *k)
+  {
+          locking_action *act;
           
-          EagerRecordInfo *iter;
+          assert(k->is_held == false);
+          k->is_held = true;
+          act = k->dependency;
+          fetch_and_decrement(&k->num_dependencies);
+  }
+
+  /*
+   * k released its write-lock, unlock other txns waiting on k.
+   */
+  void AdjustWrite(locking_key *k)
+  {
+          assert(k->is_write);
+          locking_key *desc, *temp;
+          locking_action *act;
+          
+          if (GetNext(k, &desc)) {
+                  if (desc->is_write) {
+                          pass_lock(desc);
+                  } else {
+                          temp = desc;                          
+                          do {
+                                  desc = temp;
+                                  pass_lock(desc);
+                          } while (GetNext(desc, &temp) && !temp->is_write);
+                  }
+          }  
+  }
+
+  /*
+   * k released its read-lock, unlock other txns waiting on k.
+   */
+  void AdjustRead(locking_key *k, LockBucket *bucket)
+  {
+          assert(!k->is_write);
+          locking_key *desc, *prev;
+          locking_action *act;
+
+          prev = bucket->head;
+          while (*prev != *k) {
+                  assert(prev != NULL);
+                  prev = prev->next;
+
+          }
+          if ((prev == k) && GetNext(k, &desc)) {
+                  if (desc->is_write) 
+                          pass_lock(desc);
+                  assert(desc->is_held == true);
+          }
+  }
+
+  /*
+   * Search the lock bucket for the earliest read-lock on the same key as "k".
+   */
+  locking_key* SearchRead(LockBucket *bucket, locking_key *k)
+  {
+          assert(bucket->head != NULL && bucket->tail != NULL);
+          assert(k->is_write == false);
+          
+          locking_key *iter;
           iter = bucket->head;
           while (iter != NULL) {
-                  if (iter->is_write == false &&
-                      iter->record.tableId == info->record.tableId &&
-                      iter->record.key == info->record.key)
-                          return iter;
-                  else
-                          iter = iter->next;
+                  if (iter->is_write == false && *k == *iter)
+                          break;
+                  iter = iter->next;
           }
-          return NULL;
+          return iter;
   }
-  
-  void AppendInfo(EagerRecordInfo *info, LockBucket *bucket) {
-    assert((bucket->head == NULL && bucket->tail == NULL) || 
-           (bucket->head != NULL && bucket->tail != NULL));
 
-    EagerRecordInfo *read_next;
-    
-    info->next = NULL;
-    info->prev = NULL;
+  /* 
+   * Add a lock request to the lock bucket.
+   */ 
+  void AppendInfo(locking_key *k, LockBucket *bucket)
+  {
+          locking_key *read_next;
 
-    if (bucket->tail == NULL) {
-      assert(bucket->head == NULL);
-      info->prev = NULL;
-      bucket->head = info;
-      bucket->tail = info;
-    } else {
-      assert(bucket->head != NULL);
-      if (info->is_write == false &&
-          (read_next = SearchRead(bucket, info)) != NULL &&
-          bucket->tail != read_next) {
-              assert(read_next->is_write == false);
-              read_next->next->prev = info;
-              info->next = read_next->next;
-              info->prev = read_next;
-              read_next->next = info;
-      } else {
-              bucket->tail->next = info;
-              info->prev = bucket->tail;
-              bucket->tail = info;
-      }
-    }
+          /* 
+           * If the queue is empty, both head and tail must be NULL, otherwise, 
+           * both are non-NULL. 
+           */
+          assert((bucket->head == NULL && bucket->tail == NULL) || 
+                 (bucket->head != NULL && bucket->tail != NULL));    
+          k->next = NULL;
+          k->prev = NULL;
+          
+          if (bucket->tail == NULL) {
+                  
+                  /* The queue of locks is empty. */
+                  assert(bucket->head == NULL);
+                  k->prev = NULL;
+                  bucket->head = k;
+                  bucket->tail = k;
+          } else {
+                  assert(bucket->head != NULL);
+                  if (k->is_write == false &&
+                      (read_next = SearchRead(bucket, info)) != NULL &&
+                      bucket->tail != read_next) {
+                          
+                          /* 
+                           * k is a read-lock -- search for the earliest 
+                           * read-lock on the same item. 
+                           */
+                          assert(read_next->is_write == false);
+                          read_next->next->prev = k;
+                          k->next = read_next->next;
+                          k->prev = read_next;
+                          read_next->next = k;
+                  } else {
 
-    //    bucket->tail = info;
-    assert(bucket->head != NULL && bucket->tail != NULL);
+                          /* 
+                           * Either k is a write-lock, or we couldn't find any 
+                           * other read-locks. Add k to the end of the queue. 
+                           */
+                          bucket->tail->next = info;
+                          info->prev = bucket->tail;
+                          bucket->tail = info;
+                  }
+          }
+
+          /* The queue shouldn't be empty. */
+          assert(bucket->head != NULL && bucket->tail != NULL);
   }
-  
-  void RemoveInfo(EagerRecordInfo *info, LockBucket *bucket) {
-    assert((bucket->head != NULL && bucket->tail != NULL));
 
-    if (info->next == NULL) {
-      bucket->tail = info->prev;
-    }
-    else {
-      info->next->prev = info->prev;
-    }
-  
-    if (info->prev == NULL) {
-      bucket->head = info->next;
-    }
-    else {
-      info->prev->next = info->next;
-    }
-    info->prev = NULL;
-    info->next = NULL;
-
-    assert((bucket->head == NULL && bucket->tail == NULL) || 
-           (bucket->head != NULL && bucket->tail != NULL));
+  /*
+   * Remove k from the bucket's lock queue.
+   */
+  void RemoveInfo(locking_key *k, LockBucket *bucket)
+  {
+          /* The queue shouldn't be empty! */
+          assert((bucket->head != NULL && bucket->tail != NULL));
+          
+          if (k->next == NULL) /* k's at the tail. */
+                  bucket->tail = k->prev;
+          else 
+                  k->next->prev = k->prev;
+          
+          if (k->prev == NULL) /* k is at the head. */
+                  bucket->head = k->next;    
+          else 
+                  k->prev->next = k->next;          
+          k->prev = NULL;
+          k->next = NULL;          
+          assert((bucket->head == NULL && bucket->tail == NULL) || 
+                 (bucket->head != NULL && bucket->tail != NULL));
   }
 
  public:
-  LockManagerTable(LockManagerConfig config) {
-    this->startCpu = config.startCpu;
-    this->endCpu = config.endCpu;
-    this->tableSizes = config.tableSizes;
+  
+  LockManagerTable(LockManagerConfig config)
+  {
+          this->startCpu = config.startCpu;
+          this->endCpu = config.endCpu;
+          this->tableSizes = config.tableSizes;
 
-    uint64_t totalSz = 0;
-    for (uint32_t i = 0; i < config.numTables; ++i) {      
-      totalSz += config.tableSizes[i]*CACHE_LINE;
-    }
+          uint64_t totalSz = 0;
+          for (uint32_t i = 0; i < config.numTables; ++i) {      
+                  totalSz += config.tableSizes[i]*CACHE_LINE;
+          }
     
-    // Allocate data for lock manager hash table
-    char *data = (char*)alloc_interleaved(totalSz, config.startCpu, 
-                                          config.endCpu);
-    memset(data, 0x0, totalSz);
+          // Allocate data for lock manager hash table
+          char *data = (char*)alloc_interleaved(totalSz, config.startCpu, 
+                                                config.endCpu);
+          memset(data, 0x0, totalSz);
     
-    this->tables = (char**)alloc_mem(config.numTables*sizeof(char*), 
-                                     config.startCpu);
-    memset(this->tables, 0x0, config.numTables*sizeof(char*));
-    this->tableSizes = tableSizes;
+          this->tables = (char**)alloc_mem(config.numTables*sizeof(char*), 
+                                           config.startCpu);
+          memset(this->tables, 0x0, config.numTables*sizeof(char*));
+          this->tableSizes = tableSizes;
     
-    // Setup pointers to hash tables appropriately
-    uint64_t prevSize = 0;
-    for (uint32_t i = 0; i < config.numTables; ++i) {
-      this->tables[i] = &data[prevSize];
-      prevSize += tableSizes[i]*CACHE_LINE;
-    }
+          // Setup pointers to hash tables appropriately
+          uint64_t prevSize = 0;
+          for (uint32_t i = 0; i < config.numTables; ++i) {
+                  this->tables[i] = &data[prevSize];
+                  prevSize += tableSizes[i]*CACHE_LINE;
+          }
     
-    // Setup struct TxnQueue allocators
-    this->allocators = 
-      (TxnQueueAllocator**)malloc(sizeof(TxnQueueAllocator)*
-                                  (config.endCpu-config.startCpu+1));
-    for (int i = 0; i < config.endCpu-config.startCpu+1; ++i) {
-      this->allocators[i] = new (i) TxnQueueAllocator(config.allocatorSize, i);
-    }
+          // Setup struct TxnQueue allocators
+          /*
+          this->allocators = 
+                  (TxnQueueAllocator**)malloc(sizeof(TxnQueueAllocator)*
+                                              (config.endCpu-config.startCpu+1));
+          for (int i = 0; i < config.endCpu-config.startCpu+1; ++i) {
+                  this->allocators[i] =
+                          new (i) TxnQueueAllocator(config.allocatorSize, i);
+          }
+          */
   }
   
-
-  bool Lock(EagerRecordInfo *info, uint32_t cpu __attribute__((unused))) {
-    assert(cpu > 0);
-    bool conflict = false;
-    LockBucket *bucket = GetBucketRef(info->record);
-        
-    //    reentrant_lock(&bucket->latch, cpu);
-    lock(&bucket->latch);
-    //    assert(bucket->latch>>32 == cpu);
-    info->latch = &bucket->latch;    
-
-    AppendInfo(info, bucket);
-
-    EagerRecordInfo *cur = info->prev;
-    while (cur != NULL) {
-      if ((conflict = Conflicting(cur, info)) == true) {
-        fetch_and_increment(&info->dependency->num_dependencies);
-        break;
-      }
-      else if (cur->record == info->record && cur->is_held) {
-        break;
-      }
-      cur = cur->prev;
-    }
-    
-    info->is_held = !conflict;
-    //    reentrant_unlock(&bucket->latch);
-    unlock(&bucket->latch);
-    return !conflict;
+  bool check_conflict(locking_key *key)
+  {
+          locking_action *action;
+          locking_key *ancestor;
+          bool held;
+          
+          action = key->dependency;
+          
+          /* Find the earliest entry with the same key */
+          ancestor = key->prev;
+          while (ancestor != NULL && *key != *ancestor)
+                  ;
+          if (ancestor == NULL)
+                  held = true;
+          else if (Conflicting(ancestor, key) == true) /* one is a write */
+                  held = false;                  
+          else if (ancestor->is_held == true) /* both reads, lock held */
+                  held = true;                  
+          else /* both reads, lock not held */
+                  held = false;
+          if (held)
+                  fetch_and_increment(&action->num_dependencies);
+          key->is_held = held;
+          return !held;
   }
   
-  void FinishLock(EagerRecordInfo *info) {
-    reentrant_unlock(info->latch);
+  bool Lock(locking_key *key)
+  {
+          assert(cpu > 0);
+          bool conflict;
+          LockBucket *bucket;
+
+          bucket = GetBucketRef(key);
+          lock(&bucket->latch);
+          AppendInfo(key, bucket);
+          conflict = check_conflict(key);
+          unlock(&bucket->latch);
+          return !conflict;
   }
-
-  void Unlock(EagerRecordInfo *info, uint32_t cpu __attribute__((unused))) {
-
-    assert(info->is_held);
-
-    LockBucket *bucket = GetBucketRef(info->record);    
-    //    reentrant_lock(&bucket->latch, cpu);
-    lock(&bucket->latch);
-    //    assert(bucket->latch>>32 == cpu);
-
-    if (info->is_write) {
-      AdjustWrite(info);
+  
+  void Unlock(locking_key *info, uint32_t cpu __attribute__((unused)))
+  {
+          assert(info->is_held);
+          LockBucket *bucket = GetBucketRef(info->record);    
+          lock(&bucket->latch);
+          if (info->is_write) 
+                  AdjustWrite(info);
+          else 
+                  AdjustRead(info, bucket);
+          RemoveInfo(info, bucket);
+          unlock(&bucket->latch);
     }
-    else {
-      AdjustRead(info, bucket);
-    }
-
-    RemoveInfo(info, bucket);
-    unlock(&bucket->latch);
-    //    reentrant_unlock(&bucket->latch);
-  }
-
-  // Get a pointer to the head of linked list of records.
-  /*
-  TxnQueue* GetPtr(const EagerCompositeKey &key, int cpu) {
-    assert(cpu >= startCpu && cpu <= endCpu);
-    char *latch;
-    TxnQueue **dataPtr = NULL;
-    GetBucketRef(key, &dataPtr, &latch);
-
-    // latch the bucket
-    lock((volatile uint64_t*)latch);
-    
-    TxnQueue *ret = FindRecord(dataPtr, key, cpu);    
-
-    // unlatch the bucket
-    unlock((volatile uint64_t*)latch);
-    assert(ret != NULL);
-    return ret;
-  }
-  */
-
-  /*
-  bool GetPtr(const EagerCompositeKey &key, EagerRecordInfo **OUT) {
-    char *latch;
-    EagerRecordInfo **dataPtr = NULL;
-    GetBucketRef(key, &dataPtr, &latch);
-
-    // latch the bucket
-    lock((volatile uint64_t*)latch);
-
-    // find the appropriate record
-    bool ret = FindRecord(dataPtr, key, OUT);
-
-    // unlatch the bucket
-    unlock((volatile uint64_t*)latch);
-    return ret;
-  }
-  */
-
-  /*
-  void Remove(EagerRecordInfo *info) {
-    char *latch;
-    EagerRecordInfo **dataPtr;
-    GetBucketRef(info->record, &dataPtr, &latch);
-    
-    lock(latch);
-
-    EagerRecordInfo *lst;
-    bool success = FindRecord(dataPtr, &lst);
-    assert(success);
-    
-    unlock(latch);
-  }
-  */
 };
 
 #endif          // LOCK_MANAGER_TABLE_H_
