@@ -1,5 +1,5 @@
-#ifndef                 EAGER_WORKER_HH_
-#define                 EAGER_WORKER_HH_
+#ifndef                 LOCKING_WORKER_HH_
+#define                 LOCKING_WORKER_HH_
 
 #include <table.h>
 #include <lock_manager.h>
@@ -8,25 +8,25 @@
 #include <cpuinfo.h>
 #include <runnable.hh>
 
-struct EagerActionBatch {
+struct locking_action_batch {
   uint32_t batchSize;
-  EagerAction **batch;
+  locking_action **batch;
 };
 
-struct EagerWorkerConfig {
+struct locking_worker_config {
   LockManager *mgr;
-  SimpleQueue<EagerActionBatch> *inputQueue;
-  SimpleQueue<EagerActionBatch> *outputQueue;  
+  SimpleQueue<locking_action_batch> *inputQueue;
+  SimpleQueue<locking_action_batch> *outputQueue;  
   int cpu;
   uint32_t maxPending;
   Table **tables;
 };
 
-class EagerWorker : public Runnable {
+class locking_worker : public Runnable {
 private:
-  EagerWorkerConfig config;
-  EagerAction *m_queue_head;                  // Head of queue of waiting txns
-  EagerAction *m_queue_tail;                  // Tail of queue of waiting txns
+  locking_worker_config config;
+  locking_action *m_queue_head;                  // Head of queue of waiting txns
+  locking_action *m_queue_tail;                  // Tail of queue of waiting txns
   int         m_num_elems;                    // Number of elements in the queue
 
   volatile uint32_t m_num_done;
@@ -34,17 +34,17 @@ private:
   // Worker thread function
   virtual void WorkerFunction();
 
-  void Enqueue(EagerAction *txn);
+  void Enqueue(locking_action *txn);
 
-  void RemoveQueue(EagerAction *txn);
+  void RemoveQueue(locking_action *txn);
 
   void CheckReady();
 
-  void TryExec(EagerAction *txn);
+  void TryExec(locking_action *txn);
 
-  void DoExec(EagerAction *txn);
+  void DoExec(locking_action *txn);
     
-  uint32_t QueueCount(EagerAction *txn);
+  uint32_t QueueCount(locking_action *txn);
 
 protected:    
   virtual void StartWorking();
@@ -57,11 +57,11 @@ public:
     return alloc_mem(sz, cpu);
   }
 
-  EagerWorker(EagerWorkerConfig config);
+  locking_worker(locking_worker_config config);
     
   uint32_t NumProcessed() {
     return m_num_done;
   }
 };
 
-#endif           // EAGER_WORKER_HH_
+#endif           // LOCKING_WORKER_HH_

@@ -1,6 +1,6 @@
 #include <eager_worker.h>
 
-EagerWorker::EagerWorker(EagerWorkerConfig config) 
+locking_worker::locking_worker(locking_worker_config config) 
     : Runnable(config.cpu) {
   this->config = config;
     m_queue_head = NULL;
@@ -9,16 +9,15 @@ EagerWorker::EagerWorker(EagerWorkerConfig config)
     m_num_done = 0;
 }
 
-void EagerWorker::Init() {
+void locking_worker::Init() {
 }
 
 void
-EagerWorker::StartWorking() {
+locking_worker::StartWorking() {
     WorkerFunction();
 }
 
-void
-EagerWorker::Enqueue(EagerAction *txn) {
+void locking_worker::Enqueue(locking_action *txn) {
     if (m_queue_head == NULL) {
         assert(m_queue_tail == NULL);
         m_queue_head = txn;
@@ -37,10 +36,10 @@ EagerWorker::Enqueue(EagerAction *txn) {
            (m_queue_head != NULL && m_queue_tail != NULL));
 }
 
-void
-EagerWorker::RemoveQueue(EagerAction *txn) {
-    EagerAction *prev = txn->prev;
-    EagerAction *next = txn->next;
+void locking_worker::RemoveQueue(locking_action *txn)
+{
+    locking_action *prev = txn->prev;
+    locking_action *next = txn->next;
 
     if (m_queue_head == txn) {
         assert(txn->prev == NULL);
@@ -65,7 +64,7 @@ EagerWorker::RemoveQueue(EagerAction *txn) {
 }
 
 uint32_t
-EagerWorker::QueueCount(EagerAction *iter) {
+locking_worker::QueueCount(locking_action *iter) {
     if (iter == NULL) {
         return 0;
     }
@@ -74,104 +73,43 @@ EagerWorker::QueueCount(EagerAction *iter) {
     }
 }
 
-void
-EagerWorker::CheckReady() {
-  for (EagerAction *iter = m_queue_head; iter != NULL; iter = iter->next) {
-    if (iter->num_dependencies == 0) {
-            if (config.mgr->Lock(iter, (uint32_t)this->m_thread)) {
-                    RemoveQueue(iter);
-                    DoExec(iter);
-            }
-    }
-  }
+void locking_worker::CheckReady()
+{
+        locking_action *iter;
+        for (iter = m_queue_head; iter != NULL; iter = iter->next) {
+                if (iter->num_dependencies == 0 && config.mgr->Lock(iter)) {
+                                RemoveQueue(iter);
+                                DoExec(iter);
+                }
+        }
 }
 
-void
-EagerWorker::TryExec(EagerAction *txn) {
-  if (config.mgr->Lock(txn, (uint32_t)this->m_thread)) {
-        assert(txn->num_dependencies == 0);
-        assert(txn->shadowReadset.size() == txn->readset.size());
-        assert(txn->shadowWriteset.size() == txn->writeset.size());
-        
-
-        uint32_t numReads = txn->shadowReadset.size();
-        for (uint32_t i = 0; i < numReads; ++i) {
-          uint32_t tbl = txn->shadowReadset[i].record.tableId;
-          uint32_t key = txn->shadowReadset[i].record.key;
-          txn->shadowReadset[i].value = config.tables[tbl]->Get(key);
+void locking_worker::TryExec(locking_action *txn)
+{
+        if (config.mgr->Lock(txn)) {
+                assert(txn->num_dependencies == 0);
+                txn->Run();
+                config.mgr->Unlock(txn);                
+                assert(txn->finished_execution);
+        } else {
+                m_num_done += 1;
+                Enqueue(txn);
         }
+}
 
-        uint32_t numWrites = txn->shadowWriteset.size();
-        for (uint32_t i = 0; i < numWrites; ++i) {
-          uint32_t tbl = txn->shadowWriteset[i].record.tableId;
-          uint32_t key = txn->shadowWriteset[i].record.key;
-          txn->shadowWriteset[i].value = config.tables[tbl]->Get(key);
-        }
-
+void locking_worker::DoExec(locking_action *txn)
+{
+        assert(txn->num_dependencies == 0);  
         txn->Run();
-        config.mgr->Unlock(txn, (uint32_t)this->m_thread);
-
-        assert(txn->finished_execution);
-        /*
-        EagerAction *link;
-        if (txn->IsLinked(&link)) {
-            TryExec(link);
-        }
-        else {
-            m_num_done += 1;
-            clock_gettime(CLOCK_REALTIME, &txn->end_time);
-            //            txn->end_rdtsc_time = rdtsc();
-            m_output_queue->EnqueueBlocking((uint64_t)txn);
-        }
-        */
-    }    
-    else {
-        m_num_done += 1;
-        Enqueue(txn);
-    }
+        config.mgr->Unlock(txn);
 }
 
 void
-EagerWorker::DoExec(EagerAction *txn) {
-  assert(txn->num_dependencies == 0);
-  
-  uint32_t numReads = txn->readset.size();
-  for (uint32_t i = 0; i < numReads; ++i) {
-    uint32_t tbl = txn->shadowReadset[i].record.tableId;
-    uint32_t key = txn->shadowReadset[i].record.key;
-    txn->shadowReadset[i].value = config.tables[tbl]->Get(key);
-  }
-
-  uint32_t numWrites = txn->writeset.size();
-  for (uint32_t i = 0; i < numWrites; ++i) {
-    uint32_t tbl = txn->shadowWriteset[i].record.tableId;
-    uint32_t key = txn->shadowWriteset[i].record.key;
-    txn->shadowWriteset[i].value = config.tables[tbl]->Get(key);
-  }
-
-  txn->Run();
-  config.mgr->Unlock(txn, (uint32_t)this->m_thread);
-    //    txn->PostExec();
-    /*
-    EagerAction *link;
-    if (txn->IsLinked(&link)) {
-        TryExec(link);
-    }
-    else {
-        m_num_done += 1;
-        clock_gettime(CLOCK_REALTIME, &txn->end_time);
-        //        txn->end_rdtsc_time = rdtsc();
-        m_output_queue->EnqueueBlocking((uint64_t)txn);
-    }
-    */
-}
-
-void
-EagerWorker::WorkerFunction() {
+locking_worker::WorkerFunction() {
 
   // Each iteration of this loop executes a batch of transactions
   while (true) {
-    EagerActionBatch batch = config.inputQueue->DequeueBlocking();
+    locking_action_batch batch = config.inputQueue->DequeueBlocking();
       
     for (uint32_t i = 0; i < batch.batchSize; ++i) {
       // Ensure we haven't exceeded threshold of max deferred txns. If we have, 

@@ -1,4 +1,5 @@
 #include <locking_action.h>
+#include <algorithm>
 
 locking_key::locking_key(uint64_t key, uint32_t table_id, bool is_write)
 {
@@ -12,11 +13,13 @@ locking_key::locking_key(uint64_t key, uint32_t table_id, bool is_write)
         this->next = NULL;
         this->is_initialized = false;
         this->value = NULL;
-        this->read_index = 0;
-        this->write_index = 0;
 }
 
-locking_action::locking_action(txn *txn) : db(txn)
+locking_key::locking_key()
+{
+}
+
+locking_action::locking_action(txn *txn) : translator(txn)
 {
         this->prepared = false;
 }
@@ -41,19 +44,32 @@ void* locking_action::lookup(locking_key *k)
                 return this->tables[k->table_id]->Get(k->key);
 }
 
-void* locking_action::write_ref(uint64_t key, uint32_t table_id)
+int locking_action::find_key(uint64_t key, uint32_t table_id,
+                             std::vector<locking_key> key_list)
 {
-        locking_key *k;
-        uint32_t i, num_writes;
+        uint32_t i, num_keys;
+        int ret;
 
-        for (i = 0; i < num_writes; ++i) {
-                if (this->writeset[i].key == key &&
-                    this->writeset[i].table_id == table_id) {
-                        k = &this->writeset[i];
+        ret = -1;
+        num_keys = key_list.size();
+        for (i = 0; i < num_keys; ++i) {
+                if (key_list[i].key == key &&
+                    key_list[i].table_id == table_id) {
+                        ret = i;
                         break;
                 }
         }
-        assert(k != NULL);
+        return ret;
+}
+
+void* locking_action::write_ref(uint64_t key, uint32_t table_id)
+{
+        locking_key *k;
+        int index;
+        
+        index = find_key(key, table_id, this->writeset);
+        assert(index != -1 && index < this->writeset.size());
+        k = &this->writeset[index];
         if (k->value == NULL) 
                 k->value = lookup(k);
         return k->value;
@@ -62,17 +78,11 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
 void* locking_action::read(uint64_t key, uint32_t table_id)
 {
         locking_key *k;
-        uint32_t i, num_reads;
-
-        num_reads = this->readset.size();
-        for (i = 0; i < num_reads; ++i) {
-                if (this->readset[i].key == key &&
-                    this->readset[i].table_id == table_id) {
-                        k = &this->readset[i];
-                        break;
-                }
-        }
-        assert(k != NULL);
+        int index;
+        
+        index = find_key(key, table_id, this->readset);
+        assert(index != -1 && index < this->readset.size());
+        k = &this->readset[index];
         if (k->value == NULL) 
                 k->value = lookup(k);
         return k->value;
@@ -82,7 +92,12 @@ void locking_action::prepare()
 {
         if (this->prepared == true) 
                 return;
-        std::sort(this->readset.start(), this->readset.end());
-        std::sort(this->writeset.start(), this->writeset.end());
+        std::sort(this->readset.begin(), this->readset.end());
+        std::sort(this->writeset.begin(), this->writeset.end());
         this->prepared = true;
+}
+
+bool locking_action::Run()
+{
+        return this->t->Run();
 }

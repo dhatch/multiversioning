@@ -6,6 +6,7 @@
 #include <action.h>
 #include <machine.h>
 #include <lock_manager.h>
+#include <locking_action.h>
 
 struct LockBucket {
         locking_key *head;
@@ -88,30 +89,40 @@ class LockManagerTable {
   }
 
 
-  LockBucket* GetBucketRef(const locking_key &key)
+  LockBucket* GetBucketRef(const locking_key *key)
   {
           // Get the table
-          char *tbl = tables[key.table_id];
-          uint64_t tblSz = tableSizes[key.table_id];
+          char *tbl = tables[key->table_id];
+          uint64_t tblSz = tableSizes[key->table_id];
 
           // Get the bucket in the table
-          uint64_t index = key.Hash() % tblSz;
+          uint64_t index = key->Hash() % tblSz;
           char *bucketPtr = &tbl[CACHE_LINE*index];
           return (LockBucket*)bucketPtr;
   }
 
-
+  /*
+   * Find the next locking_key on the same key as k. Returns true if we're able 
+   * to find a descendant, otherwise, return false.
+   */
   bool GetNext(locking_key *k, locking_key **next)
   {
           locking_key *cur;
 
-          cur = info->next;
-          for (cur = info->next; cur != NULL; cur = cur->next)
+          cur = k->next;
+          for (cur = k->next; cur != NULL; cur = cur->next)
                   ;
           *next = cur;
           return *next != NULL;
   }
 
+  /*
+   * Pass on a lock to k and hence, its associated transaction. 
+   * 
+   * XXX Could add some logic to enqueue on a worker thread's ready queue. This 
+   * will avoid manually checking for txns with zero dependencies in each 
+   * worker's logic.
+   */
   void pass_lock(locking_key *k)
   {
           locking_action *act;
@@ -119,7 +130,7 @@ class LockManagerTable {
           assert(k->is_held == false);
           k->is_held = true;
           act = k->dependency;
-          fetch_and_decrement(&k->num_dependencies);
+          fetch_and_decrement(&act->num_dependencies);
   }
 
   /*
@@ -129,7 +140,6 @@ class LockManagerTable {
   {
           assert(k->is_write);
           locking_key *desc, *temp;
-          locking_action *act;
           
           if (GetNext(k, &desc)) {
                   if (desc->is_write) {
@@ -151,7 +161,6 @@ class LockManagerTable {
   {
           assert(!k->is_write);
           locking_key *desc, *prev;
-          locking_action *act;
 
           prev = bucket->head;
           while (*prev != *k) {
@@ -210,7 +219,7 @@ class LockManagerTable {
           } else {
                   assert(bucket->head != NULL);
                   if (k->is_write == false &&
-                      (read_next = SearchRead(bucket, info)) != NULL &&
+                      (read_next = SearchRead(bucket, k)) != NULL &&
                       bucket->tail != read_next) {
                           
                           /* 
@@ -228,9 +237,9 @@ class LockManagerTable {
                            * Either k is a write-lock, or we couldn't find any 
                            * other read-locks. Add k to the end of the queue. 
                            */
-                          bucket->tail->next = info;
-                          info->prev = bucket->tail;
-                          bucket->tail = info;
+                          bucket->tail->next = k;
+                          k->prev = bucket->tail;
+                          bucket->tail = k;
                   }
           }
 
@@ -302,7 +311,10 @@ class LockManagerTable {
           }
           */
   }
-  
+
+  /*
+   * Check if there are any preceding requests that conflict with key.
+   */
   bool check_conflict(locking_key *key)
   {
           locking_action *action;
@@ -328,10 +340,13 @@ class LockManagerTable {
           key->is_held = held;
           return !held;
   }
-  
+
+  /*
+   * Try to acquire the logical lock requested by key. Returns true if the lock 
+   * is immediately acquired, otherwise, return false.
+   */
   bool Lock(locking_key *key)
   {
-          assert(cpu > 0);
           bool conflict;
           LockBucket *bucket;
 
@@ -342,17 +357,20 @@ class LockManagerTable {
           unlock(&bucket->latch);
           return !conflict;
   }
-  
-  void Unlock(locking_key *info, uint32_t cpu __attribute__((unused)))
+
+  /*
+   * Release the logical lock held by k.
+   */
+  void Unlock(locking_key *k)
   {
-          assert(info->is_held);
-          LockBucket *bucket = GetBucketRef(info->record);    
+          assert(k->is_held);
+          LockBucket *bucket = GetBucketRef(k);    
           lock(&bucket->latch);
-          if (info->is_write) 
-                  AdjustWrite(info);
+          if (k->is_write) 
+                  AdjustWrite(k);
           else 
-                  AdjustRead(info, bucket);
-          RemoveInfo(info, bucket);
+                  AdjustRead(k, bucket);
+          RemoveInfo(k, bucket);
           unlock(&bucket->latch);
     }
 };
