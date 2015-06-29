@@ -1,76 +1,76 @@
 #include <eager_worker.h>
 
 locking_worker::locking_worker(locking_worker_config config) 
-    : Runnable(config.cpu) {
-  this->config = config;
-    m_queue_head = NULL;
-    m_queue_tail = NULL;    
-    m_num_elems = 0;
-    m_num_done = 0;
+    : Runnable(config.cpu)
+{
+        this->config = config;
+        m_queue_head = NULL;
+        m_queue_tail = NULL;    
+        m_num_elems = 0;
+        m_num_done = 0;
 }
 
-void locking_worker::Init() {
+void locking_worker::Init()
+{
 }
 
 void
-locking_worker::StartWorking() {
-    WorkerFunction();
+locking_worker::StartWorking()
+{
+        WorkerFunction();
 }
 
-void locking_worker::Enqueue(locking_action *txn) {
-    if (m_queue_head == NULL) {
-        assert(m_queue_tail == NULL);
-        m_queue_head = txn;
-        m_queue_tail = txn;
-        txn->prev = NULL;
-        txn->next = NULL;
-    }
-    else {
-        m_queue_tail->next = txn;
-        txn->next = NULL;
-        txn->prev = m_queue_tail;
-        m_queue_tail = txn;
-    }
-    m_num_elems += 1;
-    assert((m_queue_head == NULL && m_queue_tail == NULL) ||
-           (m_queue_head != NULL && m_queue_tail != NULL));
+void locking_worker::Enqueue(locking_action *txn)
+{
+        if (m_queue_head == NULL) {
+                assert(m_queue_tail == NULL);
+                m_queue_head = txn;
+                m_queue_tail = txn;
+                txn->prev = NULL;
+                txn->next = NULL;
+        }else {
+                m_queue_tail->next = txn;
+                txn->next = NULL;
+                txn->prev = m_queue_tail;
+                m_queue_tail = txn;
+        }
+        m_num_elems += 1;
+        assert((m_queue_head == NULL && m_queue_tail == NULL) ||
+               (m_queue_head != NULL && m_queue_tail != NULL));
 }
 
 void locking_worker::RemoveQueue(locking_action *txn)
 {
-    locking_action *prev = txn->prev;
-    locking_action *next = txn->next;
+        locking_action *prev = txn->prev;
+        locking_action *next = txn->next;
 
-    if (m_queue_head == txn) {
-        assert(txn->prev == NULL);
-        m_queue_head = txn->next;
-    }
-    else {
-        prev->next = next;
-    }
+        if (m_queue_head == txn) {
+                assert(txn->prev == NULL);
+                m_queue_head = txn->next;
+        } else {
+                prev->next = next;
+        }
     
-    if (m_queue_tail == txn) {
-        assert(txn->next == NULL);
-        m_queue_tail = txn->prev;
-    }
-    else {
-        next->prev = prev;
-    }
+        if (m_queue_tail == txn) {
+                assert(txn->next == NULL);
+                m_queue_tail = txn->prev;
+        } else {
+                next->prev = prev;
+        }
     
-    m_num_elems -= 1;
-    assert(m_num_elems >= 0);
-    assert((m_queue_head == NULL && m_queue_tail == NULL) ||
-           (m_queue_head != NULL && m_queue_tail != NULL));
+        m_num_elems -= 1;
+        assert(m_num_elems >= 0);
+        assert((m_queue_head == NULL && m_queue_tail == NULL) ||
+               (m_queue_head != NULL && m_queue_tail != NULL));
 }
 
 uint32_t
-locking_worker::QueueCount(locking_action *iter) {
-    if (iter == NULL) {
-        return 0;
-    }
-    else {
-        return 1+QueueCount(iter->next);
-    }
+locking_worker::QueueCount(locking_action *iter)
+{
+        if (iter == NULL) 
+                return 0;
+        else
+                return 1+QueueCount(iter->next);
 }
 
 void locking_worker::CheckReady()
@@ -105,31 +105,31 @@ void locking_worker::DoExec(locking_action *txn)
 }
 
 void
-locking_worker::WorkerFunction() {
-
-  // Each iteration of this loop executes a batch of transactions
-  while (true) {
-    locking_action_batch batch = config.inputQueue->DequeueBlocking();
-      
-    for (uint32_t i = 0; i < batch.batchSize; ++i) {
-      // Ensure we haven't exceeded threshold of max deferred txns. If we have, 
-      // exec pending txns so we get below the threshold.
-            if ((uint32_t)m_num_elems < config.maxPending) {
-        TryExec(batch.batch[i]);
-      }
-      else {
-              while ((uint32_t)m_num_elems >= config.maxPending) {
-          CheckReady();
+locking_worker::WorkerFunction()
+{
+        locking_action_batch batch;
+        
+        // Each iteration of this loop executes a batch of transactions
+        while (true) {
+                batch = config.inputQueue->DequeueBlocking();
+                for (uint32_t i = 0; i < batch.batchSize; ++i) {
+                        
+                        // Ensure we haven't exceeded threshold of max deferred
+                        // txns. If we have, exec pending txns so we get below
+                        // the threshold.
+                        if ((uint32_t)m_num_elems < config.maxPending) 
+                                TryExec(batch.batch[i]);
+                        else 
+                                while (m_num_elems >= config.maxPending) 
+                                        CheckReady();
+                }
+                
+                // Finish deferred txns
+                while (m_num_elems != 0) 
+                        CheckReady();
+        
+                // Signal that this batch is done
+                config.outputQueue->EnqueueBlocking(batch);
         }
-      }
-    }
-
-    // Finish deferred txns
-    while (m_num_elems != 0) {
-      CheckReady();
-    }
-    
-    // Signal that this batch is done
-    config.outputQueue->EnqueueBlocking(batch);
-  }
+ 
 }

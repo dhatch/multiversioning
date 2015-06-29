@@ -151,7 +151,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
         return workers;
 }
 
-Table** setup_occ_tables(uint32_t num_tables, uint32_t *num_records)
+Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records)
 {
         Table **tables;
         uint32_t i;

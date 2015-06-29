@@ -8,6 +8,8 @@
 #include <cpuinfo.h>
 #include <runnable.hh>
 
+typedef SimpleQueue<locking_action_batch> locking_queue;
+
 struct locking_action_batch {
   uint32_t batchSize;
   locking_action **batch;
@@ -15,8 +17,8 @@ struct locking_action_batch {
 
 struct locking_worker_config {
   LockManager *mgr;
-  SimpleQueue<locking_action_batch> *inputQueue;
-  SimpleQueue<locking_action_batch> *outputQueue;  
+  locking_queue *inputQueue;
+  locking_queue *outputQueue;  
   int cpu;
   uint32_t maxPending;
   Table **tables;

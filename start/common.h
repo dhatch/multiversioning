@@ -5,6 +5,7 @@
 #include <concurrent_queue.h>
 #include <table.h>
 #include <record_generator.h>
+#include <db.h>
 
 #define RMW_COUNT	2
 #define MAX_CPU 	79
@@ -34,5 +35,9 @@ timespec diff_time(timespec end, timespec start);
 void gen_random_array(void *array, size_t sz);
 
 void pin_memory();
+
+Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records);
+
+struct big_key* setup_array(txn *t);
 
 #endif // COMMON_H_

@@ -1,6 +1,7 @@
 #include <common.h>
 #include <sys/mman.h>
 
+
 TableConfig create_table_config(uint64_t table_id, uint64_t num_buckets,
                                 int start_cpu, int end_cpu,
                                 uint64_t free_list_sz, uint64_t value_sz)
@@ -82,4 +83,26 @@ void pin_memory()
                         assert(false);
                 }
         }
+}
+
+struct big_key* setup_array(txn *t)
+{
+        uint32_t num_reads, num_writes, num_rmws, max;
+        struct big_key *arr;
+
+        /* Find out the size of array needed. */
+        num_reads = t->num_reads();
+        num_writes = t->num_writes();
+        num_rmws = t->num_rmws();
+        if (num_reads >= num_writes && num_reads >= num_rmws)
+                max = num_reads;
+        else if (num_writes >= num_rmws)
+                max = num_writes;
+        else
+                max = num_rmws;
+        assert(max >= num_reads && max >= num_writes && max >= num_rmws);
+
+        arr = (struct big_key*)malloc(sizeof(struct big_key)*max);
+        assert(arr != NULL);
+        return arr;
 }
