@@ -3,7 +3,6 @@
 
 #define OCC_WAIT_INTERVAL 1000
 #define OCC_TXN_BUFFER 5
-#define FAKE_ITER_SIZE 1000
 #define OCC_LOG_SIZE (((uint64_t)1)<<28)
 #define OCC_EPOCH_SIZE 7984000
 

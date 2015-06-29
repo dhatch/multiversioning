@@ -3,20 +3,16 @@
 
 #include <lock_manager_table.h>
 #include <locking_action.h>
-//#include <action.h>
 #include <deque>
 #include <pthread.h>
 
 using namespace std;
 
 class LockManager {    
- public:
-        static uint64_t *tableSizes;
 
  private:
         LockManagerTable *table;
-        
-        //        void FinishAcquisitions(locking_action *txn);
+        uint64_t *tableSizes;
         bool LockRecord(locking_action *txn, struct locking_key *dep);  
 
 public:

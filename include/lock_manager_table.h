@@ -14,7 +14,7 @@ struct LockBucket {
         volatile uint64_t latch;
 } __attribute__((__packed__, __aligned__(CACHE_LINE)));
 
-
+/*
 struct TxnQueue {
   locking_key *head;
   locking_key *tail;
@@ -62,20 +62,20 @@ class TxnQueueAllocator {
     return ret;
   }
 };
+*/
 
 struct LockManagerConfig {
   uint32_t numTables;
-  uint64_t *tableSizes;
+  uint32_t *tableSizes;
   int startCpu;
   int endCpu;
-  uint64_t allocatorSize;
 };
 
 class LockManagerTable {
 
  private:
   char **tables;
-  TxnQueueAllocator **allocators;
+  //  TxnQueueAllocator **allocators;
   uint64_t *tableSizes;
   
   int startCpu;
@@ -276,14 +276,17 @@ class LockManagerTable {
   {
           this->startCpu = config.startCpu;
           this->endCpu = config.endCpu;
-          this->tableSizes = config.tableSizes;
+          this->tableSizes =
+                  (uint64_t*)malloc(sizeof(uint64_t)*config.numTables);
+          for (uint32_t i = 0; i < config.numTables; ++i) 
+                  this->tableSizes[i] = (uint64_t)config.tableSizes[i];
 
           uint64_t totalSz = 0;
           for (uint32_t i = 0; i < config.numTables; ++i) {      
                   totalSz += config.tableSizes[i]*CACHE_LINE;
           }
-    
-          // Allocate data for lock manager hash table
+
+          /* Allocate data for lock manager hash table */
           char *data = (char*)alloc_interleaved(totalSz, config.startCpu, 
                                                 config.endCpu);
           memset(data, 0x0, totalSz);
@@ -292,24 +295,13 @@ class LockManagerTable {
                                            config.startCpu);
           memset(this->tables, 0x0, config.numTables*sizeof(char*));
           this->tableSizes = tableSizes;
-    
-          // Setup pointers to hash tables appropriately
+
+          /* Setup pointers to hash tables appropriately. */
           uint64_t prevSize = 0;
           for (uint32_t i = 0; i < config.numTables; ++i) {
                   this->tables[i] = &data[prevSize];
                   prevSize += tableSizes[i]*CACHE_LINE;
           }
-    
-          // Setup struct TxnQueue allocators
-          /*
-          this->allocators = 
-                  (TxnQueueAllocator**)malloc(sizeof(TxnQueueAllocator)*
-                                              (config.endCpu-config.startCpu+1));
-          for (int i = 0; i < config.endCpu-config.startCpu+1; ++i) {
-                  this->allocators[i] =
-                          new (i) TxnQueueAllocator(config.allocatorSize, i);
-          }
-          */
   }
 
   /*

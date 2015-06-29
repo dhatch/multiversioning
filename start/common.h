@@ -6,9 +6,11 @@
 #include <table.h>
 #include <record_generator.h>
 #include <db.h>
+#include <time.h>
 
 #define RMW_COUNT	2
 #define MAX_CPU 	79
+#define FAKE_ITER_SIZE 1000
 
 template<class T>
 SimpleQueue<T>** setup_queues(int num_queues, int queue_size)

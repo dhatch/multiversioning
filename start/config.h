@@ -86,16 +86,16 @@ struct hek_config {
 };
 
 
-struct LockingConfig {
-  uint32_t numThreads;
-  uint32_t numTxns;
-  uint32_t numRecords;
-  uint32_t numContendedRecords;
-  uint32_t txnSize;
-  uint32_t experiment;
-  uint64_t recordSize;
-  uint32_t distribution;
-  double theta;
+struct locking_config {
+        uint32_t num_threads;
+        uint32_t num_txns;
+        uint32_t num_records;
+        uint32_t num_contended_records;
+        uint32_t txn_size;
+        uint32_t experiment;
+        uint64_t record_size;
+        uint32_t distribution;
+        double theta;
         int read_pct;
         int read_txn_size;
 };
@@ -140,7 +140,7 @@ class ExperimentConfig {
 
  public:
   ConcurrencyControl ccType;
-  LockingConfig lockConfig;
+  locking_config lockConfig;
   OCCConfig occConfig;
   MVConfig mvConfig;    
   hek_config hek_conf;
@@ -245,14 +245,12 @@ class ExperimentConfig {
         exit(-1);
       }
       
-      lockConfig.numThreads = (uint32_t)atoi(argMap[NUM_LOCK_THREADS]);
-      lockConfig.numTxns = (uint32_t)atoi(argMap[NUM_TXNS]);
-      lockConfig.numRecords = (uint32_t)atoi(argMap[NUM_RECORDS]);
-      lockConfig.numContendedRecords = 
-        (uint32_t)atoi(argMap[NUM_CONTENDED]);
-      lockConfig.txnSize = (uint32_t)atoi(argMap[TXN_SIZE]);
+      lockConfig.num_threads = (uint32_t)atoi(argMap[NUM_LOCK_THREADS]);
+      lockConfig.num_txns = (uint32_t)atoi(argMap[NUM_TXNS]);
+      lockConfig.num_records = (uint32_t)atoi(argMap[NUM_RECORDS]);
+      lockConfig.txn_size = (uint32_t)atoi(argMap[TXN_SIZE]);
       lockConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
-      lockConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
+      lockConfig.record_size = (uint64_t)atoi(argMap[RECORD_SIZE]);
       lockConfig.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
       lockConfig.read_pct = (int)atoi(argMap[READ_PCT]);
       lockConfig.read_txn_size = (int)atoi(argMap[READ_TXN_SIZE]);

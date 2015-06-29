@@ -8,12 +8,12 @@
 #include <cpuinfo.h>
 #include <runnable.hh>
 
-typedef SimpleQueue<locking_action_batch> locking_queue;
-
 struct locking_action_batch {
   uint32_t batchSize;
   locking_action **batch;
 };
+
+typedef SimpleQueue<locking_action_batch> locking_queue;
 
 struct locking_worker_config {
   LockManager *mgr;

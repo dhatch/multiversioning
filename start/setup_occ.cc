@@ -372,7 +372,7 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
                 tables = NULL;
                 num_tables = 0;
         }
-        tables = setup_occ_tables(num_tables, num_records);
+        tables = setup_hash_tables(num_tables, num_records);
         workers = setup_occ_workers(input_queues, output_queues, tables,
                                     occ_config.numThreads, occ_config.occ_epoch,
                                     2);

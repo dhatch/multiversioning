@@ -9,6 +9,7 @@
 #include <setup_occ.h>
 #include <setup_mv.h>
 #include <setup_hek.h>
+#include <setup_locking.h>
 #include <algorithm>
 #include <fstream>
 #include <set>
@@ -32,7 +33,7 @@ uint32_t NUM_CC_THREADS;
 int NumProcs;
 uint32_t numLockingRecords;
 uint64_t recordSize;
-
+/*
 readonly_eager_action* create_readonly_eager(uint64_t numRecords,
                                              RecordGenerator *gen,
                                              uint32_t txnSize) 
@@ -477,6 +478,8 @@ void LockingExperiment(LockingConfig config) {
   //    std::cout << "Time elapsed: " << elapsedMilli << "\n";
   resultFile.close();  
 }
+*/
+
 
 // arg0: number of scheduler threads
 // arg1: number of records in the database
@@ -505,10 +508,12 @@ int main(int argc, char **argv) {
           do_mv_experiment(cfg.mvConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == LOCKING) {
-          recordSize = cfg.lockConfig.recordSize;
           assert(cfg.lockConfig.distribution < 2);
-          assert(recordSize == 8 || recordSize == 1000);
-          LockingExperiment(cfg.lockConfig);
+          if (cfg.lockConfig.experiment < 3)
+                  GLOBAL_RECORD_SIZE = 1000;
+          else
+                  GLOBAL_RECORD_SIZE = 8;
+          locking_experiment(cfg.lockConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == OCC) {
           recordSize = cfg.occConfig.recordSize;

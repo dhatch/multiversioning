@@ -2,11 +2,13 @@
 #include <algorithm>
 #include <lock_manager_table.h>
 
-uint64_t* LockManager::tableSizes = NULL;
-
 LockManager::LockManager(LockManagerConfig config)
 {
-        table = new LockManagerTable(config);  
+        uint32_t i;
+        table = new LockManagerTable(config);
+        tableSizes = (uint64_t*)malloc(sizeof(uint64_t)*config.numTables);
+        for (i = 0; i < config.numTables; ++i) 
+                tableSizes[i] = (uint64_t)config.tableSizes[i];
 }
 
 bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
