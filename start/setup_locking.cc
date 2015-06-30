@@ -22,7 +22,8 @@ static locking_action* txn_to_action(txn *t)
 
         arr = setup_array(t);
         ret = new locking_action(t);
-
+        t->set_translator(ret);
+        
         num_reads = t->num_reads();
         t->get_reads(arr);
         for (i = 0; i < num_reads; ++i) 
@@ -202,8 +203,8 @@ static struct locking_result do_measurement(locking_config conf,
         
         /* Start worker threads. */
         for (i = 0; i < conf.num_threads; ++i) {
-                workers[0]->Run();
-                workers[0]->WaitInit();
+                workers[i]->Run();
+                workers[i]->WaitInit();
         }
 
         /* Setup the database. */
@@ -212,6 +213,8 @@ static struct locking_result do_measurement(locking_config conf,
         for (i = 0; i < num_tables; ++i)
                 tables[i]->SetInit();
 
+        std::cerr << "Done setting up tables!\n";
+        
         /* Dry run */
         for (i = 0; i < conf.num_threads; ++i) {
                 inputs[i]->EnqueueBlocking(batches[0][i]);
@@ -220,6 +223,8 @@ static struct locking_result do_measurement(locking_config conf,
                 outputs[i]->DequeueBlocking();
         }
 
+        std::cerr << "Done with dry run!\n";
+        
         if (PROFILE)
                 ProfilerStart("locking.prof");
         barrier();
@@ -277,8 +282,8 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         tables = setup_hash_tables(num_tables, num_records);
         lock_manager = new LockManager(mgr_config);        
         workers = setup_workers(inputs, outputs, lock_manager,
-                                conf.num_threads, 100, tables);
+                                conf.num_threads, 1, tables);
         result = do_measurement(conf, workers, inputs, outputs, experiment_txns,
-                                0, setup_txns, tables, num_tables);
+                                7, setup_txns, tables, num_tables);
         write_locking_output(conf, result);
 }

@@ -86,6 +86,7 @@ void locking_worker::CheckReady()
 
 void locking_worker::TryExec(locking_action *txn)
 {
+        txn->tables = this->config.tables;
         if (config.mgr->Lock(txn)) {
                 assert(txn->num_dependencies == 0);
                 txn->Run();

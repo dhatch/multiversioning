@@ -14,56 +14,6 @@ struct LockBucket {
         volatile uint64_t latch;
 } __attribute__((__packed__, __aligned__(CACHE_LINE)));
 
-/*
-struct TxnQueue {
-  locking_key *head;
-  locking_key *tail;
-  volatile uint64_t __attribute((aligned(CACHE_LINE))) lock_word;
-
-  EagerCompositeKey key;
-
-  TxnQueue *next;
-  //  TxnQueue *prev;
-
-  TxnQueue() {
-    head = NULL;
-    tail = NULL;
-    lock_word = 0;
-  }
-};
-
-class TxnQueueAllocator {
- private:
-  TxnQueue *freeList;
-
- public:
-  void* operator new(std::size_t sz, int cpu) {
-    return alloc_mem(sz, cpu);
-  }
-
-  TxnQueueAllocator(uint64_t numEntries, int cpu) {
-    freeList = (TxnQueue*)alloc_mem(sizeof(TxnQueue)*numEntries, cpu);
-    memset(freeList, 0x00, sizeof(TxnQueue)*numEntries);
-    
-    for (uint64_t i = 0; i < numEntries; ++i) {
-      freeList[i].next = &freeList[i+1];
-    }
-    freeList[numEntries-1].next = NULL;
-  }
-
-  TxnQueue *Get() {
-    assert(freeList != NULL);
-    TxnQueue *ret = freeList;
-    freeList = freeList->next;
-    ret->next = NULL;
-    ret->head = NULL;
-    ret->tail = NULL;
-    ret->lock_word = 0;
-    return ret;
-  }
-};
-*/
-
 struct LockManagerConfig {
   uint32_t numTables;
   uint32_t *tableSizes;
@@ -75,9 +25,7 @@ class LockManagerTable {
 
  private:
   char **tables;
-  //  TxnQueueAllocator **allocators;
   uint64_t *tableSizes;
-  
   int startCpu;
   int endCpu;
 
@@ -110,7 +58,7 @@ class LockManagerTable {
           locking_key *cur;
 
           cur = k->next;
-          for (cur = k->next; cur != NULL; cur = cur->next)
+          for (cur = k->next; cur != NULL && (*cur != *k); cur = cur->next)
                   ;
           *next = cur;
           return *next != NULL;
@@ -204,7 +152,7 @@ class LockManagerTable {
            * If the queue is empty, both head and tail must be NULL, otherwise, 
            * both are non-NULL. 
            */
-          assert((bucket->head == NULL && bucket->tail == NULL) || 
+          assert((bucket->head == NULL && bucket->tail == NULL) ||
                  (bucket->head != NULL && bucket->tail != NULL));    
           k->next = NULL;
           k->prev = NULL;
@@ -267,7 +215,7 @@ class LockManagerTable {
           k->prev = NULL;
           k->next = NULL;          
           assert((bucket->head == NULL && bucket->tail == NULL) || 
-                 (bucket->head != NULL && bucket->tail != NULL));
+                  (bucket->head != NULL && bucket->tail != NULL));
   }
 
  public:
@@ -318,7 +266,7 @@ class LockManagerTable {
           /* Find the earliest entry with the same key */
           ancestor = key->prev;
           while (ancestor != NULL && *key != *ancestor)
-                  ;
+                  ancestor = ancestor->prev;
           if (ancestor == NULL)
                   held = true;
           else if (Conflicting(ancestor, key) == true) /* one is a write */
@@ -327,7 +275,7 @@ class LockManagerTable {
                   held = true;                  
           else /* both reads, lock not held */
                   held = false;
-          if (held)
+          if (!held)
                   fetch_and_increment(&action->num_dependencies);
           key->is_held = held;
           return !held;

@@ -1,5 +1,6 @@
 #include <locking_action.h>
 #include <algorithm>
+#include <util.h>
 
 locking_key::locking_key(uint64_t key, uint32_t table_id, bool is_write)
 {
@@ -22,17 +23,21 @@ locking_key::locking_key()
 locking_action::locking_action(txn *txn) : translator(txn)
 {
         this->prepared = false;
+        this->read_index = 0;
+        this->write_index = 0;
 }
 
 void locking_action::add_write_key(uint64_t key, uint32_t table_id)
 {
         locking_key to_add(key, table_id, true);
+        to_add.dependency = this;
         this->writeset.push_back(to_add);
 }
 
 void locking_action::add_read_key(uint64_t key, uint32_t table_id)
 {
         locking_key to_add(key, table_id, false);
+        to_add.dependency = this;
         this->readset.push_back(to_add);
 }
 
@@ -94,6 +99,9 @@ void locking_action::prepare()
                 return;
         std::sort(this->readset.begin(), this->readset.end());
         std::sort(this->writeset.begin(), this->writeset.end());
+        barrier();
+        this->num_dependencies = 0;
+        barrier();
         this->prepared = true;
 }
 

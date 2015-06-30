@@ -28,19 +28,17 @@ bool LockManager::Lock(locking_action *txn)
 {
         uint32_t *r_index, *w_index, num_reads, num_writes;
         struct locking_key write_key, read_key;
-
+        bool acquired = true;
+        
         txn->prepare();
-        barrier();
-        txn->num_dependencies = 0;
-        barrier();
-
+        
         r_index = &txn->read_index;
         w_index = &txn->write_index;
         num_reads = txn->readset.size();
         num_writes = txn->writeset.size();
 
         /* Acquire locks in sorted order. */
-        while (*r_index < num_reads && *w_index < num_writes) {
+        while (acquired && *r_index < num_reads && *w_index < num_writes) {
                 read_key = txn->readset[*r_index];
                 write_key = txn->writeset[*w_index];
                 
@@ -50,31 +48,27 @@ bool LockManager::Lock(locking_action *txn)
                  */
                 assert(read_key != write_key);                
                 if (read_key < write_key) {
+                        acquired = LockRecord(txn, &txn->readset[*r_index]);
                         *r_index += 1;
-                        if (!LockRecord(txn, &txn->readset[*r_index])) 
-                                return false;                        
                 } else {
-                        *w_index += 1;                        
-                        if (!LockRecord(txn, &txn->writeset[*w_index]))
-                                return false;
+                        acquired = LockRecord(txn, &txn->writeset[*w_index]);
+                        *w_index += 1;
                 }
         }
     
         /* At most one of these two loops can be executed. */
-        while (*w_index < num_writes) {
+        while (acquired && *w_index < num_writes) {
                 assert(*r_index == num_reads);
+                acquired = LockRecord(txn, &txn->writeset[*w_index]);
                 *w_index += 1;
-                if (!LockRecord(txn, &txn->writeset[*w_index]))
-                        return false;
         }
-        while (*r_index < num_reads) {
+        while (acquired && *r_index < num_reads) {
                 assert(*w_index == num_writes);
+                acquired = LockRecord(txn, &txn->readset[*r_index]);
                 *r_index += 1;
-                if (!LockRecord(txn, &txn->readset[*r_index]))
-                        return false;
         }
-        assert(*w_index == num_writes && *r_index == num_reads);
-        return true;
+        assert(!acquired || (*w_index == num_writes && *r_index == num_reads));
+        return acquired;
 }
 
 void LockManager::Unlock(locking_action *txn)
