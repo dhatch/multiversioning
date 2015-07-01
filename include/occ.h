@@ -6,7 +6,7 @@
 #include <concurrent_queue.h>
 #include <occ_action.h>
 #include <exception>
-
+#include <record_buffer.h>
 
 struct OCCActionBatch {
         uint32_t batchSize;
