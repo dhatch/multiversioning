@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <util.h>
 
+#define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
+
 locking_key::locking_key(uint64_t key, uint32_t table_id, bool is_write)
 {
         this->key = key;
@@ -25,6 +27,7 @@ locking_action::locking_action(txn *txn) : translator(txn)
         this->prepared = false;
         this->read_index = 0;
         this->write_index = 0;
+        this->bufs = NULL;
 }
 
 void locking_action::add_write_key(uint64_t key, uint32_t table_id)
@@ -67,17 +70,42 @@ int locking_action::find_key(uint64_t key, uint32_t table_id,
         return ret;
 }
 
+void locking_action::commit_writes()
+{
+        locking_key *k;
+        uint32_t i, num_writes, record_size;
+        void *value;
+
+        num_writes = this->writeset.size();
+        for (i = 0; i < num_writes; ++i) {
+                k = &this->writeset[i];
+                if (k->value != NULL) {
+                        value = lookup(k);
+                        record_size = this->tables[k->table_id]->RecordSize();
+                        memcpy(value, RECORD_VALUE_PTR(k->value), record_size);
+                        this->bufs->ReturnRecord(k->table_id, k->value);
+                        k->value = NULL;
+                }
+        }
+}
+
 void* locking_action::write_ref(uint64_t key, uint32_t table_id)
 {
         locking_key *k;
         int index;
-        
+        void *read_value;
+        uint32_t record_size;
+
         index = find_key(key, table_id, this->writeset);
         assert(index != -1 && index < this->writeset.size());
         k = &this->writeset[index];
-        if (k->value == NULL) 
-                k->value = lookup(k);
-        return k->value;
+        if (k->value == NULL) {
+                read_value = lookup(k);
+                k->value = this->bufs->GetRecord(table_id);
+                record_size = this->tables[table_id]->RecordSize();
+                memcpy(RECORD_VALUE_PTR(k->value), read_value, record_size);
+        }
+        return RECORD_VALUE_PTR(k->value);
 }
 
 void* locking_action::read(uint64_t key, uint32_t table_id)
@@ -105,7 +133,13 @@ void locking_action::prepare()
         this->prepared = true;
 }
 
+
+
 bool locking_action::Run()
 {
-        return this->t->Run();
+        bool commit;
+        commit = this->t->Run();
+        if (commit == true)
+                commit_writes();
+        return commit;
 }

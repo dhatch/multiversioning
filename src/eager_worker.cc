@@ -1,6 +1,7 @@
 #include <eager_worker.h>
 
-locking_worker::locking_worker(locking_worker_config config) 
+locking_worker::locking_worker(locking_worker_config config,
+                               RecordBuffersConfig rb_conf) 
     : Runnable(config.cpu)
 {
         this->config = config;
@@ -8,6 +9,7 @@ locking_worker::locking_worker(locking_worker_config config)
         m_queue_tail = NULL;    
         m_num_elems = 0;
         m_num_done = 0;
+        this->bufs = new(config.cpu) RecordBuffers(rb_conf);
 }
 
 void locking_worker::Init()
@@ -89,6 +91,8 @@ void locking_worker::TryExec(locking_action *txn)
         txn->tables = this->config.tables;
         if (config.mgr->Lock(txn)) {
                 assert(txn->num_dependencies == 0);
+                assert(txn->bufs == NULL);
+                txn->bufs = this->bufs;
                 txn->Run();
                 config.mgr->Unlock(txn);                
                 assert(txn->finished_execution);
@@ -100,7 +104,9 @@ void locking_worker::TryExec(locking_action *txn)
 
 void locking_worker::DoExec(locking_action *txn)
 {
-        assert(txn->num_dependencies == 0);  
+        assert(txn->num_dependencies == 0);
+        assert(txn->bufs == NULL);
+        txn->bufs = this->bufs;        
         txn->Run();
         config.mgr->Unlock(txn);
 }

@@ -5,6 +5,7 @@
 #include <table.h>
 #include <vector>
 #include <machine.h>
+#include <record_buffer.h>
 
 class locking_action;
 class lock_manager_table;
@@ -93,9 +94,12 @@ class locking_action : public translator {
         uint32_t read_index;
         uint32_t write_index;
         bool finished_execution;
+        RecordBuffers *bufs;
+        
         std::vector<locking_key> writeset;
         std::vector<locking_key> readset;        
 
+        void commit_writes();
         void* lookup(locking_key *key);
         void prepare();
         int find_key(uint64_t key, uint32_t table_id,

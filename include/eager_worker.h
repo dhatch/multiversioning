@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <cpuinfo.h>
 #include <runnable.hh>
+#include <record_buffer.h>
 
 struct locking_action_batch {
   uint32_t batchSize;
@@ -32,7 +33,9 @@ private:
   int         m_num_elems;                    // Number of elements in the queue
 
   volatile uint32_t m_num_done;
-    
+
+  RecordBuffers *bufs;
+  
   // Worker thread function
   virtual void WorkerFunction();
 
@@ -59,7 +62,7 @@ public:
     return alloc_mem(sz, cpu);
   }
 
-  locking_worker(locking_worker_config config);
+  locking_worker(locking_worker_config config, RecordBuffersConfig rb_conf);
     
   uint32_t NumProcessed() {
     return m_num_done;

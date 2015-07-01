@@ -112,13 +112,17 @@ static locking_worker** setup_workers(locking_queue **input,
                                       LockManager *mgr,
                                       uint32_t num_threads,
                                       uint32_t num_pending,
-                                      Table **tables)
+                                      Table **tables,
+                                      uint32_t num_tables)
 {
         assert(mgr != NULL && tables != NULL);
-        
+
+        uint32_t record_sizes[2];
         locking_worker **ret;
         int i;
 
+        record_sizes[0] = recordSize;
+        record_sizes[1] = recordSize;
         ret = (locking_worker**)malloc(sizeof(locking_worker*)*num_threads);
         assert(ret != NULL);
         for (i = 0; i < num_threads; ++i) {
@@ -130,7 +134,14 @@ static locking_worker** setup_workers(locking_queue **input,
                         num_pending,
                         tables,                        
                 };
-                ret[i] = new(i) locking_worker(conf);
+                struct RecordBuffersConfig rb_conf = {
+                        num_tables,
+                        record_sizes,
+                        5000,
+                        i,
+                };
+
+                ret[i] = new(i) locking_worker(conf, rb_conf);
         }
         return ret;
 }
@@ -284,8 +295,9 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         tables = setup_hash_tables(num_tables, num_records);
         lock_manager = new LockManager(mgr_config);        
         workers = setup_workers(inputs, outputs, lock_manager,
-                                conf.num_threads, 1, tables);
+                                conf.num_threads, 1, tables, num_tables);
         result = do_measurement(conf, workers, inputs, outputs, experiment_txns,
-                                1+EXTRA_BATCHES, setup_txns, tables, num_tables);
+                                1+EXTRA_BATCHES, setup_txns, tables,
+                                num_tables);
         write_locking_output(conf, result);
 }
