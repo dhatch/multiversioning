@@ -85,7 +85,7 @@ lock(volatile uint64_t *word) {
         while (true) {
                 if ((*word == 0) && (xchgq(word, 1) == 0)) {
                         break;
-                }
+                } 
                 do_pause();
         }
 }

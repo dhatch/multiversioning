@@ -74,6 +74,7 @@ OCCActionBatch** setup_occ_input(OCCConfig occ_config, workload_config w_conf,
         ret[0] = setup_occ_single_input(fake_config, w_conf);
         ret[1] = setup_occ_single_input(occ_config, w_conf);
         occ_config.numTxns = 1000000;
+        fake_config.numTxns = occ_config.numTxns;
         for (i = 2; i < total_iters; ++i) 
                 ret[i] = setup_occ_single_input(fake_config, w_conf);
         std::cerr << "Done setting up occ input\n";
@@ -377,10 +378,10 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
                                     occ_config.numThreads, occ_config.occ_epoch,
                                     2);
 
-        inputs = setup_occ_input(occ_config, w_conf, OCC_TXN_BUFFER);
+        inputs = setup_occ_input(occ_config, w_conf, 1);
         pin_memory();
         result = run_occ_workers(input_queues, output_queues, workers,
-                                 inputs, OCC_TXN_BUFFER+1, occ_config,
+                                 inputs, 1+1, occ_config,
                                  setup_txns, tables, num_tables);
         write_occ_output(result, occ_config);
 }

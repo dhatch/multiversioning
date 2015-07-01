@@ -9,7 +9,7 @@
 #include <gperftools/profiler.h>
 #include <setup_workload.h>
 
-#define INPUT_SIZE 1024
+#define INPUT_SIZE 2048
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 

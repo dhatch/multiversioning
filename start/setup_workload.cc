@@ -9,6 +9,8 @@
 #include <set>
 #include <common.h>
 
+RecordGenerator *my_gen = NULL;
+
 uint64_t gen_unique_key(RecordGenerator *gen,
                         std::set<uint64_t> *seen_keys)
 {
@@ -218,7 +220,6 @@ uint32_t generate_input(workload_config conf, txn ***loaders)
 
 txn* generate_transaction(workload_config config)
 {
-        RecordGenerator *gen;
         txn *txn;
         
         if (config.experiment == 3) {
@@ -226,13 +227,13 @@ txn* generate_transaction(workload_config config)
         } else if (config.experiment == 4) {
                 txn = generate_small_bank_action(config.num_records, true);
         } else if (config.experiment < 3) {
-                if (config.distribution == UNIFORM)
-                        gen = new UniformGenerator(config.num_records);
-                else
-                        gen = new ZipfGenerator((uint64_t)config.num_records,
+                if (config.distribution == UNIFORM && my_gen == NULL)
+                        my_gen = new UniformGenerator(config.num_records);
+                else if (config.distribution == ZIPFIAN && my_gen == NULL)
+                        my_gen = new ZipfGenerator((uint64_t)config.num_records,
                                                 config.theta);
-                assert(gen != NULL);
-                txn = generate_ycsb_action(gen, config);
+                assert(my_gen != NULL);
+                txn = generate_ycsb_action(my_gen, config);
         } else {
                 assert(false);
         }
