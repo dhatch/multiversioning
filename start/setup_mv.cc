@@ -550,7 +550,7 @@ static void mv_setup_input_array(std::vector<ActionBatch> *input,
         ActionBatch batch;
         uint32_t i;
         
-        num_epochs = get_num_epochs(mv_config);
+        num_epochs = 2*get_num_epochs(mv_config);
         for (i = 0; i < num_epochs + MV_DRY_RUNS; ++i) {
                 batch = mv_create_action_batch(mv_config, w_config, i+2);
                 input->push_back(batch);
@@ -621,9 +621,10 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
                                std::vector<ActionBatch> inputs,
                                uint32_t num_workers)
 {
-        uint32_t num_batches, i, j;
+        uint32_t num_batches, num_wait_batches, i, j;
         struct timespec elapsed_time, end_time, start_time;
         num_batches = inputs.size();
+        num_wait_batches = (num_batches - MV_DRY_RUNS) / 2;
 
         barrier();
         for (i = 0; i < MV_DRY_RUNS; ++i)
@@ -642,7 +643,7 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
                 input_queue->EnqueueBlocking(inputs[i]);
         }
         barrier();
-        for (i = MV_DRY_RUNS; i < num_batches; ++i) {
+        for (i = MV_DRY_RUNS; i < num_wait_batches; ++i) {
                 for (j = 0; j < num_workers; ++j) 
                         (&output_queue[j])->DequeueBlocking();
         }

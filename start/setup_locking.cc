@@ -9,6 +9,8 @@
 #include <gperftools/profiler.h>
 #include <fstream>
 
+#define EXTRA_BATCHES 1
+
 struct locking_result {
         timespec elapsed_time;
         uint64_t num_txns;
@@ -100,7 +102,7 @@ static locking_action_batch** setup_input(locking_config conf,
         ret[0] = setup_single_round(FAKE_ITER_SIZE, conf.num_threads, w_conf);
         ret[1] = setup_single_round(conf.num_txns, conf.num_threads, w_conf);
         for (i = 2; i < total_iters; ++i)
-                ret[i] = setup_single_round(FAKE_ITER_SIZE, conf.num_threads,
+                ret[i] = setup_single_round(conf.num_txns, conf.num_threads,
                                             w_conf);
         return ret;
 }
@@ -259,7 +261,7 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         inputs = setup_queues<locking_action_batch>(conf.num_threads, 1024);
         outputs = setup_queues<locking_action_batch>(conf.num_threads, 1024);
         setup_txns = setup_db(w_conf);
-        experiment_txns = setup_input(conf, w_conf, 5);
+        experiment_txns = setup_input(conf, w_conf, EXTRA_BATCHES);
         
         if (w_conf.experiment < 3) {
                 num_records[0] = w_conf.num_records;
@@ -284,6 +286,6 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         workers = setup_workers(inputs, outputs, lock_manager,
                                 conf.num_threads, 1, tables);
         result = do_measurement(conf, workers, inputs, outputs, experiment_txns,
-                                7, setup_txns, tables, num_tables);
+                                1+EXTRA_BATCHES, setup_txns, tables, num_tables);
         write_locking_output(conf, result);
 }

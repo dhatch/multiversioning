@@ -294,7 +294,7 @@ void Executor::ProcessBatch(const ActionBatch &batch) {
         */
         for (int i = config.threadId; i < (int)batch.numActions;
              i += config.numExecutors) {
-                while (pendingList->Size() > 75) {
+                while (pendingList->Size() > 0) {
                         ExecPending();
                 }
 
