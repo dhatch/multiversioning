@@ -280,7 +280,7 @@ static Executor** SetupExecutors(uint32_t cpuStart,
   uint32_t numTables = 1;
 
   uint64_t *sizeData = (uint64_t*)malloc(sizeof(uint32_t)*2);
-  sizeData[0] = recordSize;
+  sizeData[0] = GLOBAL_RECORD_SIZE;
   sizeData[1] = threadDbSz/recordSize;
 
   // First pass, create configs. Each config contains a reference to each 

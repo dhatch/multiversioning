@@ -11,6 +11,9 @@
 
 #define EXTRA_BATCHES 1
 
+extern uint32_t GLOBAL_RECORD_SIZE;
+uint32_t record_sizes[2];
+
 struct locking_result {
         timespec elapsed_time;
         uint64_t num_txns;
@@ -116,13 +119,11 @@ static locking_worker** setup_workers(locking_queue **input,
                                       uint32_t num_tables)
 {
         assert(mgr != NULL && tables != NULL);
-
-        uint32_t record_sizes[2];
         locking_worker **ret;
         int i;
 
-        record_sizes[0] = recordSize;
-        record_sizes[1] = recordSize;
+        record_sizes[0] = GLOBAL_RECORD_SIZE;
+        record_sizes[1] = GLOBAL_RECORD_SIZE;
         ret = (locking_worker**)malloc(sizeof(locking_worker*)*num_threads);
         assert(ret != NULL);
         for (i = 0; i < num_threads; ++i) {
@@ -292,7 +293,7 @@ void locking_experiment(locking_config conf, workload_config w_conf)
                 0,
                 (int)conf.num_threads - 1,
         };
-        tables = setup_hash_tables(num_tables, num_records);
+        tables = setup_hash_tables(num_tables, num_records, false);
         lock_manager = new LockManager(mgr_config);        
         workers = setup_workers(inputs, outputs, lock_manager,
                                 conf.num_threads, 1, tables, num_tables);

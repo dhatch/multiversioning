@@ -38,7 +38,7 @@ void gen_random_array(void *array, size_t sz);
 
 void pin_memory();
 
-Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records);
+Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records, bool occ);
 
 struct big_key* setup_array(txn *t);
 

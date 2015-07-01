@@ -99,7 +99,7 @@ class locking_action : public translator {
         std::vector<locking_key> writeset;
         std::vector<locking_key> readset;        
 
-        void commit_writes();
+        void commit_writes(bool commit);
         void* lookup(locking_key *key);
         void prepare();
         int find_key(uint64_t key, uint32_t table_id,

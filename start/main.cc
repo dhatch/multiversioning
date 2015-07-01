@@ -503,16 +503,18 @@ int main(int argc, char **argv) {
           if (cfg.mvConfig.experiment < 3)
                   GLOBAL_RECORD_SIZE = 1000;
           else
-                  GLOBAL_RECORD_SIZE = 8;
+                  GLOBAL_RECORD_SIZE = sizeof(SmallBankRecord);
 
           do_mv_experiment(cfg.mvConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == LOCKING) {
+          recordSize = cfg.lockConfig.record_size;
+          assert(recordSize == 8 || recordSize == 1000);
           assert(cfg.lockConfig.distribution < 2);
           if (cfg.lockConfig.experiment < 3)
                   GLOBAL_RECORD_SIZE = 1000;
           else
-                  GLOBAL_RECORD_SIZE = 8;
+                  GLOBAL_RECORD_SIZE = sizeof(SmallBankRecord);
           locking_experiment(cfg.lockConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == OCC) {
@@ -522,7 +524,7 @@ int main(int argc, char **argv) {
           if (cfg.occConfig.experiment < 3)
                   GLOBAL_RECORD_SIZE = 1000;
           else
-                  GLOBAL_RECORD_SIZE = 8;
+                  GLOBAL_RECORD_SIZE = sizeof(SmallBankRecord);
 
           occ_experiment(cfg.occConfig, cfg.get_workload_config());
           exit(0);

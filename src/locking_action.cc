@@ -70,7 +70,7 @@ int locking_action::find_key(uint64_t key, uint32_t table_id,
         return ret;
 }
 
-void locking_action::commit_writes()
+void locking_action::commit_writes(bool commit)
 {
         locking_key *k;
         uint32_t i, num_writes, record_size;
@@ -80,9 +80,11 @@ void locking_action::commit_writes()
         for (i = 0; i < num_writes; ++i) {
                 k = &this->writeset[i];
                 if (k->value != NULL) {
-                        value = lookup(k);
-                        record_size = this->tables[k->table_id]->RecordSize();
-                        memcpy(value, RECORD_VALUE_PTR(k->value), record_size);
+                        if (commit) {
+                                value = lookup(k);
+                                record_size = this->tables[k->table_id]->RecordSize();                        
+                                memcpy(value, RECORD_VALUE_PTR(k->value), record_size);
+                        }
                         this->bufs->ReturnRecord(k->table_id, k->value);
                         k->value = NULL;
                 }
@@ -139,7 +141,6 @@ bool locking_action::Run()
 {
         bool commit;
         commit = this->t->Run();
-        if (commit == true)
-                commit_writes();
+        commit_writes(commit);
         return commit;
 }

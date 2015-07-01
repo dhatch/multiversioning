@@ -116,8 +116,8 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
         bool is_leader;
         struct OCCWorkerConfig worker_config;
         struct RecordBuffersConfig buf_config;
-        recordSizes[0] = recordSize;
-        recordSizes[1] = recordSize;
+        recordSizes[0] = GLOBAL_RECORD_SIZE;
+        recordSizes[1] = GLOBAL_RECORD_SIZE;
         workers = (OCCWorker**)malloc(sizeof(OCCWorker*)*numThreads);
         assert(workers != NULL);
         epoch_ptr = (volatile uint32_t*)alloc_mem(sizeof(uint32_t), 0);
@@ -152,7 +152,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
         return workers;
 }
 
-Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records)
+Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records, bool occ)
 {
         Table **tables;
         uint32_t i;
@@ -165,7 +165,10 @@ Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records)
                 conf.startCpu = 0;
                 conf.endCpu = 71;
                 conf.freeListSz = 2*num_records[i];
-                conf.valueSz = GLOBAL_RECORD_SIZE + 8;
+                if (occ)
+                        conf.valueSz = GLOBAL_RECORD_SIZE + 8;
+                else
+                        conf.valueSz = GLOBAL_RECORD_SIZE;
                 conf.recordSize = 0;
                 tables[i] = new(0) Table(conf);
         }
@@ -373,7 +376,7 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
                 tables = NULL;
                 num_tables = 0;
         }
-        tables = setup_hash_tables(num_tables, num_records);
+        tables = setup_hash_tables(num_tables, num_records, true);
         workers = setup_occ_workers(input_queues, output_queues, tables,
                                     occ_config.numThreads, occ_config.occ_epoch,
                                     2);

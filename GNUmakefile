@@ -29,18 +29,18 @@ test:env build/tests
 
 -include $(wildcard $(DEPSDIR)/*.d)
 
-build/%.o: src/%.cc $(DEPSDIR)/stamp 
+build/%.o: src/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@mkdir -p build
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
 
 $(TESTOBJECTS):$(OBJECTS)
 
-test/%.o: test/%.cc $(DEPSDIR)/stamp 
+test/%.o: test/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) -Wno-missing-field-initializers -Wno-conversion-null $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
 
-start/%.o: start/%.cc $(DEPSDIR)/stamp 
+start/%.o: start/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@echo + cc $<
 	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -Istart -c -o $@ $<
 
