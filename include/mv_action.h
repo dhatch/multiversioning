@@ -49,10 +49,12 @@ class CompositeKey {
         bool is_rmw;
         MVRecord *value;
         int next;
+        bool initialized;
         
         CompositeKey() {
                 this->value = NULL;
                 this->next = -1;
+                this->initialized = false;
         }
         
         CompositeKey(bool isRmw, uint32_t table, uint64_t key) {
@@ -61,6 +63,7 @@ class CompositeKey {
                 this->key = key;
                 this->value = NULL;
                 this->next = -1;
+                this->initialized = false;
         }
   
         CompositeKey(bool isRmw) {
@@ -69,6 +72,7 @@ class CompositeKey {
                 this->key = 0;
                 this->value = NULL;
                 this->next = -1;
+                this->initialized = false;
         }
 
         bool operator==(const CompositeKey &other) const {

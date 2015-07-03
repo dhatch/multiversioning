@@ -431,7 +431,7 @@ bool Executor::check_ready(mv_action *action)
                             depend_action->__state != SUBSTANTIATED && 
                             !ProcessSingle(depend_action)) {
                                 ready = false;
-                        } else {
+                        } else if (action->__writeset[i].initialized == false) {
                                 /* 
                                  * XXX This is super hacky. Need to separate 
                                  * record allocation from version allocation to 
@@ -440,6 +440,7 @@ bool Executor::check_ready(mv_action *action)
                                 new_data = action->__writeset[i].value->value;
                                 old_data = prev->value;
                                 memcpy(new_data, old_data, GLOBAL_RECORD_SIZE);
+                                action->__writeset[i].initialized = true;
                         }
                 }
         }
