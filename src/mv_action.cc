@@ -348,7 +348,8 @@ void* mv_action::write_ref(uint64_t key, uint32_t table_id)
         for (i = 0; i < num_writes; ++i) {
                 if (this->__writeset[i].key == key &&
                     this->__writeset[i].tableId == table_id) {
-                        assert(this->__writeset[i].initialized == true);
+                        assert(!this->writeset[i].is_rmw || 
+                               this->__writeset[i].initialized == true);
                         return this->__writeset[i].value->value;
                 }
         }
