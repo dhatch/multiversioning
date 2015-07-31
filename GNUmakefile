@@ -20,7 +20,7 @@ NON_HEK_OBJECTS:=$(filter-out $(HEK_OBJ),$(OBJECTS))
 DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
-all:CFLAGS+=-DTESTING=0 -L${JEMALLOC_PATH}/lib -Wl,-rpath,${JEMALLOC_PATH}/lib -ljemalloc -DUSE_BACKOFF=1
+all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1
 #all:LIBS+=-ltcmalloc_minimal
 all:env build/db
 
