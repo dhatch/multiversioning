@@ -3,7 +3,6 @@
 #include <common.h>
 #include <set>
 #include <small_bank.h>
-#include <gperftools/profiler.h>
 #include <fstream>
 #include <setup_workload.h>
 
@@ -305,8 +304,6 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
 
         std::cerr << "Done dry run\n";
-        if (PROFILE)
-                ProfilerStart("occ.prof");
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
         barrier();
@@ -318,8 +315,6 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
         barrier();
-        if (PROFILE)
-                ProfilerStop();
         result.time_elapsed = diff_time(end_time, start_time);
         //        result.num_txns = config.numTxns;
         std::cout << "Num completed: " << result.num_txns << "\n";

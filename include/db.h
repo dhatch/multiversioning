@@ -85,6 +85,7 @@ class translator {
         translator(txn *t) { this->t = t; };
         virtual void *write_ref(uint64_t key, uint32_t table) = 0;
         virtual void *read(uint64_t key, uint32_t table) = 0;
+        virtual int rand() = 0;
 };
 
 /*
@@ -98,6 +99,7 @@ class txn {
         void* get_write_ref(uint64_t key, uint32_t table_id);
         void* get_read_ref(uint64_t key, uint32_t table_id);
         void* get_insert_ref(uint64_t key, uint32_t table_id);
+        int txn_rand();
         
  public:
         txn();

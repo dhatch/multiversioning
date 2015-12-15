@@ -90,6 +90,7 @@ void OCCWorker::RunSingle(OCCAction *action)
         while (true) {
                 try {
                         num_retries += 1;
+                        action->worker = this;
                         action->run();
                         action->acquire_locks();
                         barrier();

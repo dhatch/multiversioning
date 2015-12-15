@@ -52,4 +52,8 @@ void txn::get_rmws(__attribute__((unused)) struct big_key *array)
         return;
 }
 
+int txn::txn_rand()
+{
+        return trans->rand();
+}
 

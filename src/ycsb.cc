@@ -16,7 +16,7 @@ void ycsb_insert::gen_rand(char *array)
         num_words = YCSB_RECORD_SIZE / sizeof(uint32_t);
         int_array = (uint32_t*)array;
         for (i = 0; i < num_words; ++i) 
-                int_array[i] = (uint32_t)rand();        
+                int_array[i] = (uint32_t)txn_rand();
 }
 
 bool ycsb_insert::Run()

@@ -1,6 +1,7 @@
 #include <locking_action.h>
 #include <algorithm>
 #include <util.h>
+#include <eager_worker.h>
 
 #define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
 
@@ -22,8 +23,14 @@ locking_key::locking_key()
 {
 }
 
+int locking_action::rand()
+{
+        return worker->gen_random();
+}
+
 locking_action::locking_action(txn *txn) : translator(txn)
 {
+        this->worker = NULL;
         this->prepared = false;
         this->read_index = 0;
         this->write_index = 0;

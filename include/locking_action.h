@@ -9,6 +9,7 @@
 
 class locking_action;
 class lock_manager_table;
+class locking_worker;
 
 struct locking_key {
 
@@ -84,9 +85,13 @@ class locking_action : public translator {
         friend class locking_worker;
         
  private:
+        locking_action();
+        locking_action(const locking_action&);
+        locking_action& operator=(const locking_action&);
         
         volatile uint64_t __attribute__((__aligned__(CACHE_LINE)))
                 num_dependencies;
+        locking_worker *worker;
         locking_action *next;
         locking_action *prev;
         Table **tables;
@@ -101,7 +106,7 @@ class locking_action : public translator {
 
         void commit_writes(bool commit);
         void* lookup(locking_key *key);
-        void prepare();
+        
         int find_key(uint64_t key, uint32_t table_id,
                      std::vector<locking_key> key_list);
         
@@ -112,6 +117,8 @@ class locking_action : public translator {
 
         void* write_ref(uint64_t key, uint32_t table_id);
         void* read(uint64_t key, uint32_t table_id);
+        int rand();
+        void prepare();
         bool Run();
 };
 

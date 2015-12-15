@@ -408,20 +408,27 @@ bool Executor::check_ready(mv_action *action)
         mv_action *depend_action;
         MVRecord *prev;
         void *new_data, *old_data;
-        
+        uint32_t *read_index, *write_index;
+
         ready = true;
         num_reads = action->__readset.size();
         num_writes = action->__writeset.size();
-        for (i = 0; i < num_reads; ++i) {
+        read_index = &action->read_index;
+        write_index = &action->write_index;
+        for (; *read_index < num_reads; *read_index += 1) {
+                i = *read_index;
+
                 assert(action->__readset[i].value != NULL);
                 depend_action = action->__readset[i].value->writer;
                 if (depend_action != NULL &&
                     depend_action->__state != SUBSTANTIATED &&
                     !ProcessSingle(depend_action)) {
                         ready = false;
+                        break;
                 }
         }
-        for (i = 0; i < num_writes; ++i) {
+        for (; *write_index < num_writes; *write_index += 1) {
+                i = *write_index;
                 assert(action->__writeset[i].value != NULL);
                 if (action->__writeset[i].is_rmw) {
                         prev = action->__writeset[i].value->recordLink;
@@ -431,6 +438,7 @@ bool Executor::check_ready(mv_action *action)
                             depend_action->__state != SUBSTANTIATED && 
                             !ProcessSingle(depend_action)) {
                                 ready = false;
+                                break;
                         } else if (action->__writeset[i].initialized == false) {
                                 /* 
                                  * XXX This is super hacky. Need to separate 
@@ -467,6 +475,7 @@ bool Executor::ProcessTxn(mv_action *action) {
                   if (value_ptr == NULL)
                           return false;
                 }
+                action->exec = this;
                 action->Run();
                 xchgq(&action->__state, SUBSTANTIATED);
                 return true;
@@ -504,6 +513,7 @@ bool Executor::ProcessTxn(mv_action *action) {
         */
   
   // Transaction aborted
+        action->exec = this;
         action->Run();
         /*
   if (!action->Run()) {

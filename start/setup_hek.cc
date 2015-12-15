@@ -5,7 +5,6 @@
 #include <common.h>
 #include <zipf_generator.h>
 #include <uniform_generator.h>
-#include <gperftools/profiler.h>
 #include <fstream>
 #include <stdlib.h>
 #include <algorithm>
@@ -564,8 +563,6 @@ static struct hek_result run_experiment(hek_config config,
         end_single_round(output_queues, config.num_threads);
 
         /* Real run. */
-        if (PROFILE)
-                ProfilerStart("hekaton.prof");
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
         barrier();
@@ -575,8 +572,6 @@ static struct hek_result run_experiment(hek_config config,
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
         barrier();
-        if (PROFILE)
-                ProfilerStop();
 
         /* Write to result struct.  */
         result.elapsed_time = diff_time(end_time, start_time);

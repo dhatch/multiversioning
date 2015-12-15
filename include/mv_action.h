@@ -18,6 +18,7 @@ struct key_index {
 };
 
 class mv_action;
+class Executor;
 
 struct ActionBatch {
     mv_action **actionBuf;
@@ -171,11 +172,18 @@ class RMWAction : public Action {
 using namespace std;
 
 class mv_action : public translator {
-
+        friend class Executor;
         
+ private:
+        mv_action(const mv_action&);
+        mv_action& operator=(const mv_action&);
+
  protected:
+        uint32_t read_index;
+        uint32_t write_index;
         unordered_map<big_key, key_index> reverse_index;
         CompositeKey GenerateKey(bool is_rmw, uint32_t tableId, uint64_t key);
+        Executor *exec;
         bool init;
         
  public:
@@ -194,6 +202,7 @@ class mv_action : public translator {
         void setup_reverse_index();
         void* write_ref(uint64_t key, uint32_t table_id);
         void* read(uint64_t key, uint32_t table_id);
+        int rand();
         bool Run();
         virtual void add_read_key(uint32_t tableId, uint64_t key);
         virtual void add_write_key(uint32_t tableId, uint64_t key, bool is_rmw);

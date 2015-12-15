@@ -2,10 +2,32 @@
 #include <util.h>
 #include <cpuinfo.h>
 #include <pthread.h>
+#include <stdlib.h>
+
+#define PRNG_BUFSZ 32
+
+void Runnable::rand_init()
+{
+        char *random_buf;
+        
+        m_rand_state = (struct random_data*)malloc(sizeof(struct random_data));
+        memset(m_rand_state, 0x0, sizeof(struct random_data));
+        random_buf = (char*)malloc(PRNG_BUFSZ);
+        memset(random_buf, 0x0, PRNG_BUFSZ);
+        initstate_r(random(), random_buf, PRNG_BUFSZ, m_rand_state);
+}
 
 Runnable::Runnable(int cpu_number) {
         m_start_signal = 0;
         m_cpu_number = cpu_number;
+        rand_init();
+}
+
+int Runnable::gen_random()
+{
+        int ret;
+        random_r(m_rand_state, &ret);
+        return ret;
 }
 
 void

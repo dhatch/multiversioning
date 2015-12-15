@@ -6,8 +6,8 @@
 #include <eager_worker.h>
 #include <table.h>
 #include <config.h>
-#include <gperftools/profiler.h>
 #include <fstream>
+#include <sys/time.h>
 
 #define EXTRA_BATCHES 1
 
@@ -15,9 +15,17 @@ extern uint32_t GLOBAL_RECORD_SIZE;
 uint32_t record_sizes[2];
 
 struct locking_result {
+        double time;
         timespec elapsed_time;
         uint64_t num_txns;
 };
+
+static inline double GetTime() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec + tv.tv_usec/1e6;
+}
+
 
 static locking_action* txn_to_action(txn *t)
 {
@@ -43,6 +51,7 @@ static locking_action* txn_to_action(txn *t)
         t->get_writes(arr);
         for (i = 0; i < num_writes; ++i) 
                 ret->add_write_key(arr[i].key, arr[i].table_id);
+        ret->prepare();
         return ret;
 }
 
@@ -102,7 +111,7 @@ static locking_action_batch** setup_input(locking_config conf,
         total_iters = 1 + 1 + extra_batches;
         ret = (locking_action_batch**)
                 malloc(sizeof(locking_action_batch*)*total_iters);
-        ret[0] = setup_single_round(FAKE_ITER_SIZE, conf.num_threads, w_conf);
+        ret[0] = setup_single_round(FAKE_ITER_SIZE*conf.num_threads, conf.num_threads, w_conf);
         ret[1] = setup_single_round(conf.num_txns, conf.num_threads, w_conf);
         for (i = 2; i < total_iters; ++i)
                 ret[i] = setup_single_round(conf.num_txns, conf.num_threads,
@@ -197,7 +206,7 @@ static void write_locking_output(locking_config conf,
 
         result_file << "\n";
         result_file.close();  
-        std::cout << "Time elapsed: " << elapsed_milli << " ";
+        std::cout << "Time elapsed: " << result.time << " ";
         std::cout << "Num txns: " << conf.num_txns << "\n";
 }
 
@@ -214,6 +223,8 @@ static struct locking_result do_measurement(locking_config conf,
         uint32_t i, j;
         struct locking_result result;
         timespec start_time, end_time;
+
+        pin_thread(79);
         
         /* Start worker threads. */
         for (i = 0; i < conf.num_threads; ++i) {
@@ -239,10 +250,9 @@ static struct locking_result do_measurement(locking_config conf,
 
         std::cerr << "Done with dry run!\n";
         
-        if (PROFILE)
-                ProfilerStart("locking.prof");
+        double start_dbl = GetTime();
         barrier();
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
+        clock_gettime(CLOCK_REALTIME, &start_time);
         barrier();
 
         for (i = 1; i < num_batches; ++i)
@@ -250,11 +260,11 @@ static struct locking_result do_measurement(locking_config conf,
                         inputs[j]->EnqueueBlocking(batches[i][j]);
         for (i = 0; i < conf.num_threads; ++i)
                 outputs[i]->DequeueBlocking();
+        double end_dbl = GetTime();
         barrier();
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
+        clock_gettime(CLOCK_REALTIME, &end_time);
         barrier();
-        if (PROFILE)
-                ProfilerStop();
+        result.time = end_dbl - start_dbl;
         result.elapsed_time = diff_time(end_time, start_time);
         return result;
 }
@@ -296,7 +306,7 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         tables = setup_hash_tables(num_tables, num_records, false);
         lock_manager = new LockManager(mgr_config);        
         workers = setup_workers(inputs, outputs, lock_manager,
-                                conf.num_threads, 1, tables, num_tables);
+                                conf.num_threads, 50, tables, num_tables);
         result = do_measurement(conf, workers, inputs, outputs, experiment_txns,
                                 1+EXTRA_BATCHES, setup_txns, tables,
                                 num_tables);

@@ -133,7 +133,8 @@ alloc_mem(size_t size, int cpu) {
           numa_set_strict(1);
           void *buf = numa_alloc_onnode(size, numa_node);
           //          void *buf = numa_alloc_interleaved(size);
-
+          
+          /*
   if (buf != NULL) {
     if (mlock(buf, size) != 0) {
       numa_free(buf, size);
@@ -141,7 +142,7 @@ alloc_mem(size_t size, int cpu) {
       buf = NULL;
     }
   }  
-
+          */
           
 //           if (errno != 0) {
 //                   perror("Error: ");
@@ -154,7 +155,7 @@ alloc_mem(size_t size, int cpu) {
 void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
         //        return alloc_interleaved_all(size);
         //        return alloc_mem(size, startCpu);
-
+        //        return malloc(size);
   struct bitmask *mask = numa_bitmask_alloc(80);
   numa_set_strict(1);
   for (int i = startCpu; i < endCpu; ++i) {
@@ -167,8 +168,8 @@ void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
 //           perror("Error: ");
 //   }
 //  return buf;
-
-
+  
+  /*
   if (buf != NULL) {
     if (mlock(buf, size) != 0) {
       numa_free(buf, size);
@@ -176,17 +177,19 @@ void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
       buf = NULL;
     }
   } 
-
+  */
   numa_bitmask_free(mask);
   return buf;
   
 }
 
 void* alloc_interleaved_all(size_t size) {
+        //        return malloc(size);
         //        return alloc_mem(size, 0);
   void *buf = numa_alloc_interleaved(size);
   assert(buf != NULL);
 
+  /*
   if (buf != NULL) {
     if (mlock(buf, size) != 0) {
       numa_free(buf, size);
@@ -194,7 +197,7 @@ void* alloc_interleaved_all(size_t size) {
       buf = NULL;
     }
   } 
-
+  */
 
 //   if (errno != 0) {
 //           perror("Error: ");

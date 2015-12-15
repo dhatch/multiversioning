@@ -71,6 +71,7 @@ void gen_random_array(void *array, size_t sz)
 
 void pin_memory()
 {
+        /*
         if (!PROFILE) {
                 mlockall(MCL_CURRENT);
                 if (errno != 0) {
@@ -83,6 +84,7 @@ void pin_memory()
                         assert(false);
                 }
         }
+        */
 }
 
 struct big_key* setup_array(txn *t)

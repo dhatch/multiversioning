@@ -1,5 +1,6 @@
 #include <mv_action.h>
 #include <table.h>
+#include <executor.h>
 
 extern Table** mv_tables;
 
@@ -271,6 +272,8 @@ mv_action::mv_action(txn *t) : translator(t)
                 this->__read_starts.push_back(-1);
         }
         this->init = false;
+        this->read_index = 0;
+        this->write_index = 0;
 }
 
 bool mv_action::initialized()
@@ -441,4 +444,9 @@ void mv_action::add_write_key(uint32_t tableId, uint64_t key, bool is_rmw)
         to_add = GenerateKey(is_rmw, tableId, key);
         __writeset.push_back(to_add);
         __readonly = false;
+}
+
+int mv_action::rand()
+{
+        return exec->gen_random();
 }

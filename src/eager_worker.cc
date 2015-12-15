@@ -93,6 +93,7 @@ void locking_worker::TryExec(locking_action *txn)
                 assert(txn->num_dependencies == 0);
                 assert(txn->bufs == NULL);
                 txn->bufs = this->bufs;
+                txn->worker = this;
                 txn->Run();
                 config.mgr->Unlock(txn);                
                 assert(txn->finished_execution);
@@ -106,7 +107,8 @@ void locking_worker::DoExec(locking_action *txn)
 {
         assert(txn->num_dependencies == 0);
         assert(txn->bufs == NULL);
-        txn->bufs = this->bufs;        
+        txn->bufs = this->bufs;    
+        txn->worker = this;
         txn->Run();
         config.mgr->Unlock(txn);
 }
@@ -115,7 +117,8 @@ void
 locking_worker::WorkerFunction()
 {
         locking_action_batch batch;
-        
+        //        double results[1000];
+
         // Each iteration of this loop executes a batch of transactions
         while (true) {
                 batch = config.inputQueue->DequeueBlocking();

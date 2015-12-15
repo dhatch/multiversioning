@@ -8,7 +8,7 @@
 #include <db.h>
 #include <time.h>
 
-#define RMW_COUNT	2
+#define RMW_COUNT	8
 #define MAX_CPU 	79
 #define FAKE_ITER_SIZE 1000
 

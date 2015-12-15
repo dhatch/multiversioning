@@ -1,6 +1,6 @@
-CFLAGS=-O2 -g -Wall -Wextra -Werror -std=c++0x -DPROFILE=0 -Wno-sign-compare  
-CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0
-LIBS=-lnuma -lpthread -lrt -lcityhash -lprofiler
+CFLAGS=-O2 -g -Wall -Wextra -Werror -std=c++0x -Wno-sign-compare 
+CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 
+LIBS=-lnuma -lpthread -lrt -lcityhash 
 CXX=g++
 
 INCLUDE=include
@@ -20,8 +20,7 @@ NON_HEK_OBJECTS:=$(filter-out $(HEK_OBJ),$(OBJECTS))
 DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
-all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1
-#all:LIBS+=-ltcmalloc_minimal
+all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1 -fno-omit-frame-pointer
 all:env build/db
 
 test:CFLAGS+=-DTESTING=1

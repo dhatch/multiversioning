@@ -6,11 +6,11 @@ import os.path
 import clean
 
 
-fmt_locking = "build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --read_pct {7} --read_txn_size 10000"
+fmt_locking = "numactl --interleave=all build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --read_pct {7} --read_txn_size 10000"
 
 fmt_multi = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch_size 10000 --num_records {2} --num_worker_threads {3} --txn_size 10 --experiment {4} --record_size {7} --distribution {5} --theta {6} --read_pct {8} --read_txn_size 10000"
 
-fmt_occ = "build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct {7} --read_txn_size 10000"
+fmt_occ = "numactl --interleave=all build/db --cc_type 2  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct {7} --read_txn_size 10000"
 
 fmt_hek = "build/db --cc_type 3  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --occ_epoch 8000000 --read_pct {7} --read_txn_size 10000"
 
@@ -35,7 +35,7 @@ def main():
 #    test_cc()
 #    exp_0()
 #    occ_uncontended_1000()
-    hek_uncontended_1000()
+    test_locking()
 #    search_best()
 #    test_cc()
 #    ccontrol()
@@ -47,6 +47,28 @@ def main():
 #    write_uncontended()
 #    exp_1()
 #    exp_2()
+
+def test_locking():
+    low_dir = "results/low_contention/"
+    high_dir = "results/high_contention/"
+    p10rmw = "10rmw"
+    p2rmw8r = "2rmw8r"
+    for i in range(0, 4):
+        cur_dir = os.path.join(low_dir, p2rmw8r)
+        occ_expt(cur_dir, "occ.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000, 0)
+        locking_expt(cur_dir, "locking.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000, 0)
+
+        cur_dir = os.path.join(high_dir, p10rmw)
+        occ_expt(cur_dir, "occ.txt", 4, 40, 3000000, 1000000, 0, 1, 0.9, 1000, 0)
+        locking_expt(cur_dir, "locking.txt", 4, 40, 3000000, 1000000, 0, 1, 0.9, 1000, 0)
+
+        cur_dir = os.path.join(high_dir, p2rmw8r)
+        occ_expt(cur_dir, "occ.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000, 0)
+        locking_expt(cur_dir, "locking.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000, 0)
+
+        cur_dir = os.path.join(low_dir, p10rmw)
+        occ_expt(cur_dir, "occ.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000, 0)
+        locking_expt(cur_dir, "locking.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000, 0)
 
 
 

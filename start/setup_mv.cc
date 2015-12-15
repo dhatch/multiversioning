@@ -6,7 +6,6 @@
 #include <executor.h>
 #include <iostream>
 #include <fstream>
-#include <gperftools/profiler.h>
 #include <setup_workload.h>
 
 #define INPUT_SIZE 2048
@@ -634,9 +633,6 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
                         (&output_queue[j])->DequeueBlocking();
         barrier();
 
-        if (PROFILE)
-                ProfilerStart("bohm.prof");
-        barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
         barrier();                
         for (i = MV_DRY_RUNS; i < num_batches; ++i) {
@@ -650,8 +646,6 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
         barrier();
-        if (PROFILE)
-                ProfilerStop();                
         elapsed_time = diff_time(end_time, start_time);
         std::cerr << "Done running Bohm experiment!\n";
         return elapsed_time;

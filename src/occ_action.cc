@@ -1,5 +1,6 @@
 #include <occ_action.h>
 #include <algorithm>
+#include <occ.h>
 
 static bool try_acquire_single(volatile uint64_t *lock_ptr)
 {
@@ -365,6 +366,11 @@ void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
                 }
         } 
         return RECORD_VALUE_PTR(comp_key->value);
+}
+
+int OCCAction::rand()
+{
+        return worker->gen_random();
 }
 
 void* OCCAction::read(uint64_t key, uint32_t table_id)

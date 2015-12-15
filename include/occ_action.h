@@ -24,6 +24,8 @@ enum validation_err_t {
         VALIDATION_ERR,
 };
 
+class OCCWorker;
+
 class occ_validation_exception : public std::exception {
  public:
         occ_validation_exception(validation_err_t err) { this->err = err; }
@@ -85,10 +87,17 @@ class occ_composite_key {
 
 
 class OCCAction : public translator {
+        friend class OCCWorker;
+
  private:
+        OCCAction();
+        OCCAction& operator=(const OCCAction&);
+        OCCAction(const OCCAction&);
+
         RecordBuffers *record_alloc;
         Table **tables;
         uint64_t tid;
+        OCCWorker *worker;
         std::vector<occ_composite_key> readset;
         std::vector<occ_composite_key> writeset;
         std::vector<occ_composite_key> shadow_writeset;
@@ -105,6 +114,7 @@ class OCCAction : public translator {
         
         virtual void *write_ref(uint64_t key, uint32_t table);
         virtual void *read(uint64_t key, uint32_t table);
+        virtual int rand();
         
         virtual void set_allocator(RecordBuffers *buf);
         virtual void set_tables(Table **tables);

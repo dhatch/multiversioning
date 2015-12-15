@@ -45,14 +45,15 @@ class SimpleQueue {
     volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) m_head;    
     volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) m_tail;    
 
-
     SimpleQueue(char* values, uint64_t size) {
         m_values = values;
         m_size = (uint64_t)size;
         assert(!(m_size & (m_size-1)));
         assert(sizeof(T) < CACHE_LINE);
+        memset(values, 0x0, m_size*CACHE_LINE);
         m_head = 0;
         m_tail = 0;        
+        barrier();
     }
     
     uint64_t diff() {
@@ -80,10 +81,19 @@ class SimpleQueue {
     }
     
     void EnqueueBlocking(T data) {
-        assert(m_head >= m_tail);
-        while (m_head == m_tail + m_size) 
-            ;
-        uint64_t index = m_head & (m_size - 1);
+            uint64_t head = m_head;
+            uint64_t tail;
+            assert(m_head >= m_tail);
+            while (true) {
+                    barrier();
+                    tail = m_tail;
+                    barrier();
+                    if (head < tail + m_size)
+                            break;
+            }
+            //        while (m_head == m_tail + m_size) 
+            //            ;
+        uint64_t index = head & (m_size - 1);
         assert(index < m_size);
         assert(index <= ((m_size - 1) << 6));
         (*(T*)&m_values[index*CACHE_LINE]) = data;
@@ -91,10 +101,19 @@ class SimpleQueue {
     }
     
     T DequeueBlocking() {
+            uint64_t head, tail;
+            tail = m_tail;
         assert(m_head >= m_tail);
-        while (m_head == m_tail) 
-            ;
-        uint64_t index = m_tail & (m_size - 1);
+        while (true) {
+                barrier();
+                head = m_head;
+                barrier();
+                if (head > tail)
+                        break;
+        }
+        //        while (m_head == m_tail) 
+        //            ;
+        uint64_t index = tail & (m_size - 1);
         assert(index < m_size);
         assert(index <= ((m_size - 1) << 6));
         T ret = (*(T*)&m_values[index*CACHE_LINE]);
@@ -116,7 +135,7 @@ class SimpleQueue {
             return true;
         }
     }
-} __attribute__((aligned(CACHE_LINE)));
+};
 
 class ConcurrentQueue {
 
