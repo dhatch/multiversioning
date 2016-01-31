@@ -3,6 +3,7 @@
 
 #include <action.h>
 #include <vector>
+#include <db.h>
 
 #define HEK_INF		0xFFFFFFFFFFFFFFF0
 #define HEK_MASK	0x000000000000000F
@@ -55,7 +56,7 @@ struct hek_key {
 
 // Align to 256 bytes because we use the least significant byte
 // corresponding to the pointer.
-class hek_action {
+class hek_action : public translator {
  public:
         std::vector<hek_key> readset;
         std::vector<hek_key> writeset;
@@ -70,16 +71,17 @@ class hek_action {
         bool must_wait;
         bool readonly;
 
-        hek_action() {
+ 	hek_action(txn *t) : translator(t) {
                 readonly = false;
         };
         
-        virtual hek_status Run() = 0;
-
-        virtual void* Read(uint32_t index);
-        virtual void* GetWriteRef(uint32_t index);
-};
-
+        virtual hek_status Run();
+        virtual void* read(uint64_t key, uint32_t table_id);
+        virtual void* write_ref(uint64_t key, uint32_t table_id);
+        virtual int rand();
+        
+} __attribute__((__aligned__(256)));;
+/*
 class hek_rmw_action : public hek_action {
  public:
         virtual hek_status Run();
@@ -141,5 +143,6 @@ namespace hek_small_bank {
                 virtual hek_status Run();
         } __attribute__((__packed__, __aligned__(256)));
 };
+*/
 
 #endif // HEK_ACTION_H_

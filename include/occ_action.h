@@ -111,6 +111,7 @@ class OCCAction : public translator {
  public:
         
         OCCAction(txn *txn);
+        OCCAction *link;
         
         virtual void *write_ref(uint64_t key, uint32_t table);
         virtual void *read(uint64_t key, uint32_t table);
@@ -118,7 +119,7 @@ class OCCAction : public translator {
         
         virtual void set_allocator(RecordBuffers *buf);
         virtual void set_tables(Table **tables);
-        
+
         virtual bool run();
         virtual void acquire_locks();
         virtual void validate();

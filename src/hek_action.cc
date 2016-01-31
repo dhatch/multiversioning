@@ -1,19 +1,52 @@
 #include <hek_action.h>
 #include <small_bank.h>
 
-using namespace hek_small_bank;
+extern uint32_t GLOBAL_RECORD_SIZE;
 
-void* hek_action::Read(uint32_t i)
+void* hek_action::read(uint64_t key, uint32_t table_id)
 {
-        assert(i < readset.size());
-        return readset[i].value->value;
+        uint32_t i, sz;
+
+        sz = readset.size();
+        for (i = 0; i < sz; ++i) {
+                if (readset[i].key == key && readset[i].table_id == table_id)
+                        return readset[i].value->value;
+        }
+        assert(false);
 }
 
-void* hek_action::GetWriteRef(uint32_t i)
+void* hek_action::write_ref(uint64_t key, uint32_t table_id)
 {
-        assert(i < writeset.size());
-        return writeset[i].value->value;
+        uint32_t i, sz;
+        void *read_val;
+
+        sz = writeset.size();
+        for (i = 0; i < sz; ++i) {
+                if (writeset[i].key == key && writeset[i].table_id == table_id) {
+                        if (writeset[i].is_rmw == true) {
+                                read_val = read(key, table_id);
+                                memcpy(writeset[i].value->value, read_val, GLOBAL_RECORD_SIZE);
+                        }
+                        return writeset[i].value->value;
+                }
+
+        }
+        assert(false);
 }
+
+hek_status hek_action::Run()
+{
+        hek_status ret = {true, true};
+        t->Run();
+        return ret;
+}
+
+int hek_action::rand()
+{
+        return 0;
+}
+
+/*
 
 hek_status hek_rmw_action::Run()
 {
@@ -50,6 +83,7 @@ hek_status hek_rmw_action::Run()
 hek_readonly_action::hek_readonly_action() : hek_action()
 {
         readonly = true;
+
 }
 
 hek_status hek_readonly_action::Run()
@@ -221,3 +255,4 @@ hek_status write_check::Run()
         do_spin();
         return ret;
 }
+*/

@@ -44,7 +44,8 @@ class OCCWorker : public Runnable {
         uint32_t txn_counter;
         RecordBuffers *bufs;
         
-        virtual void RunSingle(OCCAction *action);
+        virtual bool RunSingle(OCCAction *action);
+        virtual uint32_t exec_pending(OCCAction **action_list);
         virtual void UpdateEpoch();
         virtual void EpochManager();
         virtual void TxnRunner();
