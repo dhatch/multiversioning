@@ -27,7 +27,8 @@ static struct option long_options[] = {
   {"occ_epoch", required_argument, NULL, 13},
   {"read_pct", required_argument, NULL, 14},
   {"read_txn_size", required_argument, NULL, 15},
-  {NULL, no_argument, NULL, 16},
+  {"hot_position", required_argument, NULL, 16},  
+  {NULL, no_argument, NULL, 17},
 };
 
 enum distribution_t {
@@ -44,6 +45,7 @@ struct workload_config
         double theta;
         uint32_t read_pct;
         uint32_t read_txn_size;
+        uint32_t hot_position;
 };
 
 enum ConcurrencyControl {
@@ -135,6 +137,7 @@ class ExperimentConfig {
     OCC_EPOCH,
     READ_PCT,
     READ_TXN_SIZE,
+    HOT_POSITION,
   };
   unordered_map<int, char*> argMap;
 
@@ -359,7 +362,15 @@ class ExperimentConfig {
             this->w_conf.theta = (double)atof(argMap[THETA]);
     }
     this->w_conf.read_pct = (uint32_t)atoi(argMap[READ_PCT]);
-    this->w_conf.read_txn_size = (uint32_t)atoi(argMap[READ_TXN_SIZE]);    
+    this->w_conf.read_txn_size = (uint32_t)atoi(argMap[READ_TXN_SIZE]);
+    
+    /* 
+     * If experiment varies hot record location, make sure that location has 
+     * been specified. 
+     */
+    assert(w_conf.experiment != 2 || argMap.count(HOT_POSITION) != 0);
+    if (w_conf.experiment == 2)
+            w_conf.hot_position = (uint32_t)atoi(argMap[HOT_POSITION]);
   }
 
   void ReadArgs(int argc, char **argv) {

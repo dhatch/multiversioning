@@ -96,6 +96,49 @@ txn* generate_ycsb_readonly(RecordGenerator *gen, workload_config config)
         return ret;
 }
 
+txn* generate_ycsb_hot(RecordGenerator *gen, uint32_t num_reads, 
+                       uint32_t num_rmws, uint32_t hot_position)
+{
+        assert(hot_position < num_rmws);
+        using namespace std;
+        
+        uint32_t i;
+        uint64_t key;
+        set<uint64_t> seen_keys;
+        vector<uint64_t> reads, rmws;
+        txn *ret;
+
+        /* Generate the txn's read- and write-sets. */
+        ret = NULL;
+        
+        /* 
+         * Simulate degenerate contention case by forcing first rmw to always 
+         * occur on record 0. 
+         */
+        seen_keys.insert(0);
+        for (i = 0; i < num_rmws; ++i) {
+                if (i == hot_position) {
+                        rmws.push_back(0);
+                } else {
+                        key = gen_unique_key(gen, &seen_keys);
+                        rmws.push_back(key);
+                }
+        }
+
+        for (i = 0; i < num_reads; ++i) {
+                key = gen_unique_key(gen, &seen_keys);
+                reads.push_back(key);
+        }
+
+        /* Create a txn to return. */
+        ret = new ycsb_rmw(reads, rmws);
+        assert(ret != NULL);
+        assert(ret->num_reads() == reads.size());
+        assert(ret->num_rmws() == rmws.size());
+        assert(ret->num_writes() == 0);
+        return ret;
+}
+
 txn* generate_ycsb_rmw(RecordGenerator *gen, uint32_t num_reads,
                        uint32_t num_rmws)
 {
@@ -130,8 +173,6 @@ txn* generate_ycsb_rmw(RecordGenerator *gen, uint32_t num_reads,
 
 txn* generate_ycsb_action(RecordGenerator *gen, workload_config config)
 {
-        assert(RMW_COUNT <= config.txn_size);
-        
         uint32_t num_reads, num_rmws;
         int flip;
 
@@ -142,16 +183,17 @@ txn* generate_ycsb_action(RecordGenerator *gen, workload_config config)
         if (flip < config.read_pct) {
                 return generate_ycsb_readonly(gen, config);
         } else if (config.experiment == 0) {
-                //                num_writes = 0;
                 num_rmws = config.txn_size;
                 num_reads = 0;
         } else if (config.experiment == 1) {
-                //                num_writes = 0;
+                assert(RMW_COUNT <= config.txn_size);
                 num_rmws = RMW_COUNT;
                 num_reads = config.txn_size - RMW_COUNT;
         } else if (config.experiment == 2) {
-                assert(false);
-                return NULL;
+                num_rmws = config.txn_size;
+                num_reads = 0;
+                return generate_ycsb_hot(gen, num_reads, num_rmws, 
+                                         config.hot_position);
         }
         return generate_ycsb_rmw(gen, num_reads, num_rmws);
 }
@@ -220,7 +262,7 @@ uint32_t generate_input(workload_config conf, txn ***loaders)
 
 txn* generate_transaction(workload_config config)
 {
-        txn *txn;
+        txn *txn = NULL;
         
         if (config.experiment == 3) {
                 txn = generate_small_bank_action(config.num_records, false);
@@ -233,7 +275,8 @@ txn* generate_transaction(workload_config config)
                         my_gen = new ZipfGenerator((uint64_t)config.num_records,
                                                 config.theta);
                 assert(my_gen != NULL);
-                txn = generate_ycsb_action(my_gen, config);
+                if (config.experiment < 3)
+                        txn = generate_ycsb_action(my_gen, config);
         } else {
                 assert(false);
         }

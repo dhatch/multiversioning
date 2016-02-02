@@ -174,6 +174,7 @@ static locking_action_batch setup_db(workload_config w_conf)
 }
 
 static void write_locking_output(locking_config conf,
+                                 workload_config w_conf,
                                  struct locking_result result)
 {
         std::ofstream result_file;
@@ -190,12 +191,20 @@ static void write_locking_output(locking_config conf,
         result_file << "threads:" << conf.num_threads << " ";
         result_file << "records:" << conf.num_records << " ";
         result_file << "read_pct:" << conf.read_pct << " ";
+        result_file << "txn_size:" << w_conf.txn_size << " ";
+        if (conf.experiment == 2)
+                result_file << "hot_position:" << w_conf.hot_position << " ";
+
         if (conf.experiment == 0) 
                 result_file << "10rmw" << " ";
         else if (conf.experiment == 1) 
                 result_file << "8r2rmw" << " ";
+        else if (conf.experiment == 2)
+                result_file << "vary_hot" << " ";
         else if (conf.experiment == 3) 
                 result_file << "small_bank" << " ";
+        else
+                assert(false);
  
         if (conf.distribution == 0) 
                 result_file << "uniform ";
@@ -310,5 +319,5 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         result = do_measurement(conf, workers, inputs, outputs, experiment_txns,
                                 1+EXTRA_BATCHES, setup_txns, tables,
                                 num_tables);
-        write_locking_output(conf, result);
+        write_locking_output(conf, w_conf, result);
 }
