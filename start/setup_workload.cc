@@ -95,16 +95,37 @@ txn* generate_ycsb_readonly(RecordGenerator *gen, workload_config config)
         assert(ret->num_rmws() == 0);
         return ret;
 }
+/*
+void gen_increasing(RecordGenerator *gen, uint64_t bound, 
+                    vector<uint64_t> *seen)
+{
+        uint64_t key;
+        uint32_t sz, i;
+        
+        sz = seen->size();
+        while (true) {
+                key = gen->GenNext();
+                if (key < bound) {
+                        for (i = 0; i < sz; ++i) 
+                                if (key <= (*seen)[i])
+                                        break;                
+                        if (i == sz)
+                                break;
+                }
+        }
+        seen->push_back(key);
+}
+*/
 
-txn* generate_ycsb_hot(RecordGenerator *gen, uint32_t num_reads, 
-                       uint32_t num_rmws, uint32_t hot_position)
+txn* generate_ycsb_hot(RecordGenerator *gen, uint32_t num_rmws, 
+                       uint32_t hot_position, 
+                       workload_config w_conf)
 {
         assert(hot_position < num_rmws);
         using namespace std;
         
         uint32_t i;
-        uint64_t key;
-        set<uint64_t> seen_keys;
+        uint64_t hot_key, delta, key;
         vector<uint64_t> reads, rmws;
         txn *ret;
 
@@ -113,24 +134,31 @@ txn* generate_ycsb_hot(RecordGenerator *gen, uint32_t num_reads,
         
         /* 
          * Simulate degenerate contention case by forcing first rmw to always 
-         * occur on record 0. 
+         * occur on a single hot record.
          */
-        seen_keys.insert(0);
+        hot_key = (w_conf.num_records / num_rmws) * hot_position;
+        delta = w_conf.num_records / num_rmws;
         for (i = 0; i < num_rmws; ++i) {
                 if (i == hot_position) {
-                        rmws.push_back(0);
+                        rmws.push_back(hot_key);
                 } else {
-                        key = gen_unique_key(gen, &seen_keys);
+                        while (true) {
+                                key = (gen->GenNext() % delta) + delta*i;
+                                if (key != hot_key)
+                                        break;
+                        }
                         rmws.push_back(key);
                 }
         }
-
-        for (i = 0; i < num_reads; ++i) {
-                key = gen_unique_key(gen, &seen_keys);
-                reads.push_back(key);
+        assert(rmws.size() == num_rmws);
+        for (i = 1; i < num_rmws; ++i) {
+                assert(rmws[i-1] < rmws[i]);
+                if (i == hot_position)
+                        assert(rmws[i] == hot_key);
         }
 
         /* Create a txn to return. */
+        assert(reads.size() == 0);
         ret = new ycsb_rmw(reads, rmws);
         assert(ret != NULL);
         assert(ret->num_reads() == reads.size());
@@ -192,8 +220,9 @@ txn* generate_ycsb_action(RecordGenerator *gen, workload_config config)
         } else if (config.experiment == 2) {
                 num_rmws = config.txn_size;
                 num_reads = 0;
-                return generate_ycsb_hot(gen, num_reads, num_rmws, 
-                                         config.hot_position);
+                return generate_ycsb_hot(gen, num_rmws, 
+                                         config.hot_position, 
+                                         config);
         }
         return generate_ycsb_rmw(gen, num_reads, num_rmws);
 }

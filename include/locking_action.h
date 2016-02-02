@@ -10,6 +10,7 @@
 class locking_action;
 class lock_manager_table;
 class locking_worker;
+class LockManager;
 
 struct locking_key {
 
@@ -92,6 +93,7 @@ class locking_action : public translator {
         volatile uint64_t __attribute__((__aligned__(CACHE_LINE)))
                 num_dependencies;
         locking_worker *worker;
+        LockManager *mgr;
         locking_action *next;
         locking_action *prev;
         Table **tables;

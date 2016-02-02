@@ -13,13 +13,15 @@ class LockManager {
  private:
         LockManagerTable *table;
         uint64_t *tableSizes;
-        bool LockRecord(locking_action *txn, struct locking_key *dep);  
+
 
 public:
     LockManager(LockManagerConfig config);
     virtual bool Lock(locking_action *txn);
     virtual void Unlock(locking_action *txn);
     static bool SortCmp(const locking_key &key1, const locking_key &key2);
+    bool LockRecord(locking_action *txn, struct locking_key *dep);
+    void BlockingLockRecord(locking_action *txn, struct locking_key *dep);
 };
 
 #endif // LOCK_MANAGER_HH_
