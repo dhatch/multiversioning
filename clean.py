@@ -174,6 +174,36 @@ def compute_avg_locking(input_file):
     inpt.close()
     return throughput_dict
 
+def compute_avg_hot(input_file):
+    inpt = open(input_file)
+    throughput_dict = {}
+    for line in inpt:
+        splits = line.split()
+        sz = 10
+        for s in splits:
+            if s.startswith("time:"):
+                time_str = s[len("time:"):]
+                time = float(time_str)
+            elif s.startswith("txns:"):
+                txns_str = s[len("txns:"):]
+                txns = int(txns_str)
+            elif s.startswith("txn_size:"):
+                sz_str = s[len("txn_size:"):]
+                sz = int(sz_str)
+            elif s.startswith("hot_position:"):
+                hot_str = s[len("hot_position:"):]
+                hot = int(hot_str)
+        key = float(sz - (hot + 1)) / float(sz)
+        throughput = float(txns) / float(time)
+        if not key in throughput_dict:
+            throughput_dict[key] = []
+        throughput_dict[key].append(throughput*1000)
+    for key in throughput_dict:
+        thpt_list = throughput_dict[key]
+        thpt_list.sort()
+    inpt.close()
+    return throughput_dict
+
 def write_output(output_dict, output_filename):
     outpt = open(output_filename, 'w')
     keys = output_dict.keys()
@@ -190,6 +220,10 @@ def theta_fn(input_type, input_file, output_file):
         my_dict = compute_avg_locking_theta(input_file)
     elif input_type == "mv":
         my_dict = compute_avg_mv_theta(input_file)
+    write_output(my_dict, output_file)
+
+def hot_fn(input_file, output_file):
+    my_dict = compute_avg_hot(input_file)
     write_output(my_dict, output_file)
 
 def clean_fn(input_type, input_file, output_file, only_worker=False):

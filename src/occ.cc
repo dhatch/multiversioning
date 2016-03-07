@@ -46,7 +46,7 @@ uint32_t OCCWorker::exec_pending(OCCAction **pending_list)
 {
         OCCAction *cur, *prev;
         uint32_t num_done;
-
+        
         prev = NULL;
         cur = *pending_list;
         num_done = 0;
@@ -67,30 +67,58 @@ uint32_t OCCWorker::exec_pending(OCCAction **pending_list)
 
 void OCCWorker::TxnRunner()
 {
-        uint32_t i, num_pending;
-        OCCActionBatch input, output;
+        uint32_t i, j, num_pending;
+        OCCActionBatch input, output;//, batches[2];
         OCCAction *pending_list;
         
         num_pending = 0;
         pending_list = NULL;
         output.batch = NULL;
-        while (true) {
+        
+        /* This is very hacky. For measurement purposes only!!! */
+        if (config.cpu == 1) {
                 input = config.inputQueue->DequeueBlocking();
-                for (i = 0; i < input.batchSize; ++i) {
-                        while (num_pending >= 50) 
-                                num_pending -= exec_pending(&pending_list);
-                        if (!RunSingle(input.batch[i])) {
-                                input.batch[i]->link = pending_list;
-                                pending_list = input.batch[i];
-                                num_pending += 1;
-                        }
-                }                
-                while (num_pending != 0) 
-                        num_pending -= exec_pending(&pending_list);
-                assert(pending_list == NULL);
-                output.batchSize = input.batchSize;
-                config.outputQueue->EnqueueBlocking(output);
+                for (i = 0; i < input.batchSize; ++i) 
+                        if (!RunSingle(input.batch[i]))
+                                assert(false);
+                config.outputQueue->EnqueueBlocking(input);                
         }
+        
+        barrier();
+        config.num_completed = 0;
+        barrier();
+
+        for (j = 0; j < 3 ; ++j) {
+                input = config.inputQueue->DequeueBlocking();
+                if (j < 1) {
+                        for (i = 0; i < input.batchSize; ++i) {
+                                while (num_pending >= 50) 
+                                        num_pending -= exec_pending(&pending_list);
+                                if (!RunSingle(input.batch[i])) {
+                                        input.batch[i]->link = pending_list;
+                                        pending_list = input.batch[i];
+                                        num_pending += 1;
+                                } 
+                        }
+                        while (num_pending != 0) 
+                                num_pending -= exec_pending(&pending_list);
+                        assert(pending_list == NULL);
+                        output.batchSize = input.batchSize;
+                        config.outputQueue->EnqueueBlocking(output);
+                } else {
+                        uint32_t batch_sz = input.batchSize;
+                        for (i = 0; ; ++i) {
+                                while (num_pending >= 50)
+                                        num_pending -= exec_pending(&pending_list);
+                                if (!RunSingle(input.batch[i % batch_sz])) {
+                                        input.batch[i % batch_sz]->link = pending_list;
+                                        pending_list = input.batch[i % batch_sz];
+                                        num_pending += 1;
+                                }
+                        }
+                }
+        }
+        
 }
 
 void OCCWorker::UpdateEpoch()
@@ -108,7 +136,11 @@ void OCCWorker::UpdateEpoch()
 
 uint64_t OCCWorker::NumCompleted()
 {
-        return config.num_completed;
+        uint64_t ret;
+        barrier();
+        ret = config.num_completed;
+        barrier();
+        return ret;
 }
 
 /*
@@ -130,17 +162,21 @@ bool OCCWorker::RunSingle(OCCAction *action)
                 barrier();
                 epoch = *config.epoch_ptr;
                 barrier();                        
-                action->validate();
+                if (!READ_COMMITTED)
+                        action->validate();
                 this->last_tid = action->compute_tid(epoch,
                                                      this->last_tid);
                 action->install_writes();
                 action->cleanup();
+                fetch_and_increment(&config.num_completed);
                 validated = true;
         } catch(const occ_validation_exception &e) {
+                if (READ_COMMITTED)
+                        assert(false);
                 if (e.err == VALIDATION_ERR)
                         action->release_locks();
                 action->cleanup();
                 validated = false;
-        }
+        }        
         return validated;
 }

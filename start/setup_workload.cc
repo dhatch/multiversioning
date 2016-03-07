@@ -103,7 +103,7 @@ txn* generate_ycsb_hot(RecordGenerator *gen, uint32_t num_reads,
         using namespace std;
         
         uint32_t i;
-        uint64_t key;
+        uint64_t key, hot_key;
         set<uint64_t> seen_keys;
         vector<uint64_t> reads, rmws;
         txn *ret;
@@ -115,10 +115,10 @@ txn* generate_ycsb_hot(RecordGenerator *gen, uint32_t num_reads,
          * Simulate degenerate contention case by forcing first rmw to always 
          * occur on record 0. 
          */
-        seen_keys.insert(0);
+        hot_key = gen_unique_key(gen, &seen_keys);
         for (i = 0; i < num_rmws; ++i) {
                 if (i == hot_position) {
-                        rmws.push_back(0);
+                        rmws.push_back(hot_key);
                 } else {
                         key = gen_unique_key(gen, &seen_keys);
                         rmws.push_back(key);

@@ -1,3 +1,4 @@
+
 #include <occ_action.h>
 #include <algorithm>
 #include <occ.h>
@@ -302,8 +303,10 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
                         barrier();
                         if (after_read == ret)
                                 return ret;
+                        else if (READ_COMMITTED)
+                                continue;
                         else
-                                throw occ_validation_exception(READ_ERR);
+                                throw occ_validation_exception(VALIDATION_ERR);
                         return ret;
                 }
         }
