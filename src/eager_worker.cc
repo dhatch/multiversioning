@@ -86,6 +86,18 @@ void locking_worker::CheckReady()
         }
 }
 
+void locking_worker::exec(locking_action *txn)
+{
+        /* Acquire locks dynamically while running the txn */
+        txn->tables = this->config.tables;
+        txn->mgr = config.mgr;
+        txn->worker = this;
+        txn->bufs = this->bufs;
+        txn->Run();
+        config.mgr->Unlock(txn);
+        assert(txn->finished_execution);
+}
+
 void locking_worker::TryExec(locking_action *txn)
 {
         txn->tables = this->config.tables;
@@ -122,21 +134,8 @@ locking_worker::WorkerFunction()
         // Each iteration of this loop executes a batch of transactions
         while (true) {
                 batch = config.inputQueue->DequeueBlocking();
-                for (uint32_t i = 0; i < batch.batchSize; ++i) {
-                        
-                        // Ensure we haven't exceeded threshold of max deferred
-                        // txns. If we have, exec pending txns so we get below
-                        // the threshold.
-                        if ((uint32_t)m_num_elems < config.maxPending) 
-                                TryExec(batch.batch[i]);
-                        else 
-                                while (m_num_elems >= config.maxPending) 
-                                        CheckReady();
-                }
-                
-                // Finish deferred txns
-                while (m_num_elems != 0) 
-                        CheckReady();
+                for (uint32_t i = 0; i < batch.batchSize; ++i) 
+                        exec(batch.batch[i]);
         
                 // Signal that this batch is done
                 config.outputQueue->EnqueueBlocking(batch);

@@ -19,6 +19,21 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
         return table->Lock(k);
 }
 
+void LockManager::BlockingLockRecord(locking_action *txn, struct locking_key *k)
+{
+        volatile uint64_t deps;
+
+        if (!LockRecord(txn, k)) {
+                while (true) {
+                        barrier();
+                        deps = txn->num_dependencies;
+                        barrier();
+                        if (deps == 0)
+                                break;
+                }
+        }
+}
+
 bool LockManager::SortCmp(const locking_key &key1, const locking_key &key2)
 {
         return key1 < key2;

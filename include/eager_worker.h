@@ -50,12 +50,14 @@ private:
   void DoExec(locking_action *txn);
     
   uint32_t QueueCount(locking_action *txn);
+  void exec(locking_action *txn);
 
 protected:    
   virtual void StartWorking();
   
   virtual void Init();
 
+  
 public:
 
   void* operator new(std::size_t sz, int cpu) {
