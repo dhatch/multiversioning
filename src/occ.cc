@@ -152,7 +152,7 @@ bool OCCWorker::RunSingle(OCCAction *action)
         volatile uint32_t epoch;
         bool validated;
 
-        action->set_tables(this->config.tables);
+        action->set_tables(this->config.tables, this->config.lock_tables);
         action->set_allocator(this->bufs);
         action->worker = this;
 
@@ -162,10 +162,11 @@ bool OCCWorker::RunSingle(OCCAction *action)
                 barrier();
                 epoch = *config.epoch_ptr;
                 barrier();                        
-                if (!READ_COMMITTED)
+                if (!READ_COMMITTED) {
                         action->validate();
-                this->last_tid = action->compute_tid(epoch,
-                                                     this->last_tid);
+                        this->last_tid = action->compute_tid(epoch,
+                                                             this->last_tid);
+                }
                 action->install_writes();
                 action->cleanup();
                 fetch_and_increment(&config.num_completed);

@@ -9,6 +9,35 @@
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 
+
+Table** setup_occ_lock_tables(int start_cpu, int end_cpu, uint32_t table_sz)
+{
+        assert(READ_COMMITTED);
+        uint64_t val;
+        uint32_t i;
+        TableConfig conf;
+        Table **ret;
+
+        /* First create a table */
+        conf = {
+                0,
+                2*table_sz,
+                start_cpu,
+                end_cpu,
+                2*table_sz,
+                sizeof(uint64_t),
+                sizeof(uint64_t),
+        };
+        ret = (Table**)malloc(sizeof(Table*));
+        ret[0] = new (0) Table(conf);
+        
+        /* Initialize the table */
+        val = 0;
+        for (i = 0; i < table_sz; ++i) 
+                ret[0]->Put(i, &val);
+        return ret;
+}
+
 OCCAction* setup_occ_action(txn *txn)
 {
         OCCAction *action;
@@ -107,13 +136,16 @@ OCCActionBatch* setup_occ_single_input(OCCConfig config, workload_config w_conf)
 OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                               SimpleQueue<OCCActionBatch> **outputQueue,
                               Table **tables, int numThreads,
-                              uint64_t epoch_threshold, uint32_t numTables)
+                              uint64_t epoch_threshold, uint32_t numTables, 
+                              uint32_t num_records)
 {
         uint32_t recordSizes[2];
         OCCWorker **workers;
         volatile uint32_t *epoch_ptr;
         int i;
         bool is_leader;
+        Table **tables_copy, **lock_tables, **lock_tables_copy;
+
         struct OCCWorkerConfig worker_config;
         struct RecordBuffersConfig buf_config;
         recordSizes[0] = GLOBAL_RECORD_SIZE;
@@ -125,13 +157,33 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
         barrier();
         *epoch_ptr = 0;
         barrier();
+
+        if (READ_COMMITTED)
+                lock_tables = setup_occ_lock_tables(0, numThreads, num_records);
+        else
+                lock_tables = NULL;
+        lock_tables_copy = NULL;
+
+        /* Copy tables */
         for (i = 0; i < numThreads; ++i) {
+                tables_copy = (Table**)alloc_mem(sizeof(Table*)*numTables, i);
+                memcpy(tables_copy, tables, sizeof(Table*)*numTables);
+                
+                if (READ_COMMITTED) {
+                        lock_tables_copy = (Table**)alloc_mem(sizeof(Table*), i);
+                        memcpy(lock_tables_copy, lock_tables, sizeof(Table*));
+                }
+                //                for (i = 0; i < numTables; ++i) {
+                //                        tables_copy[i] = Table::copy_table(tables[i], i);
+                //                }
+
                 is_leader = (i == 0);
                 worker_config = {
                         inputQueue[i],
                         outputQueue[i],
                         i,
-                        tables,
+                        tables_copy,
+                        lock_tables_copy,
                         is_leader,
                         epoch_ptr,
                         0,
@@ -388,7 +440,7 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
         tables = setup_hash_tables(num_tables, num_records, true);
         workers = setup_occ_workers(input_queues, output_queues, tables,
                                     occ_config.numThreads, occ_config.occ_epoch,
-                                    2);
+                                    2, num_records[0]);
 
         inputs = setup_occ_input(occ_config, w_conf, 1);
         pin_memory();

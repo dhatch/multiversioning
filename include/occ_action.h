@@ -96,6 +96,7 @@ class OCCAction : public translator {
 
         RecordBuffers *record_alloc;
         Table **tables;
+        Table **lock_tables;
         uint64_t tid;
         OCCWorker *worker;
         std::vector<occ_composite_key> readset;
@@ -118,7 +119,7 @@ class OCCAction : public translator {
         virtual int rand();
         
         virtual void set_allocator(RecordBuffers *buf);
-        virtual void set_tables(Table **tables);
+        virtual void set_tables(Table **tables, Table **lock_tables);
 
         virtual bool run();
         virtual void acquire_locks();

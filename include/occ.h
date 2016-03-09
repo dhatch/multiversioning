@@ -25,6 +25,7 @@ struct OCCWorkerConfig {
         SimpleQueue<OCCActionBatch> *outputQueue;
         int cpu;
         Table **tables;
+        Table **lock_tables;
         bool is_leader;
         volatile uint32_t *epoch_ptr;
         volatile uint64_t num_completed;

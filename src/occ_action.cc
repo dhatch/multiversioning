@@ -18,18 +18,26 @@ static bool try_acquire_single(volatile uint64_t *lock_ptr)
 static void acquire_single(volatile uint64_t *lock_ptr)
 {
         uint32_t backoff, temp;
-        if (USE_BACKOFF) 
-                backoff = 1;
+         if (USE_BACKOFF) 
+                 backoff = 1;
         while (true) {
                 if (try_acquire_single(lock_ptr)) {
                         assert(IS_LOCKED(*lock_ptr));
                         break;
                 }
                 if (USE_BACKOFF) {
-                        temp = backoff;
-                        while (temp-- > 0)
-                                single_work();
-                        backoff = backoff*2;
+//                         if (READ_COMMITTED) {
+//                                 barrier();
+//                                 for (i = 0; i < 100; ++i) 
+//                                         single_work();
+//                                 barrier();
+//                                 do_pause();
+//                         } else {
+                         temp = backoff;
+                         while (temp-- > 0)
+                                 single_work();
+                         backoff = backoff*2;
+                         //                        }
                 }
         }
 }
@@ -138,148 +146,11 @@ void OCCAction::set_allocator(RecordBuffers *bufs)
         this->record_alloc = bufs;
 }
 
-void OCCAction::set_tables(Table **tables)
+void OCCAction::set_tables(Table **tables, Table **lock_tables)
 {
         this->tables = tables;
+        this->lock_tables = lock_tables;
 }
-
-/*
-readonly_action::readonly_action()
-{
-        memset(__reads, 0x0, 1000);
-}
-
-occ_txn_status readonly_action::Run()
-{
-        uint32_t num_reads, i, j;
-        occ_txn_status status;
-        char *read_ptr;
-        num_reads = readset.size();
-        status.commit = true;
-        status.validation_pass = true;
-        for (i = 0; i < num_reads; ++i) {
-                read_ptr = (char*)readset[i].StartRead();
-                for (j = 0; j < 10; ++j) {
-                        uint64_t *write_p = (uint64_t*)&__reads[j*100];
-                        *write_p += *((uint64_t*)&read_ptr[j*100]);
-                }
-                if (readset[i].FinishRead() == false) {
-                        status.validation_pass = false;
-                        break;
-                }                
-        }
-        return status;        
-}
-
-mix_occ_action::mix_occ_action() : readonly_action()
-{
-}
-
-
-occ_txn_status mix_occ_action::Run()
-{
-        //        uint32_t i, j, num_reads, num_writes;
-        occ_txn_status status;
-        status.commit =true;
-        status.validation_pass = true;
-
-        num_reads = readset.size();
-        num_writes = writeset.size();
-        for (i = 0; i < num_reads; ++i) {
-                for (j = 0; j < 10; ++j) {
-                        uint32_t *write_p = (uint32_t*)&__reads[j*100];
-                        *write_p += *((uint32_t*)&__reads[j*100]);
-                }
-        }
-        for (i = 0; i < num_writes; ++i) {
-                char *write_ptr = (char*)writeset[i].GetValue();
-                memcpy(write_ptr, __reads, 1000);
-                for (j = 0; j < 10; ++j) {
-                        *((uint32_t*)&write_ptr[j*100]) += (i+j);
-                }
-        }
-
-        return status;
-}
-
-
-
-bool RMWOCCAction::DoReads()
-{
-        uint32_t num_writes, num_reads, i, j, num_fields;
-        char *read_ptr, *write_ptr;
-        uint64_t counter;
-        
-        num_reads = readset.size();
-        num_writes = writeset.size();
-        counter = 0;
-        num_fields = 10;
-        for (i = 0; i < num_reads; ++i) {
-                read_ptr = (char*)readset[i].StartRead();
-                barrier();
-                for (j = 0; j < num_fields; ++j) 
-                        counter += *((uint64_t*)&read_ptr[j*100]);
-                barrier();
-                if (readset[i].FinishRead() == false) 
-                        return false;
-        }
-        for (i = 0; i < num_writes; ++i) {
-                write_ptr = (char*)writeset[i].GetValue();
-                read_ptr = (char*)readset[i].StartRead();
-                barrier();
-                memcpy(write_ptr, read_ptr, 1000);
-                if (readset[i].FinishRead() == false)
-                        return false;
-                barrier();
-                for (j = 0; j < num_fields; ++j) {
-                        *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
-                }
-        }
-        return true;                
-}
-
-void RMWOCCAction::AccumulateValues()
-{
-
-        uint32_t i, num_fields;
-        num_fields = recordSize/sizeof(uint64_t);
-        __total = 0;
-        for (i = 0; i < num_fields; ++i) 
-                __total += __accumulated[i];
-
-}
-
-void RMWOCCAction::DoWrites()
-{
-        uint64_t counter;
-        uint32_t i, j, num_writes, num_fields;
-        uint64_t *field_ptr;
-        num_fields = recordSize/sizeof(uint64_t);
-        counter = __total;
-        num_writes = writeset.size();
-        for (i = 0; i < num_writes; ++i) {
-                field_ptr = (uint64_t*)writeset[i].GetValue();
-                for (j = 0; j < num_fields; ++j) 
-                        field_ptr[j] = counter+j;
-        }
-}
-
-void* RMWOCCAction::GetData()
-{
-        return __accumulated;
-}
-
-occ_txn_status RMWOCCAction::Run()
-{
-        assert(recordSize == 1000);
-        occ_txn_status status;
-        status.validation_pass = false;
-        status.commit = true;
-        status.validation_pass = DoReads();
-        return status;
-}
-*/
-
 
 uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
 {
@@ -306,7 +177,7 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
                         else if (READ_COMMITTED)
                                 continue;
                         else
-                                throw occ_validation_exception(VALIDATION_ERR);
+                                throw occ_validation_exception(READ_ERR);
                         return ret;
                 }
         }
@@ -412,14 +283,19 @@ void OCCAction::acquire_locks()
 
         num_writes = this->writeset.size();
         std::sort(this->writeset.begin(), this->writeset.end());
+
         for (i = 0; i < num_writes; ++i) {
                 assert(this->writeset[i].is_locked == false);
                 table_id = this->writeset[i].tableId;
                 key = this->writeset[i].key;
-                value = this->tables[table_id]->GetAlways(key);
+                if (READ_COMMITTED)
+                        value = this->lock_tables[table_id]->GetAlways(key);
+                else
+                        value = this->tables[table_id]->GetAlways(key);
                 acquire_single((volatile uint64_t*)value);
                 this->writeset[i].is_locked = true;
         }
+
 }
 
 void OCCAction::release_locks()
@@ -505,6 +381,8 @@ void OCCAction::cleanup()
 
 void OCCAction::install_single_write(occ_composite_key &comp_key)
 {
+        if (READ_COMMITTED)
+                this->tid = 0;
         assert(IS_LOCKED(this->tid) == false);
 
         void *value;
@@ -513,11 +391,17 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
 
         record_size = this->tables[comp_key.tableId]->RecordSize();
         value = this->tables[comp_key.tableId]->GetAlways(comp_key.key);
+        if (READ_COMMITTED)
+                acquire_single((volatile uint64_t*)value);
         old_tid = *(uint64_t*)value;
         assert(IS_LOCKED(old_tid) == true);
         memcpy(RECORD_VALUE_PTR(value), RECORD_VALUE_PTR(comp_key.value),
                record_size - sizeof(uint64_t));
         xchgq((volatile uint64_t*)value, this->tid);
+        if (READ_COMMITTED) {
+                value = this->lock_tables[comp_key.tableId]->GetAlways(comp_key.key);
+                release_single((volatile uint64_t*)value);
+        }
         comp_key.is_locked = false;
 }
 
