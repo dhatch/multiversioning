@@ -66,36 +66,35 @@ class GarbageBin {
   void FinishEpoch(uint32_t epoch);
 };
 
-// List of actions still to be completed as part of a particular epoch
+/* List of actions still to be completed as part of a particular epoch. */
 class PendingActionList {
- private:
+ private:  
+        /* Allocator */
+        ActionListNode *freeList;
   
-  // Allocator
-  ActionListNode *freeList;
-  
-  // List meta-data
-  ActionListNode *head;
-  ActionListNode *tail;
+        /* List meta-data */
+        ActionListNode *head;
+        ActionListNode *tail;
 
-  // Used to iterate through list
-  ActionListNode *cursor;
+        /* Used to iterate through list */
+        ActionListNode *cursor;
   
-  uint32_t size;
+        uint32_t size;
 
  public:
-  void* operator new(std::size_t sz, int cpu) {
-    return alloc_mem(sz, cpu);
-  }
+        void* operator new(std::size_t sz, int cpu) {
+                return alloc_mem(sz, cpu);
+        }
 
-  PendingActionList(uint32_t freeListSize);
+        PendingActionList(uint32_t freeListSize);
 
-  void EnqueuePending(mv_action *action);
-  void DequeuePending(ActionListNode *listNode);
+        void EnqueuePending(mv_action *action);
+        void DequeuePending(ActionListNode *listNode);
 
-  void ResetCursor();
-  ActionListNode* GetNext();
-  bool IsEmpty();
-  uint32_t Size();
+        void ResetCursor();
+        ActionListNode* GetNext();
+        bool IsEmpty();
+        uint32_t Size();
 };
 
 class RecordAllocator {
@@ -114,65 +113,62 @@ class RecordAllocator {
 };
 
 struct ExecutorConfig {
-  uint32_t threadId;
-  uint32_t numExecutors;
-  int cpu;
-  volatile uint32_t *epochPtr;
-  volatile uint32_t *lowWaterMarkPtr;
-  SimpleQueue<ActionBatch> *inputQueue;
-  SimpleQueue<ActionBatch> *outputQueue;
-  uint32_t numTables;
-  uint64_t *recordSizes;
-  uint64_t *allocatorSizes;
-  uint32_t numQueuesPerTable;
-  SimpleQueue<RecordList> *recycleQueues;
-  GarbageBinConfig garbageConfig;
+        uint32_t threadId;
+        uint32_t numExecutors;
+        int cpu;
+        volatile uint32_t *epochPtr;
+        volatile uint32_t *lowWaterMarkPtr;
+        SimpleQueue<ActionBatch> *inputQueue;
+        SimpleQueue<ActionBatch> *outputQueue;
+        uint32_t numTables;
+        uint64_t *recordSizes;
+        uint64_t *allocatorSizes;
+        uint32_t numQueuesPerTable;
+        SimpleQueue<RecordList> *recycleQueues;
+        GarbageBinConfig garbageConfig;
 };
 
 class Executor : public Runnable {
  private:
-  ExecutorConfig config;
-  GarbageBin *garbageBin;
-  PendingActionList *pendingList;
-  uint32_t epoch;
+        ExecutorConfig config;
+        GarbageBin *garbageBin;
+        PendingActionList *pendingList;
+        uint32_t epoch;
 
-  RecordAllocator **allocators;
-  void **bufs;
-  uint64_t buf_ptr;
-  PendingActionList *pendingGC;
-  uint64_t counter;
+        RecordAllocator **allocators;
+        void **bufs;
+        uint64_t buf_ptr;
+        PendingActionList *pendingGC;
+        uint64_t counter;
 
  protected:
 
+        //  Executor(ExecutorConfig config);
+        virtual void StartWorking();
+        virtual void Init();
+        void ReturnVersion(MVRecord *record);
 
-  virtual void LeaderFunction();
+        void ExecPending();
 
-  //  Executor(ExecutorConfig config);
-  virtual void StartWorking();
-  virtual void Init();
-  void ReturnVersion(MVRecord *record);
+        void ProcessBatch(const ActionBatch &batch);
+        bool ProcessSingle(mv_action *action);
+        bool ProcessTxn(mv_action *action);
 
-  void ExecPending();
+        bool run_readonly(mv_action *action);
+        void RecycleData();
 
-  void ProcessBatch(const ActionBatch &batch);
-  bool ProcessSingle(mv_action *action);
-  bool ProcessTxn(mv_action *action);
+        void adjust_lowwatermark();
 
-  void RecycleData();
+        uint32_t DoPendingGC();
+        bool ProcessSingleGC(mv_action *action);
+        bool check_ready(mv_action *action);
 
-
-  uint32_t DoPendingGC();
-  bool ProcessSingleGC(mv_action *action);
-  bool check_ready(mv_action *action);
-
-  virtual uint64_t next_ptr();
  public:
-  void* operator new(std::size_t sz, int cpu) {
-    return alloc_mem(sz, cpu);
-  }
-  Executor(ExecutorConfig config);
+        void* operator new(std::size_t sz, int cpu) {
+                return alloc_mem(sz, cpu);
+        }
 
-  //  uint64_t GetEpoch();
+        Executor(ExecutorConfig config);
 };
 
 #endif          // EXECUTOR_H_

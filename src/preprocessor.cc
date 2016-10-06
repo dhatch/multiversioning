@@ -34,110 +34,111 @@ MVActionHasher:: MVActionHasher(int cpuNumber,
 }
 
 
-void MVActionHasher::StartWorking() {
-  uint32_t epoch = 0;
-  while (true) {
+void MVActionHasher::StartWorking() 
+{
+        uint32_t epoch = 0;
+        while (true) {
     
-    // Take a single batch as input.
-    ActionBatch batch = inputQueue->DequeueBlocking();
+                /* Take a single batch as input. */
+                ActionBatch batch = inputQueue->DequeueBlocking();
     
-    // Process every action in the batch.
-    uint32_t numActions = batch.numActions;
-    for (uint32_t i = 0; i < numActions; ++i) {
-      ProcessAction(batch.actionBuf[i], epoch, i);
-    }
+                /* Process every action in the batch. */
+                uint32_t numActions = batch.numActions;
+                for (uint32_t i = 0; i < numActions; ++i) {
+                        ProcessAction(batch.actionBuf[i], epoch, i);
+                }
     
-    // Output the batch to the concurrency control stage.
-    outputQueue->EnqueueBlocking(batch);
-  }
+                /* Output the batch to the concurrency control stage. */
+                outputQueue->EnqueueBlocking(batch);
+        }
 }
 
 void MVActionHasher::ProcessAction(mv_action *action, uint32_t epoch,
-                                   uint32_t txnCounter) {
-  action->__combinedHash =  0;
-  action->__version = (((uint64_t)epoch << 32) | txnCounter);
-  size_t numWrites = action->__writeset.size();  
-  for (uint32_t i = 0; i < numWrites; ++i) {
+                                   uint32_t txnCounter) 
+{
+        action->__combinedHash =  0;
+        action->__version = (((uint64_t)epoch << 32) | txnCounter);
+        size_t numWrites = action->__writeset.size();  
+        for (uint32_t i = 0; i < numWrites; ++i) {
     
-    // Find which concurrency control thread is in charge of this key. Write out
-    // the threadId and change the combinedHash bitmask appropriately.
-      action->__writeset[i].threadId = 0;
-    uint32_t threadId = 
-      CompositeKey::HashKey(&action->__writeset[i]) % 
-      MVScheduler::NUM_CC_THREADS;
-    action->__writeset[i].threadId = threadId;
-    action->__combinedHash |= (((uint64_t)1)<<threadId);
-  }
+                /*
+                 * Find which concurrency control thread is in charge of this 
+                 * key. Write out the threadId and change the combinedHash 
+                 * bitmask appropriately.
+                 */
+                action->__writeset[i].threadId = 0;
+                uint32_t threadId = 
+                        CompositeKey::HashKey(&action->__writeset[i]) % 
+                        MVScheduler::NUM_CC_THREADS;
+                action->__writeset[i].threadId = threadId;
+                action->__combinedHash |= (((uint64_t)1)<<threadId);
+        }
 }
 
-void MVScheduler::Init() {
-
+void MVScheduler::Init() 
+{
 }
 
 MVScheduler::MVScheduler(MVSchedulerConfig config) : 
-  Runnable(config.cpuNumber) {
+        Runnable(config.cpuNumber) 
+{
+        this->config = config;
+        this->epoch = 0;
+        this->txnCounter = 0;
+        this->txnMask = ((uint64_t)1<<config.threadId);
 
-  this->config = config;
-  this->epoch = 0;
-  this->txnCounter = 0;
-  this->txnMask = ((uint64_t)1<<config.threadId);
+        this->partitions = 
+                (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
+                                              config.cpuNumber);
+        assert(this->partitions != NULL);
 
-  //  std::cout << "Thread id: " << config.threadId << "\n";
-  //  std::cout << "Mask: " << txnMask << "\n";
+        /* Initialize the allocator and the partitions. */
+        this->alloc = new (config.cpuNumber) MVRecordAllocator(config.allocatorSize, 
+                                                               config.cpuNumber,
+                                                               config.worker_start,
+                                                               config.worker_end);
+        for (uint32_t i = 0; i < this->config.numTables; ++i) {
 
-  //    this->alloc = NULL;
-
-  this->partitions = 
-          (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
-                                        config.cpuNumber);
-  assert(this->partitions != NULL);
-
-  // Initialize the allocator and the partitions.
-  this->alloc = new (config.cpuNumber) MVRecordAllocator(config.allocatorSize, 
-                                                         config.cpuNumber,
-                                                         config.worker_start,
-                                                         config.worker_end);
-  for (uint32_t i = 0; i < this->config.numTables; ++i) {
-
-          // Track the partition locally and add it to the database's catalog.
-          this->partitions[i] =
-                  new (config.cpuNumber) MVTablePartition(config.tblPartitionSizes[i],
-                                                          config.cpuNumber, alloc);
-          assert(this->partitions[i] != NULL);
-          //    DB.PutPartition(i, config.threadId, this->partitions[i]);
-  }
-  this->threadId = config.threadId;
+                /* Track the partition locally and add it to the database's catalog. */
+                this->partitions[i] =
+                        new (config.cpuNumber) MVTablePartition(config.tblPartitionSizes[i],
+                                                                config.cpuNumber, alloc);
+                assert(this->partitions[i] != NULL);
+        }
+        this->threadId = config.threadId;
 }
 
 static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
     return (((uint64_t)epoch << 32) | txnCounter);
 }
 
-void MVScheduler::StartWorking() {
+void MVScheduler::StartWorking() 
+{
         //  std::cout << config.numRecycleQueues << "\n";
-  while (true) {
-    ActionBatch curBatch = config.inputQueue->DequeueBlocking();
-    for (uint32_t i = 0; i < config.numSubords; ++i) 
-      config.pubQueues[i]->EnqueueBlocking(curBatch);
-    for (uint32_t i = 0; i < curBatch.numActions; ++i) 
-            ScheduleTransaction(curBatch.actionBuf[i]);
-    for (uint32_t i = 0; i < config.numSubords; ++i) 
-      config.subQueues[i]->DequeueBlocking();
-    for (uint32_t i = 0; i < config.numOutputs; ++i) 
-      config.outputQueues[i].EnqueueBlocking(curBatch);
-    Recycle();
-  }
+        while (true) {
+                ActionBatch curBatch = config.inputQueue->DequeueBlocking();
+                for (uint32_t i = 0; i < config.numSubords; ++i) 
+                        config.pubQueues[i]->EnqueueBlocking(curBatch);
+                for (uint32_t i = 0; i < curBatch.numActions; ++i) 
+                        ScheduleTransaction(curBatch.actionBuf[i]);
+                for (uint32_t i = 0; i < config.numSubords; ++i) 
+                        config.subQueues[i]->DequeueBlocking();
+                for (uint32_t i = 0; i < config.numOutputs; ++i) 
+                        config.outputQueues[i].EnqueueBlocking(curBatch);
+                Recycle();
+        }
 }
 
-void MVScheduler::Recycle() {
-  // Check for recycled MVRecords
-  for (uint32_t i = 0; i < config.numRecycleQueues; ++i) {
-    MVRecordList recycled;
-    while (config.recycleQueues[i]->Dequeue(&recycled)) {
-      //      std::cout << "Received recycled mv records: " << recycled.count << "\n";
-      this->alloc->ReturnMVRecords(recycled);
-    }
-  }  
+void MVScheduler::Recycle() 
+{
+        /* Check for recycled MVRecords */
+        for (uint32_t i = 0; i < config.numRecycleQueues; ++i) {
+                MVRecordList recycled;
+                while (config.recycleQueues[i]->Dequeue(&recycled)) {
+                        //      std::cout << "Received recycled mv records: " << recycled.count << "\n";
+                        this->alloc->ReturnMVRecords(recycled);
+                }
+        }  
 }
 
 
@@ -146,9 +147,10 @@ void MVScheduler::Recycle() {
  * Hash the given key, and find which concurrency control thread is
  * responsible for the appropriate key range. 
  */
-uint32_t MVScheduler::GetCCThread(CompositeKey key) {
-  uint64_t hash = CompositeKey::Hash(&key);
-  return (uint32_t)(hash % NUM_CC_THREADS);
+uint32_t MVScheduler::GetCCThread(CompositeKey key) 
+{
+        uint64_t hash = CompositeKey::Hash(&key);
+        return (uint32_t)(hash % NUM_CC_THREADS);
 }
 
 
@@ -186,8 +188,9 @@ void MVScheduler::ProcessWriteset(mv_action *action)
 }
 
 
-inline void MVScheduler::ScheduleTransaction(mv_action *action) {
-  if ((action->__combinedHash & txnMask) != 0) {
-          ProcessWriteset(action);
-  }
+inline void MVScheduler::ScheduleTransaction(mv_action *action) 
+{
+        if ((action->__combinedHash & txnMask) != 0) {
+                ProcessWriteset(action);
+        }
 }
