@@ -3,7 +3,9 @@ CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 -DREAD_COMMITTED=1
 LIBS=-lnuma -lpthread -lrt -lcityhash 
 CXX=g++
 
-INCLUDE=include
+LIBPATH=./libs/lib/
+INC_DIRS=include libs/include
+INCLUDE=$(foreach d, $(INC_DIRS), -I$d)
 SRC=src
 SOURCES:=$(wildcard $(SRC)/*.cc $(SRC)/*.c)
 HEKATON:=$(wildcard $(SRC)/hek*.cc $(SRC)/hek*.c)
@@ -32,7 +34,7 @@ test:env build/tests
 build/%.o: src/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@mkdir -p build
 	@echo + cc $<
-	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
+	@$(CXX) $(CFLAGS) $(DEPCFLAGS) $(INCLUDE) -c -o $@ $<
 
 $(TESTOBJECTS):$(OBJECTS)
 
@@ -42,10 +44,10 @@ test/%.o: test/%.cc $(DEPSDIR)/stamp GNUmakefile
 
 start/%.o: start/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@echo + cc $<
-	@$(CXX) $(CFLAGS) $(DEPCFLAGS) -I$(INCLUDE) -Istart -c -o $@ $<
+	@$(CXX) $(CFLAGS) $(DEPCFLAGS) $(INCLUDE) -Istart -c -o $@ $<
 
 build/db:$(START_OBJECTS) $(OBJECTS)
-	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
+	@$(CXX) $(CFLAGS) -o $@ $^ -L$(LIBPATH) $(LIBS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS) $(NON_MAIN_STARTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
