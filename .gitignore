@@ -10,3 +10,4 @@ results
 *.pyc
 *#*
 nohup.out
+libs/*
