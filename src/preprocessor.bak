@@ -22,6 +22,63 @@ void* MVActionHasher::operator new(std::size_t sz, int cpu) {
   return ret;
 }
 
+void MVActionHasher::Init() {
+}
+
+MVActionHasher:: MVActionHasher(int cpuNumber,
+                                SimpleQueue<ActionBatch> *inputQueue, 
+                                SimpleQueue<ActionBatch> *outputQueue) 
+  : Runnable(cpuNumber){
+  this->inputQueue = inputQueue;
+  this->outputQueue = outputQueue;
+}
+
+
+void MVActionHasher::StartWorking() 
+{
+        uint32_t epoch = 0;
+        while (true) {
+    
+                /* Take a single batch as input. */
+                ActionBatch batch = inputQueue->DequeueBlocking();
+    
+                /* Process every action in the batch. */
+                uint32_t numActions = batch.numActions;
+                for (uint32_t i = 0; i < numActions; ++i) {
+                        ProcessAction(batch.actionBuf[i], epoch, i);
+                }
+    
+                /* Output the batch to the concurrency control stage. */
+                outputQueue->EnqueueBlocking(batch);
+        }
+}
+
+void MVActionHasher::ProcessAction(mv_action *action, uint32_t epoch,
+                                   uint32_t txnCounter) 
+{
+        action->__combinedHash =  0;
+        action->__version = (((uint64_t)epoch << 32) | txnCounter);
+        size_t numWrites = action->__writeset.size();  
+        for (uint32_t i = 0; i < numWrites; ++i) {
+    
+                /*
+                 * Find which concurrency control thread is in charge of this 
+                 * key. Write out the threadId and change the combinedHash 
+                 * bitmask appropriately.
+                 */
+                action->__writeset[i].threadId = 0;
+                uint32_t threadId = 
+                        CompositeKey::HashKey(&action->__writeset[i]) % 
+                        MVScheduler::NUM_CC_THREADS;
+                action->__writeset[i].threadId = threadId;
+                action->__combinedHash |= (((uint64_t)1)<<threadId);
+        }
+}
+
+void MVScheduler::Init() 
+{
+}
+
 MVScheduler::MVScheduler(MVSchedulerConfig config) : 
         Runnable(config.cpuNumber) 
 {
@@ -62,13 +119,8 @@ void MVScheduler::StartWorking()
                 ActionBatch curBatch = config.inputQueue->DequeueBlocking();
                 for (uint32_t i = 0; i < config.numSubords; ++i) 
                         config.pubQueues[i]->EnqueueBlocking(curBatch);
-
-                for (mv_action* action = curBatch.actionBuf[0];
-                     action != NULL;
-                     action = action->__nextAction[thisThread]) {
-                  ScheduleTransaction(action);
-                }
-
+                for (uint32_t i = 0; i < curBatch.numActions; ++i) 
+                        ScheduleTransaction(curBatch.actionBuf[i]);
                 for (uint32_t i = 0; i < config.numSubords; ++i) 
                         config.subQueues[i]->DequeueBlocking();
                 for (uint32_t i = 0; i < config.numOutputs; ++i) 
@@ -88,6 +140,19 @@ void MVScheduler::Recycle()
                 }
         }  
 }
+
+
+
+/*
+ * Hash the given key, and find which concurrency control thread is
+ * responsible for the appropriate key range. 
+ */
+uint32_t MVScheduler::GetCCThread(CompositeKey key) 
+{
+        uint64_t hash = CompositeKey::Hash(&key);
+        return (uint32_t)(hash % NUM_CC_THREADS);
+}
+
 
 /*
  * For each record in the writeset, write out a placeholder indicating that
@@ -125,5 +190,7 @@ void MVScheduler::ProcessWriteset(mv_action *action)
 
 inline void MVScheduler::ScheduleTransaction(mv_action *action) 
 {
-        ProcessWriteset(action);
+        if ((action->__combinedHash & txnMask) != 0) {
+                ProcessWriteset(action);
+        }
 }
