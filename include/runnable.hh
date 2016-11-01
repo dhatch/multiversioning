@@ -39,6 +39,8 @@ public:
 
         virtual int gen_random();
 
+        int getCpuNum();
+
 };
 
 #endif          //  RUNNABLE_HH_

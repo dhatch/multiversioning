@@ -6,6 +6,10 @@
 
 #define PRNG_BUFSZ 32
 
+int Runnable::getCpuNum() {
+  return m_cpu_number;
+}
+
 void Runnable::rand_init()
 {
         char *random_buf;

@@ -1,6 +1,8 @@
 #ifndef PPP_H_
 #define PPP_H_
 
+#include <sstream>
+
 #include <mv_action.h>
 #include <runnable.hh>
 #include <concurrent_queue.h>
@@ -26,24 +28,32 @@ class MVTablePartition;
 
 class MVActionDistributor : public Runnable {
   private:
+    void log(string msg);
+    SimpleQueue<int> *orderingInputQueue;
+    SimpleQueue<int> *orderingOutputQueue;
 
     SimpleQueue<ActionBatch> *inputQueue;
 
-    SimpleQueue<ActionBatch> *outputQueues[_NUM_PARTITIONS_];
+    SimpleQueue<CompositeKey*> **outputQueues;
+
+    static uint32_t GetCCThread(CompositeKey key);
 
   protected:
 
-    virtual void StartWorking();
     virtual void Init();
-    static inline void ProcessAction(mv_action *action, uint32_t epoch, 
-                                     uint32_t txnCounter);
+    virtual void StartWorking();
+    void ProcessKeySet(std::vector<CompositeKey> set, CompositeKey ** heads,  CompositeKey ** tails);
 
   public:
     void* operator new(std::size_t sz, int cpu);
 
     MVActionDistributor(int cpuNumber,
         SimpleQueue<ActionBatch> *inputQueue,
-        SimpleQueue<ActionBatch> *outputQueue[]);
+        SimpleQueue<CompositeKey*> **outputQueues,
+        SimpleQueue<int> *orderInput,
+        SimpleQueue<int> *orderOutput,
+        bool leader
+    );
 };
 
 #endif    /* PPP_H_ */
