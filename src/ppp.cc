@@ -18,13 +18,13 @@ void MVActionDistributor::Init() {}
 
 MVActionDistributor::MVActionDistributor(int cpuNumber, 
     SimpleQueue<ActionBatch> *inputQueue,
-    SimpleQueue<ActionBatch> **outputQueues,
+    SimpleQueue<ActionBatch> *outputQueue,
     SimpleQueue<int> *orderInput,
     SimpleQueue<int> *orderOutput,
     bool leader
 ): Runnable(cpuNumber) {
   this->inputQueue = inputQueue;
-  this->outputQueues = outputQueues;
+  this->outputQueue = outputQueue;
   this->orderingInputQueue = orderInput;
   this->orderingOutputQueue = orderOutput;
   // If this is the leader preprocessing thread (the first one),
@@ -127,9 +127,7 @@ void MVActionDistributor::StartWorking() {
     // begin working on the next batch while waiting
     orderingInputQueue->DequeueBlocking();
     // do the output
-    for(uint32_t i = 0; i < NUM_CC_THREADS; ++i) {
-      outputQueues[i]->EnqueueBlocking(batch);
-    }
+    outputQueue->EnqueueBlocking(batch);
     // Notify next thread that they can output
     orderingOutputQueue->EnqueueBlocking(1);
 

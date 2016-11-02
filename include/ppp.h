@@ -33,7 +33,7 @@ class MVActionDistributor : public Runnable {
 
     SimpleQueue<ActionBatch> *inputQueue;
 
-    SimpleQueue<ActionBatch> **outputQueues;
+    SimpleQueue<ActionBatch> *outputQueue;
 
     static uint32_t GetCCThread(CompositeKey& key);
 
@@ -48,7 +48,7 @@ class MVActionDistributor : public Runnable {
 
     MVActionDistributor(int cpuNumber,
         SimpleQueue<ActionBatch> *inputQueue,
-        SimpleQueue<ActionBatch> **outputQueues,
+        SimpleQueue<ActionBatch> *outputQueue,
         SimpleQueue<int> *orderInput,
         SimpleQueue<int> *orderOutput,
         bool leader
