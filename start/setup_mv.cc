@@ -350,18 +350,18 @@ static MVActionDistributor** SetupPPPThreads(int numProcs,
   MVActionDistributor** procArray = 
     (MVActionDistributor**) alloc_mem(sizeof(MVScheduler*)*numProcs, 79);
 
-  uint32_t QSIZE = 2;
-  char* mem = (char*) alloc_mem(sizeof(CACHE_LINE*2*QSIZE), 1);
-  SimpleQueue<ActionBatch>* inputQueue = new SimpleQueue<ActionBatch>(mem, QSIZE);
-  memset(mem, 0x00, CACHE_LINE*2*QSIZE);
+  char *mem = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 0);            
+  SimpleQueue<ActionBatch>* inputQueue = new SimpleQueue<ActionBatch>(mem, INPUT_SIZE);
+  memset(mem, 0x00, CACHE_LINE*INPUT_SIZE);
   *inputRef = inputQueue;
 
-  mem = (char*) alloc_mem(sizeof(CACHE_LINE*2*QSIZE), 1);
-  SimpleQueue<ActionBatch>* outputQueue = new SimpleQueue<ActionBatch>(mem, QSIZE);
-  memset(mem, 0x00, CACHE_LINE*2*QSIZE);
+  mem = (char*) alloc_mem(sizeof(CACHE_LINE*INPUT_SIZE), 0);
+  SimpleQueue<ActionBatch>* outputQueue = new SimpleQueue<ActionBatch>(mem, INPUT_SIZE);
+  memset(mem, 0x00, CACHE_LINE*INPUT_SIZE);
   *outputRef = outputQueue;
 
-  mem = (char*) alloc_mem(sizeof(CACHE_LINE*2*QSIZE), 1);
+  uint32_t QSIZE = 2;
+  mem = (char*) alloc_mem(sizeof(CACHE_LINE*2*QSIZE), 0);
   SimpleQueue<int>* last_link = new SimpleQueue<int>(mem, QSIZE);
   memset(mem, 0x00, CACHE_LINE*2*QSIZE);
   SimpleQueue<int>* old_link = last_link;

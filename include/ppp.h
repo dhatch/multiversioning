@@ -41,7 +41,7 @@ class MVActionDistributor : public Runnable {
 
     virtual void Init();
     virtual void StartWorking();
-    void ProcessAction(mv_action * action, mv_action * last_action);
+    void ProcessAction(mv_action * action, int* lastActions, mv_action** batch, int index);
 
   public:
     void* operator new(std::size_t sz, int cpu);

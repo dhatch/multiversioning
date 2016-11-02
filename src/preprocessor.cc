@@ -59,10 +59,14 @@ void MVScheduler::StartWorking()
                 for (uint32_t i = 0; i < config.numSubords; ++i) 
                         config.pubQueues[i]->EnqueueBlocking(curBatch);
 
-                for (mv_action* action = curBatch.actionBuf[0];
-                     action != NULL;
-                     action = action->__nextAction[threadId]) {
+                mv_action* action = curBatch.actionBuf[0];
+                while (true) {
                   ScheduleTransaction(action);
+                  int nextAction = action->__nextAction[threadId];
+                  if  (nextAction == -1) {
+                    break;
+                  }
+                  action = curBatch.actionBuf[nextAction];
                 }
 
                 for (uint32_t i = 0; i < config.numSubords; ++i) 
