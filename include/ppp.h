@@ -9,7 +9,6 @@
 #include <numa.h>
 #include <mv_table.h>
 
-#define _NUM_PARTITIONS_ 2
 
 extern uint64_t recordSize;
 
@@ -54,6 +53,7 @@ class MVActionDistributor : public Runnable {
         SimpleQueue<int> *orderOutput,
         bool leader
     );
+  static uint32_t NUM_CC_THREADS;
 };
 
 #endif    /* PPP_H_ */
