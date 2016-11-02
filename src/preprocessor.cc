@@ -16,12 +16,6 @@ using namespace std;
 
 uint32_t MVScheduler::NUM_CC_THREADS = 1;
 
-void* MVActionHasher::operator new(std::size_t sz, int cpu) {
-  void *ret = alloc_mem(sz, cpu);
-  assert(ret != NULL);
-  return ret;
-}
-
 MVScheduler::MVScheduler(MVSchedulerConfig config) : 
         Runnable(config.cpuNumber) 
 {
@@ -55,6 +49,8 @@ static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
     return (((uint64_t)epoch << 32) | txnCounter);
 }
 
+void MVScheduler::Init () {}
+
 void MVScheduler::StartWorking() 
 {
         //  std::cout << config.numRecycleQueues << "\n";
@@ -65,7 +61,7 @@ void MVScheduler::StartWorking()
 
                 for (mv_action* action = curBatch.actionBuf[0];
                      action != NULL;
-                     action = action->__nextAction[thisThread]) {
+                     action = action->__nextAction[threadId]) {
                   ScheduleTransaction(action);
                 }
 
@@ -95,7 +91,7 @@ void MVScheduler::Recycle()
  * to track the version of each record written by the transaction. The version
  * is equal to the transaction's timestamp.
  */
-void MVScheduler::ProcessWriteset(mv_action *action)
+inline void MVScheduler::ScheduleTransaction(mv_action *action) 
 {
 
         while (alloc->Warning()) {
@@ -122,8 +118,3 @@ void MVScheduler::ProcessWriteset(mv_action *action)
         }
 }
 
-
-inline void MVScheduler::ScheduleTransaction(mv_action *action) 
-{
-        ProcessWriteset(action);
-}

@@ -195,7 +195,7 @@ class mv_action : public translator {
         std::vector<int> __read_starts;
         std::vector<CompositeKey> __readset;
         std::vector<CompositeKey> __writeset;
-        std::vector<CompositeKey> __nextAction;
+        std::vector<mv_action*> __nextAction;
         
         volatile uint64_t __attribute__((aligned(CACHE_LINE))) __state;
 

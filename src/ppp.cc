@@ -16,7 +16,7 @@ void MVActionDistributor::Init() {}
 
 MVActionDistributor::MVActionDistributor(int cpuNumber, 
     SimpleQueue<ActionBatch> *inputQueue,
-    SimpleQueue<CompositeKey*> **outputQueues,
+    SimpleQueue<ActionBatch> **outputQueues,
     SimpleQueue<int> *orderInput,
     SimpleQueue<int> *orderOutput,
     bool leader
@@ -37,26 +37,10 @@ MVActionDistributor::MVActionDistributor(int cpuNumber,
  * Hash the given key, and find which concurrency control thread is
  * responsible for the appropriate key range. 
  */
-uint32_t MVActionDistributor::GetCCThread(CompositeKey key) 
+uint32_t MVActionDistributor::GetCCThread(CompositeKey& key) 
 {
         uint64_t hash = CompositeKey::Hash(&key);
         return (uint32_t)(hash % _NUM_PARTITIONS_);
-}
-
-void MVActionDistributor::ProcessKeySet(std::vector<CompositeKey> set, CompositeKey ** heads, CompositeKey ** tails) {
-      for (std::vector<CompositeKey>::iterator it = set.begin() ; it != set.end(); ++it) {
-        // Find the appropriate partition
-        std::stringstream msg;
-        msg << "Examining record " << it->key << " placing in partition" << partition;
-        log(msg.str());
-        if (heads[partition] == NULL) {
-          heads[partition] = &(*it);
-          tails[partition] = &(*it);
-        } else {
-          tails[partition]->next_key = &(*it);
-          tails[partition] = &(*it);
-        }
-      }
 }
 
 // Output to concurrency control layer:
@@ -79,7 +63,7 @@ void MVActionDistributor::ProcessAction(mv_action * action, mv_action * last_act
     keys[i] = -1;
   }
   for(int i = 0; i < readset.size(); i++) {
-    int partition = GetCCThread(*it);
+    int partition = GetCCThread(readset[i]);
     cc_threads[partition] = 1;
     int index = keys[partition];
     if (index != -1) {
@@ -93,15 +77,14 @@ void MVActionDistributor::ProcessAction(mv_action * action, mv_action * last_act
   for (int i = 0; i < _NUM_PARTITIONS_; i++) {
     keys[i] = -1;
   }
-  for(int i = 0; i < write_set.size(); i++) {
-    int partition = GetCCThread(*it);
+  for(int i = 0; i < writeset.size(); i++) {
+    int partition = GetCCThread(readset[i]);
     cc_threads[partition] = 1;
-    int index = keys[partition];
     int index = keys[partition];
     if (index != -1) {
       readset[index].next = i;
     } else {
-      action->__writestarts[partition] = i;
+      action->__write_starts[partition] = i;
     }
     keys[partition] = i;
   }
@@ -129,7 +112,7 @@ void MVActionDistributor::StartWorking() {
       mv_action * action = actions[i];
       mv_action * last_action;
       if (i == 0) {
-        last_action = NULL,
+        last_action = NULL;
       } else {
         last_action = actions[i - 1];
       }

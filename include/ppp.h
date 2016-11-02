@@ -34,22 +34,22 @@ class MVActionDistributor : public Runnable {
 
     SimpleQueue<ActionBatch> *inputQueue;
 
-    SimpleQueue<CompositeKey*> **outputQueues;
+    SimpleQueue<ActionBatch> **outputQueues;
 
-    static uint32_t GetCCThread(CompositeKey key);
+    static uint32_t GetCCThread(CompositeKey& key);
 
   protected:
 
     virtual void Init();
     virtual void StartWorking();
-    void ProcessKeySet(std::vector<CompositeKey> set, CompositeKey ** heads,  CompositeKey ** tails);
+    void ProcessAction(mv_action * action, mv_action * last_action);
 
   public:
     void* operator new(std::size_t sz, int cpu);
 
     MVActionDistributor(int cpuNumber,
         SimpleQueue<ActionBatch> *inputQueue,
-        SimpleQueue<CompositeKey*> **outputQueues,
+        SimpleQueue<ActionBatch> **outputQueues,
         SimpleQueue<int> *orderInput,
         SimpleQueue<int> *orderOutput,
         bool leader
