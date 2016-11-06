@@ -113,6 +113,8 @@ void MVActionDistributor::StartWorking() {
   while (true) {
     // Take a batch from input...
     ActionBatch batch = config.inputQueue->DequeueBlocking();
+    std::stringstream msg;
+    msg << "Got batch " << batch.batchNo;
 
     for (uint32_t i = 0; i < config.numSubords; i++) 
       config.pubQueues[i]->EnqueueBlocking(batch);

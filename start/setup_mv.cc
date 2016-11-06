@@ -389,6 +389,7 @@ static SimpleQueue<T>* SetupQueuesMany(uint32_t numEntries, uint32_t numQueues, 
   for (uint32_t i = 0; i < numQueues; ++i) {
       new (&queues[i]) SimpleQueue<T>(&queueData[dataDelta*i], numEntries);
   }
+
   return queues;
 }
 
@@ -840,6 +841,7 @@ static MVActionDistributor** setup_ppp_threads(MVConfig config,
   int num_threads = config.numPPPThreads;
   MVActionDistributor **distributors;
   distributors = SetupPPPThreads(num_threads, ppp_input, ppp_output);
+  std::cerr << "Done setting up preprocessor threads\n";
   return distributors;
 }
 
@@ -924,19 +926,28 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
         MVScheduler::NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
         NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
         assert(mv_config.distribution < 2);
-        outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE,
-                                                   mv_config.numWorkerThreads,
-                                                   71);
+
         pppThreads = setup_ppp_threads(mv_config, &pppInputQueue, &pppOutputQueue);
 
         schedThreads = setup_scheduler_threads(mv_config, pppOutputQueue,
                                                &schedOutputQueues,
                                                schedGCQueues);
+
         mv_setup_input_array(&input_placeholder, mv_config, w_config);
+
+        // If this line is moved to line 929 (before setup_ppp_threads)
+        // the output queues are set to null value..??
+        outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE,
+                                                   mv_config.numWorkerThreads,
+                                                   71);
+
+
         execThreads = setup_executors(mv_config, schedOutputQueues, outputQueue,
                                       schedGCQueues);
+
         init_database(mv_config, w_config, pppInputQueue, outputQueue,
                       pppThreads, schedThreads, execThreads);
+
         pin_memory();
         elapsed_time = run_experiment(pppInputQueue,  //&schedOutputQueues[config.numWorkerThreads],
                                       outputQueue,

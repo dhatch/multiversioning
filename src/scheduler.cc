@@ -5,6 +5,7 @@
 #include <database.h>
 #include <action.h>
 #include <cpuinfo.h>
+#include <sstream>
 
 #include <stdlib.h>
 
@@ -56,13 +57,13 @@ void MVScheduler::StartWorking()
         //  std::cout << config.numRecycleQueues << "\n";
         while (true) {
                 ActionBatch curBatch = config.inputQueue->DequeueBlocking();
+
                 for (uint32_t i = 0; i < config.numSubords; ++i) 
                         config.pubQueues[i]->EnqueueBlocking(curBatch);
 
                 mv_action* action = curBatch.actionBuf[0];
                 while (true) {
                   ScheduleTransaction(action);
-                 // std::cout << "txn scheduled!\n";
                   int nextAction = action->__nextAction[threadId];
                   if  (nextAction == -1) {
                     break;
