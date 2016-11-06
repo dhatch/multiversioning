@@ -51,7 +51,6 @@ class CompositeKey {
         MVRecord *value;
         int next;
         bool initialized;
-        CompositeKey * next_key;
         
         CompositeKey() {
                 this->value = NULL;
@@ -193,9 +192,9 @@ class mv_action : public translator {
         bool __readonly;
         std::vector<int> __write_starts;
         std::vector<int> __read_starts;
+        std::vector<int> __nextAction;
         std::vector<CompositeKey> __readset;
         std::vector<CompositeKey> __writeset;
-        std::vector<mv_action*> __nextAction;
         
         volatile uint64_t __attribute__((aligned(CACHE_LINE))) __state;
 

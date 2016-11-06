@@ -269,6 +269,7 @@ mv_action::mv_action(txn *t) : translator(t)
         this->__state = STICKY;
         for (uint32_t i = 0; i < NUM_CC_THREADS; ++i) {
                 this->__write_starts.push_back(-1);
+                this->__nextAction.push_back(-1);
                 this->__read_starts.push_back(-1);
         }
         this->init = false;

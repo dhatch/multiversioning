@@ -56,8 +56,6 @@ uint32_t MVActionDistributor::GetCCThread(CompositeKey& key)
 // Constructing a new thing to pass: the txn is included but can it be modified?
 // Why not? 
 void MVActionDistributor::ProcessAction(mv_action * action, int* last_actions, mv_action ** batch, int index) {
-  std::vector<CompositeKey> readset = action->__readset;
-  std::vector<CompositeKey> writeset = action->__writeset;
   int cc_threads[NUM_CC_THREADS] = {-1};
   int keys[NUM_CC_THREADS];
 
@@ -65,14 +63,14 @@ void MVActionDistributor::ProcessAction(mv_action * action, int* last_actions, m
     keys[i] = -1;
   }
 
-  for(int i = 0; i < readset.size(); i++) {
-    int partition = GetCCThread(readset[i]);
+  for(int i = 0; i < action->__readset.size(); i++) {
+    int partition = GetCCThread(action->__readset[i]);
     cc_threads[partition] = 1;
     int index = keys[partition];
-    if (index != -1) {
-      readset[index].next = i;
-    } else {
+    if (index == -1) {
       action->__read_starts[partition] = i;
+    } else {
+      action->__readset[index].next = i;
     }
     keys[partition] = i;
   }
@@ -81,12 +79,12 @@ void MVActionDistributor::ProcessAction(mv_action * action, int* last_actions, m
     keys[i] = -1;
   }
 
-  for(int i = 0; i < writeset.size(); i++) {
-    int partition = GetCCThread(writeset[i]);
+  for(int i = 0; i < action->__writeset.size(); i++) {
+    int partition = GetCCThread(action->__writeset[i]);
     cc_threads[partition] = 1;
     int index = keys[partition];
     if (index != -1) {
-      writeset[index].next = i;
+      action->__writeset[index].next = i;
     } else {
       action->__write_starts[partition] = i;
     }
@@ -94,9 +92,8 @@ void MVActionDistributor::ProcessAction(mv_action * action, int* last_actions, m
   }
 
   for(int i = 0; i < NUM_CC_THREADS; i++) {
-    int partition = cc_threads[i];
-    if (partition != -1) {
-      batch[last_actions[i]]->__nextAction[partition] = index;
+    if (cc_threads[i] == 1) {
+      batch[last_actions[i]]->__nextAction[i] = index;
       last_actions[i] = index;
     }
   }
@@ -116,8 +113,13 @@ void MVActionDistributor::StartWorking() {
     // Pre process each txn
     for(uint32_t i = 0; i < numActions; ++i) {
       mv_action * action = actions[i];
-      action->print_txn();
       ProcessAction(action, lastActions, batch.actionBuf, i);
+    }
+
+    // Ensure the last action in the batch has negative nextAction values
+    mv_action* action = actions[numActions - 1];
+    for(uint32_t i = 0 ; i < NUM_CC_THREADS; i++) {
+      action->__nextAction[i] = -1;
     }
     // Possible design for interthread comms
     // Queue between threads in round robin

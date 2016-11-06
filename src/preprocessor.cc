@@ -62,6 +62,7 @@ void MVScheduler::StartWorking()
                 mv_action* action = curBatch.actionBuf[0];
                 while (true) {
                   ScheduleTransaction(action);
+                 // std::cout << "txn scheduled!\n";
                   int nextAction = action->__nextAction[threadId];
                   if  (nextAction == -1) {
                     break;
