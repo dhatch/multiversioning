@@ -1,11 +1,14 @@
-#ifndef         PREPROCESSOR_H_
-#define         PREPROCESSOR_H_
+#ifndef PREPROCESSOR_H_
+#define PREPROCESSOR_H_
+
+#include <sstream>
 
 #include <mv_action.h>
 #include <runnable.hh>
 #include <concurrent_queue.h>
 #include <numa.h>
 #include <mv_table.h>
+
 
 extern uint64_t recordSize;
 
@@ -14,64 +17,50 @@ class mv_action;
 class MVRecordAllocator;
 class MVTablePartition;
 
-
-struct MVSchedulerConfig {
+struct MVActionDistributorConfig {
   int cpuNumber;
   uint32_t threadId;
-  size_t allocatorSize;         // Scheduler thread's local sticky allocator
-  uint32_t numTables;           // Number of tables in the system
-  size_t *tblPartitionSizes;    // Size of each table's partition
-  
-  uint32_t numOutputs;
-        
   uint32_t numSubords;
-  uint32_t numRecycleQueues;
-
   SimpleQueue<ActionBatch> *inputQueue;
-  SimpleQueue<ActionBatch> *outputQueues;
+  SimpleQueue<ActionBatch> *outputQueue;
   SimpleQueue<ActionBatch> **pubQueues;
   SimpleQueue<ActionBatch> **subQueues;
-  SimpleQueue<MVRecordList> **recycleQueues;
-
-  int worker_start;
-  int worker_end;
 };
 
-/*
- * MVScheduler implements scheduling logic. The scheduler is partitioned across 
- * several physical cores.
+/* An MVActionDistributor is the real first stage of the transaction
+ * processing pipeline (meant to replace MVActionHasher)
+ * Its job is to take incoming batches and assign transactions to a
+ * concurrency control worker thread (or virtual partition)
+ *
+ * The number of virtual partitions is fixed for now
  */
-class MVScheduler : public Runnable {
-        friend class SchedulerTest;
-        
- private:
-        static inline uint32_t GetCCThread(CompositeKey key);
 
-    MVSchedulerConfig config;
-    MVRecordAllocator *alloc;
+class MVActionDistributor : public Runnable {
+  private:
+    void log(string msg);
+    MVActionDistributorConfig config;
 
-    MVTablePartition **partitions;
+    static uint32_t GetCCThread(CompositeKey& key);
 
-    uint32_t epoch;
-    uint32_t txnCounter;
-    uint64_t txnMask;
+  protected:
 
-    uint32_t threadId;
-
- protected:
-        virtual void StartWorking();
-        void ScheduleTransaction(mv_action *action);
     virtual void Init();
-    virtual void Recycle();
- public:
-    
-    void* operator new (std::size_t sz, int cpu) {
-            return alloc_mem(sz, cpu);
-    }
+    virtual void StartWorking();
+    void ProcessAction(mv_action * action, int* lastActions, mv_action** batch, int index);
 
-    static uint32_t NUM_CC_THREADS;
-    MVScheduler(MVSchedulerConfig config);
+  public:
+    void* operator new(std::size_t sz, int cpu);
+
+    /*
+    MVActionDistributor(int cpuNumber,
+        SimpleQueue<ActionBatch> *inputQueue,
+        SimpleQueue<ActionBatch> *outputQueue,
+        SimpleQueue<int> *orderInput,
+        SimpleQueue<int> *orderOutput,
+        bool leader
+    );*/
+    MVActionDistributor(MVActionDistributorConfig config);
+  static uint32_t NUM_CC_THREADS;
 };
 
-
-#endif          /* PREPROCESSOR_H_ */
+#endif    /* PREPROCESSOR_H_ */

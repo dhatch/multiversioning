@@ -1,6 +1,6 @@
 #include <catalog.h>
 #include <util.h>
-#include <preprocessor.h>
+#include <scheduler.h>
 
 Catalog::Catalog(uint32_t numTables) {
   this->finalized = false;

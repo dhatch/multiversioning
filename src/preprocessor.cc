@@ -1,125 +1,157 @@
 #include <preprocessor.h>
-#include <machine.h>
-#include <city.h>
-#include <catalog.h>
-#include <database.h>
-#include <action.h>
-#include <cpuinfo.h>
 
-#include <stdlib.h>
+uint32_t MVActionDistributor::NUM_CC_THREADS = 1;
 
-#include <cassert>
-#include <cstring>
-#include <deque>
-
-using namespace std;
-
-uint32_t MVScheduler::NUM_CC_THREADS = 1;
-
-MVScheduler::MVScheduler(MVSchedulerConfig config) : 
-        Runnable(config.cpuNumber) 
-{
-        this->config = config;
-        this->epoch = 0;
-        this->txnCounter = 0;
-        this->txnMask = ((uint64_t)1<<config.threadId);
-
-        this->partitions = 
-                (MVTablePartition**)alloc_mem(sizeof(MVTablePartition*)*config.numTables, 
-                                              config.cpuNumber);
-        assert(this->partitions != NULL);
-
-        /* Initialize the allocator and the partitions. */
-        this->alloc = new (config.cpuNumber) MVRecordAllocator(config.allocatorSize, 
-                                                               config.cpuNumber,
-                                                               config.worker_start,
-                                                               config.worker_end);
-        for (uint32_t i = 0; i < this->config.numTables; ++i) {
-
-                /* Track the partition locally and add it to the database's catalog. */
-                this->partitions[i] =
-                        new (config.cpuNumber) MVTablePartition(config.tblPartitionSizes[i],
-                                                                config.cpuNumber, alloc);
-                assert(this->partitions[i] != NULL);
-        }
-        this->threadId = config.threadId;
+void MVActionDistributor::log (string msg) {
+  std::stringstream m;
+  m << this->getCpuNum() << ": " << msg << "\n";
+  std::cout << m.str();
+}
+  
+void* MVActionDistributor::operator new(std::size_t sz, int cpu) {
+  void *ret = alloc_mem(sz, cpu);
+  assert(ret != NULL);
+  return ret;
 }
 
-static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
-    return (((uint64_t)epoch << 32) | txnCounter);
-}
+void MVActionDistributor::Init() {}
 
-void MVScheduler::Init () {}
+MVActionDistributor::MVActionDistributor(MVActionDistributorConfig config) :
+  Runnable(config.cpuNumber) {
+  
+  this->config = config;
 
-void MVScheduler::StartWorking() 
-{
-        //  std::cout << config.numRecycleQueues << "\n";
-        while (true) {
-                ActionBatch curBatch = config.inputQueue->DequeueBlocking();
-                for (uint32_t i = 0; i < config.numSubords; ++i) 
-                        config.pubQueues[i]->EnqueueBlocking(curBatch);
-
-                mv_action* action = curBatch.actionBuf[0];
-                while (true) {
-                  ScheduleTransaction(action);
-                 // std::cout << "txn scheduled!\n";
-                  int nextAction = action->__nextAction[threadId];
-                  if  (nextAction == -1) {
-                    break;
-                  }
-                  action = curBatch.actionBuf[nextAction];
-                }
-
-                for (uint32_t i = 0; i < config.numSubords; ++i) 
-                        config.subQueues[i]->DequeueBlocking();
-                for (uint32_t i = 0; i < config.numOutputs; ++i) 
-                        config.outputQueues[i].EnqueueBlocking(curBatch);
-                Recycle();
-        }
-}
-
-void MVScheduler::Recycle() 
-{
-        /* Check for recycled MVRecords */
-        for (uint32_t i = 0; i < config.numRecycleQueues; ++i) {
-                MVRecordList recycled;
-                while (config.recycleQueues[i]->Dequeue(&recycled)) {
-                        //      std::cout << "Received recycled mv records: " << recycled.count << "\n";
-                        this->alloc->ReturnMVRecords(recycled);
-                }
-        }  
 }
 
 /*
- * For each record in the writeset, write out a placeholder indicating that
- * the value for the record will be produced by this transaction. We don't need
- * to track the version of each record written by the transaction. The version
- * is equal to the transaction's timestamp.
+MVActionDistributor::MVActionDistributor(int cpuNumber, 
+    SimpleQueue<ActionBatch> *inputQueue,
+    SimpleQueue<ActionBatch> *outputQueue,
+    SimpleQueue<int> *orderInput,
+    SimpleQueue<int> *orderOutput,
+    bool leader
+): Runnable(cpuNumber) {
+  this->inputQueue = inputQueue;
+  this->outputQueue = outputQueue;
+  this->orderingInputQueue = orderInput;
+  this->orderingOutputQueue = orderOutput;
+  // If this is the leader preprocessing thread (the first one),
+  // pre-empt the input queue so that operation doesn't get blocked
+  // on the first batch
+  if (leader) {
+    orderInput->EnqueueBlocking(1);
+  }
+}
+*/
+/*
+ * Hash the given key, and find which concurrency control thread is
+ * responsible for the appropriate key range. 
  */
-inline void MVScheduler::ScheduleTransaction(mv_action *action) 
+uint32_t MVActionDistributor::GetCCThread(CompositeKey& key) 
 {
-
-        while (alloc->Warning()) {
-                //          std::cerr << "[WARNING] CC thread low on versions\n";
-                Recycle();
-        }
-
-        int r_index = action->__read_starts[threadId];
-        int w_index = action->__write_starts[threadId];
-        int i;
-        while (r_index != -1) {
-                i = r_index;
-                MVRecord *ref = this->partitions[action->__readset[i].tableId]->
-                        GetMVRecord(action->__readset[i], action->__version);
-                action->__readset[i].value = ref;
-                r_index = action->__readset[i].next;
-        }
-
-        while (w_index != -1) {
-                i = w_index;
-                this->partitions[action->__writeset[i].tableId]->
-                        WriteNewVersion(action->__writeset[i], action, action->__version);
-                w_index = action->__writeset[i].next;
-        }
+        uint64_t hash = CompositeKey::Hash(&key);
+        return (uint32_t)(hash % NUM_CC_THREADS);
 }
 
+// Output to concurrency control layer:
+// Batch of txns that are guaranteed to contain read/write elements that 
+// are relevant to the thread
+//
+// List of ints that refer to the index within the writeset/readset of 
+// the specific composite keys that we care about, ordered in the same
+// order as the batch
+
+// Constructing a new thing to pass: the txn is included but can it be modified?
+// Why not? 
+void MVActionDistributor::ProcessAction(mv_action * action, int* last_actions, mv_action ** batch, int index) {
+  int cc_threads[NUM_CC_THREADS] = {-1};
+  int keys[NUM_CC_THREADS];
+
+  for (int i = 0; i < NUM_CC_THREADS; i++) {
+    keys[i] = -1;
+  }
+
+  for(int i = 0; i < action->__readset.size(); i++) {
+    int partition = GetCCThread(action->__readset[i]);
+    cc_threads[partition] = 1;
+    int index = keys[partition];
+    if (index == -1) {
+      action->__read_starts[partition] = i;
+    } else {
+      action->__readset[index].next = i;
+    }
+    keys[partition] = i;
+  }
+
+  for (int i = 0; i < NUM_CC_THREADS; i++) {
+    keys[i] = -1;
+  }
+
+  for(int i = 0; i < action->__writeset.size(); i++) {
+    int partition = GetCCThread(action->__writeset[i]);
+    cc_threads[partition] = 1;
+    int index = keys[partition];
+    if (index != -1) {
+      action->__writeset[index].next = i;
+    } else {
+      action->__write_starts[partition] = i;
+    }
+    keys[partition] = i;
+  }
+
+  for(int i = 0; i < NUM_CC_THREADS; i++) {
+    if (cc_threads[i] == 1) {
+      batch[last_actions[i]]->__nextAction[i] = index;
+      last_actions[i] = index;
+    }
+  }
+}
+
+void MVActionDistributor::StartWorking() {
+  //uint32_t epoch = 0;
+  log("Thread started!");
+  while (true) {
+    // Take a batch from input...
+    ActionBatch batch = config.inputQueue->DequeueBlocking();
+
+    for (uint32_t i = 0; i < config.numSubords; i++) 
+      config.pubQueues[i]->EnqueueBlocking(batch);
+
+    mv_action** actions = batch.actionBuf;
+    uint32_t numActions = batch.numActions;
+    // Allocate the output batches here for now as linked lists
+    int lastActions[NUM_CC_THREADS] = {0};
+
+    // Pre process each txn
+    for (uint32_t i = 0; i < numActions; ++i) {
+      mv_action * action = actions[i];
+      ProcessAction(action, lastActions, batch.actionBuf, i);
+    }
+
+    // Ensure the last action in the batch has negative nextAction values
+    mv_action* action = actions[numActions - 1];
+    for (uint32_t i = 0 ; i < NUM_CC_THREADS; i++) {
+      action->__nextAction[i] = -1;
+    }
+
+    for (uint32_t i = 0; i < config.numSubords; ++i) 
+      config.subQueues[i]->DequeueBlocking();
+
+    config.outputQueue->EnqueueBlocking(batch);
+    /*
+    // Possible design for interthread comms
+    // Queue between threads in round robin
+    // Wait until previouus thread has told us we can output
+    // At a later point perhaps we can make it more dynamic and 
+    // begin working on the next batch while waiting
+    orderingInputQueue->DequeueBlocking();
+    // do the output
+    outputQueue->EnqueueBlocking(batch);
+    // Notify next thread that they can output
+    orderingOutputQueue->EnqueueBlocking(1);*/
+
+  }
+
+
+
+}
