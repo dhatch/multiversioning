@@ -17,6 +17,16 @@ class mv_action;
 class MVRecordAllocator;
 class MVTablePartition;
 
+struct MVActionDistributorConfig {
+  int cpuNumber;
+  uint32_t threadId;
+  uint32_t numSubords;
+  SimpleQueue<ActionBatch> *inputQueue;
+  SimpleQueue<ActionBatch> *outputQueue;
+  SimpleQueue<ActionBatch> **pubQueues;
+  SimpleQueue<ActionBatch> **subQueues;
+};
+
 /* An MVActionDistributor is the real first stage of the transaction
  * processing pipeline (meant to replace MVActionHasher)
  * Its job is to take incoming batches and assign transactions to a
@@ -28,12 +38,7 @@ class MVTablePartition;
 class MVActionDistributor : public Runnable {
   private:
     void log(string msg);
-    SimpleQueue<int> *orderingInputQueue;
-    SimpleQueue<int> *orderingOutputQueue;
-
-    SimpleQueue<ActionBatch> *inputQueue;
-
-    SimpleQueue<ActionBatch> *outputQueue;
+    MVActionDistributorConfig config;
 
     static uint32_t GetCCThread(CompositeKey& key);
 
@@ -46,13 +51,15 @@ class MVActionDistributor : public Runnable {
   public:
     void* operator new(std::size_t sz, int cpu);
 
+    /*
     MVActionDistributor(int cpuNumber,
         SimpleQueue<ActionBatch> *inputQueue,
         SimpleQueue<ActionBatch> *outputQueue,
         SimpleQueue<int> *orderInput,
         SimpleQueue<int> *orderOutput,
         bool leader
-    );
+    );*/
+    MVActionDistributor(MVActionDistributorConfig config);
   static uint32_t NUM_CC_THREADS;
 };
 

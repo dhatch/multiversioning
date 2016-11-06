@@ -16,6 +16,14 @@ void* MVActionDistributor::operator new(std::size_t sz, int cpu) {
 
 void MVActionDistributor::Init() {}
 
+MVActionDistributor::MVActionDistributor(MVActionDistributorConfig config) :
+  Runnable(config.cpuNumber) {
+  
+  this->config = config;
+
+}
+
+/*
 MVActionDistributor::MVActionDistributor(int cpuNumber, 
     SimpleQueue<ActionBatch> *inputQueue,
     SimpleQueue<ActionBatch> *outputQueue,
@@ -34,7 +42,7 @@ MVActionDistributor::MVActionDistributor(int cpuNumber,
     orderInput->EnqueueBlocking(1);
   }
 }
-
+*/
 /*
  * Hash the given key, and find which concurrency control thread is
  * responsible for the appropriate key range. 
@@ -104,23 +112,33 @@ void MVActionDistributor::StartWorking() {
   log("Thread started!");
   while (true) {
     // Take a batch from input...
-    ActionBatch batch = inputQueue->DequeueBlocking();
+    ActionBatch batch = config.inputQueue->DequeueBlocking();
+
+    for (uint32_t i = 0; i < config.numSubords; i++) 
+      config.pubQueues[i]->EnqueueBlocking(batch);
+
     mv_action** actions = batch.actionBuf;
     uint32_t numActions = batch.numActions;
     // Allocate the output batches here for now as linked lists
     int lastActions[NUM_CC_THREADS] = {0};
 
     // Pre process each txn
-    for(uint32_t i = 0; i < numActions; ++i) {
+    for (uint32_t i = 0; i < numActions; ++i) {
       mv_action * action = actions[i];
       ProcessAction(action, lastActions, batch.actionBuf, i);
     }
 
     // Ensure the last action in the batch has negative nextAction values
     mv_action* action = actions[numActions - 1];
-    for(uint32_t i = 0 ; i < NUM_CC_THREADS; i++) {
+    for (uint32_t i = 0 ; i < NUM_CC_THREADS; i++) {
       action->__nextAction[i] = -1;
     }
+
+    for (uint32_t i = 0; i < config.numSubords; ++i) 
+      config.subQueues[i]->DequeueBlocking();
+
+    config.outputQueue->EnqueueBlocking(batch);
+    /*
     // Possible design for interthread comms
     // Queue between threads in round robin
     // Wait until previouus thread has told us we can output
@@ -130,7 +148,7 @@ void MVActionDistributor::StartWorking() {
     // do the output
     outputQueue->EnqueueBlocking(batch);
     // Notify next thread that they can output
-    orderingOutputQueue->EnqueueBlocking(1);
+    orderingOutputQueue->EnqueueBlocking(1);*/
 
   }
 
