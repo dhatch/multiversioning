@@ -28,7 +28,8 @@ static struct option long_options[] = {
   {"read_pct", required_argument, NULL, 14},
   {"read_txn_size", required_argument, NULL, 15},
   {"hot_position", required_argument, NULL, 16},  
-  {NULL, no_argument, NULL, 17},
+  {"num_ppp_threads", required_argument, NULL, 17},
+  {NULL, no_argument, NULL, 18},
 };
 
 enum distribution_t {
@@ -139,6 +140,7 @@ class ExperimentConfig {
     READ_PCT,
     READ_TXN_SIZE,
     HOT_POSITION,
+    NUM_PPP_THREADS
   };
   unordered_map<int, char*> argMap;
 
@@ -180,7 +182,8 @@ class ExperimentConfig {
           argMap.count(RECORD_SIZE) == 0 || 
           argMap.count(DISTRIBUTION) == 0 ||
           argMap.count(READ_PCT) == 0 ||
-          argMap.count(READ_TXN_SIZE) == 0) {
+          argMap.count(READ_TXN_SIZE) == 0 ||
+          argMap.count(NUM_PPP_THREADS) == 0) {
         std::cerr << "Missing one or more multiversion concurrency control params\n";
         std::cerr << "--" << long_options[NUM_CC_THREADS].name << "\n";
         std::cerr << "--" << long_options[NUM_TXNS].name << "\n";
@@ -193,6 +196,7 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
         std::cerr << "--" << long_options[READ_PCT].name << "\n";
         std::cerr << "--" << long_options[READ_TXN_SIZE].name << "\n";
+        std::cerr << "--" << long_options[NUM_PPP_THREADS].name << "\n";
         exit(-1);        
       }
       
@@ -206,6 +210,7 @@ class ExperimentConfig {
       mvConfig.epochSize = (uint32_t)atoi(argMap[EPOCH_SIZE]);
       mvConfig.numRecords = (uint32_t)atoi(argMap[NUM_RECORDS]);
       mvConfig.numWorkerThreads = (uint32_t)atoi(argMap[NUM_WORKER_THREADS]);
+      mvConfig.numPPPThreads = (uint32_t)atoi(argMap[NUM_PPP_THREADS]);
       mvConfig.txnSize = (uint32_t)atoi(argMap[TXN_SIZE]);
       mvConfig.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
       mvConfig.recordSize = (uint64_t)atoi(argMap[RECORD_SIZE]);
