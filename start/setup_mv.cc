@@ -4,6 +4,8 @@
 #include <concurrent_queue.h>
 #include <preprocessor.h>
 #include <scheduler.h>
+#include <logging/mv_logging.h>
+#include <mv_action_batch_factory.h>
 #include <executor.h>
 #include <iostream>
 #include <fstream>
@@ -323,7 +325,14 @@ static Executor** SetupExecutors(uint32_t cpuStart,
   return execs;
 }
 
-// Setup an array of queues.
+/** Setup an array of SimpleQueues of data type 'T'.
+ *
+ * 'numQueues' will be created, with their memory pinned to 'cpu'.
+ *
+ * Each queue will be able to hold 'numEntires' entries.
+ *
+ * Returns: An array of length 'numQueues' containing the allocated queues.
+ */
 template<class T>
 static SimpleQueue<T>* SetupQueuesMany(uint32_t numEntries, uint32_t numQueues, int cpu) {
   size_t metaDataSz = sizeof(SimpleQueue<T>)*numQueues; // SimpleQueue structs
@@ -475,6 +484,41 @@ static MVScheduler** SetupSchedulers(uint32_t cpuStart,
   return schedArray;
 }
 
+static MVLogging* SetupLogging(MVConfig config,
+                               SimpleQueue<ActionBatch> **inputQueue_OUT,
+                               SimpleQueue<bool> **exitQueueIn_OUT,
+                               SimpleQueue<bool> **exitQueueOut_OUT,
+                               SimpleQueue<ActionBatch> *outputQueue) {
+        // Allocate logging input queue.
+        char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 0);
+        SimpleQueue<ActionBatch> *loggingInputQueue =
+                new SimpleQueue<ActionBatch>(inputArray, INPUT_SIZE);
+
+        char* exitQueueStorage = (char*)alloc_mem(CACHE_LINE*2, 0);
+        assert(exitQueueStorage);
+
+        *exitQueueIn_OUT = new SimpleQueue<bool>(exitQueueStorage, 1);
+        *exitQueueOut_OUT = new SimpleQueue<bool>(exitQueueStorage + CACHE_LINE, 1);
+
+
+        MVLogging *logging = new MVLogging(loggingInputQueue,
+                                           outputQueue,
+                                           *exitQueueIn_OUT,
+                                           *exitQueueOut_OUT,
+                                           config.logFileName,
+                                           config.logRestore,
+                                           config.epochSize,
+                                           2,
+                                           config.logAsync,
+                                           config.numCCThreads + config.numWorkerThreads);
+
+        *inputQueue_OUT = loggingInputQueue;
+
+        std::cerr << "Done setting up logging!" << std::endl;
+        return logging;
+}
+
+
 static uint32_t get_num_epochs(MVConfig config)
 {
         uint32_t num_epochs;
@@ -485,132 +529,18 @@ static uint32_t get_num_epochs(MVConfig config)
         return num_epochs;
 }
 
-/*
- * Pre-process each txn's read- and write-sets. 
- * 
- * XXX Ideally, this should happen _online_, and "route" transactions to the
- * appropriate concurrency control threads, but we're doing it offline because 
- * it's good enough for experiments.
- *
- * Basically, make a linked list where the starts vector is of size NUM_CC_THREADS
- * vector[i] tells you the first index in the vector of composite keys that is for thread i
- * and each composite key has an int field 'next' that points to the next key for thread i
- *
- * So do we want to just move this to an outer layer? and the prepreprocessor just does this step
- * and then puts the txn in the appropriate output Qs (sending it to multiple CC threads, but only the relevant ones)
- * Instead of sending composite keys..
- *
- * Do we have issue with changing concurrency threads
- *
- * OK new idea... send batches of write/read actions to the concurrency control layer. each batch also has the batch of txns
- * in total order. I mean, the write/read actions could even be associated with the txn object, who cares.Then the concurrency
- * layer can output the associated batch of txn objects to the execution layer.
- *
- *
- */
-/*
-static void do_preprocessing(vector<CompositeKey> &keys, vector<int> &starts)
-{
-        CompositeKey mv_key;
-        int indices[NUM_CC_THREADS], index, *ptr;
-        uint32_t i, num_keys;
-        for (i = 0; i < NUM_CC_THREADS; ++i)
-                indices[i] = -1;
-        num_keys = keys.size();
-        for (i = 0; i < num_keys; ++i) {
-                mv_key = keys[i];
-                if (indices[mv_key.threadId] != -1) {
-                  // If this key's thread ID is found
-                        index = indices[mv_key.threadId];
-                  // Look in the list of keys at that index
-                  // Assign ptr to the next field of that 
-                        ptr = &keys[index].next;
-                } else {
-                  // If it wasn't found, then put i in the starts vector
-                        ptr = &starts[mv_key.threadId];
-                }
-                indices[mv_key.threadId] = i;
-                *ptr = i;
-        }
-}*/
-
-static void convert_keys(mv_action *action, txn *txn)
-{
-        uint32_t i, num_reads, num_rmws, num_writes, num_entries;
-        struct big_key *array;
-
-        /* Alloc an array to poke txn information. */
-        num_reads = txn->num_reads();
-        num_rmws = txn->num_rmws();
-        num_writes = txn->num_writes();
-        if (num_reads >= num_rmws && num_reads >= num_writes) 
-                num_entries = num_reads;
-        else if (num_rmws >= num_writes) 
-                num_entries = num_rmws;
-        else 
-                num_entries = num_writes;
-        array = (struct big_key*)malloc(sizeof(struct big_key)*num_entries);
-                
-        /* Handle writes. */
-        txn->get_writes(array);
-        for (i = 0; i < num_writes; ++i)
-                action->add_write_key(array[i].table_id, array[i].key, false);
-
-        /* Handle rmws. */
-        txn->get_rmws(array);
-        for (i = 0; i < num_rmws; ++i)
-                action->add_write_key(array[i].table_id, array[i].key, true);
-        
-        /* Handle reads. */
-        txn->get_reads(array);
-        for (i = 0; i < num_reads; ++i)
-                action->add_read_key(array[i].table_id, array[i].key);
-        if (num_rmws == 0 && num_writes == 0)
-                action->__readonly = true;
-        free(array);
-}
-
-static mv_action* generate_mv_action(txn *txn)
-{
-        mv_action *action;
-
-        /* Get the transaction's rw-sets. */
-        action = new mv_action(txn);
-        txn->set_translator(action);
-        convert_keys(action, txn);
-
-        /* 
-         * Pre-process rw-sets for more concurrency control phase parallelism. 
-         */
-        /*
-        do_preprocessing(action->__writeset, action->__write_starts);
-        do_preprocessing(action->__readset, action->__read_starts);
-        */
-        action->setup_reverse_index();
-        return action;        
-}
-
 static ActionBatch mv_create_action_batch(MVConfig config,
                                           workload_config w_config,
                                           uint32_t epoch)
 {
-        ActionBatch batch;
-        mv_action *action;
+        MVActionBatchFactory batchFactory{epoch, config.epochSize};
         txn *txn;
-        uint32_t i;
-        uint64_t timestamp;
-        batch.numActions = config.epochSize;
-        batch.actionBuf =
-                (mv_action**)malloc(sizeof(mv_action*)*config.epochSize);
-        assert(batch.actionBuf != NULL);
-        for (i = 0; i < config.epochSize; ++i) {
-                timestamp = CREATE_MV_TIMESTAMP(epoch, i);
+        while (!batchFactory.full()) {
                 txn = generate_transaction(w_config);
-                action = generate_mv_action(txn);
-                action->__version = timestamp;
-                batch.actionBuf[i] = action;
+                batchFactory.addTransaction(txn);
         }
-        return batch;
+
+        return batchFactory.getBatch();
 }
 
 static void mv_setup_input_array(std::vector<ActionBatch> *input,
@@ -631,24 +561,20 @@ static void mv_setup_input_array(std::vector<ActionBatch> *input,
 static ActionBatch generate_db(workload_config conf)
 {
         txn **loader_txns;
-        uint32_t num_txns, i;
-        ActionBatch ret;
-
-        uint64_t timestamp;
+        uint64_t num_txns, i;
 
         loader_txns = NULL;
         num_txns = generate_input(conf, &loader_txns);
         assert(loader_txns != NULL);
-        ret.numActions = num_txns;
-        ret.actionBuf = (mv_action**)malloc(sizeof(mv_action*)*num_txns);
-        for (i = 0; i < num_txns; ++i) {
-                ret.actionBuf[i] = generate_mv_action(loader_txns[i]);
-                timestamp = CREATE_MV_TIMESTAMP(1, i);
-                ret.actionBuf[i]->__version = timestamp;
+
+        MVActionBatchFactory batchFactory{1, num_txns};
+        for (i = 0; i < num_txns; i++) {
+                assert(!batchFactory.full());
+                batchFactory.addTransaction(loader_txns[i]);
         }
-        return ret;
+        return batchFactory.getBatch();
 }
- 
+
 static void write_results(MVConfig config, timespec elapsed_time)
 {
         uint32_t num_epochs;
@@ -688,6 +614,8 @@ static void write_results(MVConfig config, timespec elapsed_time)
 
 static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
                                SimpleQueue<ActionBatch> *output_queue,
+                               SimpleQueue<bool> *loggingExitIn,
+                               SimpleQueue<bool> *loggingExitOut,
                                std::vector<ActionBatch> inputs,
                                uint32_t num_workers)
 {
@@ -714,6 +642,14 @@ static timespec run_experiment(SimpleQueue<ActionBatch> *input_queue,
                 for (j = 0; j < num_workers; ++j) 
                         (&output_queue[j])->DequeueBlocking();
         }
+
+        if (loggingExitIn) {
+          // Wait for logging to finish.
+          loggingExitIn->EnqueueBlocking(true);
+          bool v = loggingExitOut->DequeueBlocking();
+          assert(v);
+        }
+
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
         barrier();
@@ -726,6 +662,7 @@ static void init_database(MVConfig config,
                           workload_config w_conf,
                           SimpleQueue<ActionBatch> *input_queue,
                           SimpleQueue<ActionBatch> *output_queue,
+                          MVLogging *logging_thread,
                           MVActionDistributor **ppp_threads,
                           MVScheduler **sched_threads,
                           Executor **exec_threads)
@@ -742,6 +679,12 @@ static void init_database(MVConfig config,
         }
 
         init_batch = generate_db(w_conf);
+
+        if (logging_thread) {
+                logging_thread->Run();
+                logging_thread->WaitInit();
+        }
+
         for (i = 0; i < config.numCCThreads; ++i) {
                 sched_threads[i]->Run();        
                 sched_threads[i]->WaitInit();
@@ -789,6 +732,9 @@ static MVScheduler** setup_scheduler_threads(MVConfig config,
         } else if (config.experiment < 5) {
                 stickies_per_thread = (((uint64_t)1)<<24);
                 num_tables = 2;
+        } else if (config.experiment == 5 || config.experiment == 6) {
+                stickies_per_thread = (((uint64_t)1)<<24);
+                num_tables = 1;
         } else {
                 assert(false);
         }
@@ -825,17 +771,36 @@ static Executor** setup_executors(MVConfig config,
         return execs;
 }
 
+/**
+ * The entry point for any multiversioning experiment.
+ */
 void do_mv_experiment(MVConfig mv_config, workload_config w_config)
 {
+        MVLogging *loggingThread = nullptr;
         MVActionDistributor **pppThreads;
         MVScheduler **schedThreads;
         Executor **execThreads;
-        SimpleQueue<ActionBatch> *schedOutputQueues;
+
+        // The input queue for the logging thread.
+        SimpleQueue<ActionBatch> *loggingInputQueue = nullptr;
+        SimpleQueue<bool> *loggingExitSignalIn = nullptr;
+        SimpleQueue<bool> *loggingExitSignalOut = nullptr;
+
+        // The input/output queue for the preprocessing layer
         SimpleQueue<ActionBatch> *pppInputQueue;
         SimpleQueue<ActionBatch> *pppOutputQueue;
-        
+
+        // An array of scheduler output queues (the leader's output queues).
+        SimpleQueue<ActionBatch> *schedOutputQueues;
+
+        // Garbage collection queues.
         SimpleQueue<MVRecordList> **schedGCQueues[mv_config.numCCThreads];
+
+        // The execution layer output queues.  There is one output queue for each
+        // executor thread.
         SimpleQueue<ActionBatch> *outputQueue;
+
+        // The input batches which will be submitted to run the experiment.
         std::vector<ActionBatch> input_placeholder;
         timespec elapsed_time;
 
@@ -849,6 +814,7 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
                 GLOBAL_RECORD_SIZE = 1000;
         else
                 GLOBAL_RECORD_SIZE = 8;
+
         MVScheduler::NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
         NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
         assert(mv_config.distribution < 2);
@@ -871,12 +837,27 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
         execThreads = setup_executors(mv_config, schedOutputQueues, outputQueue,
                                       schedGCQueues);
 
-        init_database(mv_config, w_config, pppInputQueue, outputQueue,
-                      pppThreads, schedThreads, execThreads);
+        // The overall input queue for the system.
+        SimpleQueue<ActionBatch> *systemInputQueue = pppInputQueue;
+        if (mv_config.loggingEnabled) {
+                loggingThread = SetupLogging(mv_config, &loggingInputQueue,
+                                             &loggingExitSignalIn,
+                                             &loggingExitSignalOut,
+                                             pppInputQueue);
+                systemInputQueue = loggingInputQueue;
+        }
+
+        // Execute the initial transactions needed to load experiment data
+        // into the database.
+        init_database(mv_config, w_config, systemInputQueue, outputQueue,
+                      loggingThread, pppThreads, schedThreads, execThreads);
 
         pin_memory();
-        elapsed_time = run_experiment(pppInputQueue,  //&schedOutputQueues[config.numWorkerThreads],
+
+        elapsed_time = run_experiment(systemInputQueue,
                                       outputQueue,
+                                      loggingExitSignalIn,
+                                      loggingExitSignalOut,
                                       input_placeholder,// 1);
                                       mv_config.numWorkerThreads);
         write_results(mv_config, elapsed_time);

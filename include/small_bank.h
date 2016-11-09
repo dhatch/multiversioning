@@ -5,9 +5,13 @@
 #include <cstdlib>
 
 #include <db.h>
+#include <logging/buffer.h>
+#include <logging/read_buffer.h>
 #include <mv_action.h>
 #include <occ_action.h>
 #include <action.h>
+
+#include <assert.h>
 
 #define METADATA_SIZE 0
 
@@ -25,6 +29,9 @@ namespace SmallBank {
 
         class LoadCustomerRange : public txn {
         private:
+                const uint64_t _customer_start;
+                const uint64_t _customer_end;
+
                 std::vector<long> balances;
                 std::vector<uint64_t> customers;
                 
@@ -34,6 +41,14 @@ namespace SmallBank {
                 virtual bool Run();
                 virtual uint32_t num_writes();
                 virtual void get_writes(struct big_key *array);
+
+                virtual void serialize(IBuffer *buffer);
+
+                virtual TxnType type() const override {
+                  return TxnType::SB_LOAD_CUSTOMER_RANGE;
+                }
+
+                static txn* deserialize(IReadBuffer *readBuffer);
         };
         
         class Balance : public txn {
@@ -45,6 +60,14 @@ namespace SmallBank {
                 virtual bool Run();
                 virtual uint32_t num_reads();
                 virtual void get_reads(struct big_key *array);
+
+                virtual void serialize(IBuffer *) { assert(false); };
+
+                virtual TxnType type() const override {
+                  return TxnType::SB_BALANCE;
+                }
+
+                static txn* deserialize(IReadBuffer *) { assert(false); }
         };
 
         class DepositChecking : public txn {
@@ -57,6 +80,14 @@ namespace SmallBank {
                 virtual bool Run();
                 virtual uint32_t num_rmws();
                 virtual void get_rmws(struct big_key *array);
+
+                virtual void serialize(IBuffer *buffer);
+
+                virtual TxnType type() const override {
+                  return TxnType::SB_DEPOSIT_CHECKING;
+                }
+
+                static txn* deserialize(IReadBuffer *readBuffer);
         };
 
         class TransactSaving : public txn {    
@@ -69,6 +100,13 @@ namespace SmallBank {
                 virtual bool Run();
                 virtual uint32_t num_rmws();
                 virtual void get_rmws(struct big_key *array);
+
+                virtual void serialize(IBuffer *buffer);
+                virtual TxnType type() const override {
+                  return TxnType::SB_TRANSACT_SAVING;
+                }
+
+                static txn* deserialize(IReadBuffer *readBuffer);
         };
 
         class Amalgamate : public txn {
@@ -80,6 +118,13 @@ namespace SmallBank {
                 virtual bool Run();
                 virtual uint32_t num_rmws();
                 virtual void get_rmws(struct big_key *array);
+
+                virtual void serialize(IBuffer *buffer);
+                virtual TxnType type() const override {
+                  return TxnType::SB_AMALGAMATE;
+                }
+
+                static txn* deserialize(IReadBuffer *readBuffer);
         };
   
         class WriteCheck : public txn {
@@ -94,6 +139,13 @@ namespace SmallBank {
                 virtual uint32_t num_rmws();
                 virtual void get_reads(struct big_key *array);
                 virtual void get_rmws(struct big_key *array);
+
+                virtual void serialize(IBuffer *buffer);
+                virtual TxnType type() const override {
+                  return TxnType::SB_WRITE_CHECK;
+                }
+
+                static txn* deserialize(IReadBuffer *readBuffer);
         };  
 };
 

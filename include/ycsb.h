@@ -2,7 +2,11 @@
 #define YCSB_H_
 
 #include <db.h>
+#include <logging/buffer.h>
+#include <logging/read_buffer.h>
 #include <vector>
+
+#include <assert.h>
 
 #define YCSB_RECORD_SIZE 1000
 
@@ -20,6 +24,13 @@ class ycsb_insert : public txn {
         virtual bool Run();
         virtual uint32_t num_writes();
         virtual void get_writes(struct big_key *array);
+
+        virtual void serialize(IBuffer *buffer);
+        virtual TxnType type() const override {
+                return TxnType::YCSB_INSERT;
+        }
+
+        static txn* deserialize(IReadBuffer *buffer);
 };
 
 class ycsb_readonly : public txn {
@@ -31,6 +42,13 @@ class ycsb_readonly : public txn {
         virtual bool Run();
         virtual uint32_t num_reads();
         virtual void get_reads(struct big_key *array);
+
+        virtual void serialize(IBuffer *) { assert(false); };
+        virtual TxnType type() const override {
+                return TxnType::YCSB_READONLY;
+        }
+
+        static txn* deserialize(IReadBuffer *) { assert(false); };
 };
 
 class ycsb_rmw : public txn {
@@ -40,11 +58,19 @@ class ycsb_rmw : public txn {
         
  public:
         ycsb_rmw(vector<uint64_t> reads, vector<uint64_t> writes);
+
         virtual bool Run();
         virtual uint32_t num_reads();
         virtual uint32_t num_rmws();
         virtual void get_reads(struct big_key *array);
         virtual void get_rmws(struct big_key *array);
+
+        virtual void serialize(IBuffer *buffer);
+        virtual TxnType type() const override {
+                return TxnType::YCSB_RMW;
+        }
+
+        static txn* deserialize(IReadBuffer *buffer);
 };
 
 #endif // YCSB_H_

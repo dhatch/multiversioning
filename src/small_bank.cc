@@ -2,11 +2,13 @@
 
 SmallBank::LoadCustomerRange::LoadCustomerRange(uint64_t customer_start,
                                                 uint64_t customer_end)
+        : _customer_start(customer_start), _customer_end(customer_end)
 {
         assert(customer_end > customer_start);        
         uint64_t i;
         long savings, checking;
-        
+       
+        // TODO serialize rand() state.
         for (i = customer_start; i < customer_end; ++i) {
                 savings = rand() % 100;
                 checking = rand() % 100;
@@ -53,6 +55,19 @@ void SmallBank::LoadCustomerRange::get_writes(struct big_key *array)
                 array[2*i+1].key = this->customers[i];
                 array[2*i+1].table_id = CHECKING;
         }
+}
+
+void SmallBank::LoadCustomerRange::serialize(IBuffer *buffer) {
+        buffer->write(_customer_start);
+        buffer->write(_customer_end);
+}
+
+txn* SmallBank::LoadCustomerRange::deserialize(IReadBuffer *readBuffer) {
+        uint64_t customer_start;
+        uint64_t customer_end;
+        assert(readBuffer->read(&customer_start));
+        assert(readBuffer->read(&customer_end));
+        return new SmallBank::LoadCustomerRange(customer_start, customer_end);
 }
 
 
@@ -113,6 +128,19 @@ void SmallBank::DepositChecking::get_rmws(struct big_key *array)
         array[0].table_id = CHECKING;
 }
 
+void SmallBank::DepositChecking::serialize(IBuffer *buffer) {
+        buffer->write(customer_id);
+        buffer->write(amount);
+}
+
+txn* SmallBank::DepositChecking::deserialize(IReadBuffer *buffer) {
+        uint64_t customer_id;
+        long amount;
+        assert(buffer->read(&customer_id));
+        assert(buffer->read(&amount));
+        return new SmallBank::DepositChecking(customer_id, amount);
+}
+
 SmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount)
 {
         this->amount = amount;
@@ -137,6 +165,19 @@ void SmallBank::TransactSaving::get_rmws(struct big_key *array)
 {
         array[0].key = this->customer_id;
         array[0].table_id = SAVINGS;
+}
+
+void SmallBank::TransactSaving::serialize(IBuffer *buffer) {
+        buffer->write(customer_id);
+        buffer->write(amount);
+}
+
+txn* SmallBank::TransactSaving::deserialize(IReadBuffer *buffer) {
+        uint64_t customer_id;
+        long amount;
+        assert(buffer->read(&customer_id));
+        assert(buffer->read(&amount));
+        return new SmallBank::TransactSaving(customer_id, amount);
 }
 
 SmallBank::Amalgamate::Amalgamate(uint64_t from_customer, uint64_t to_customer)
@@ -179,6 +220,19 @@ void SmallBank::Amalgamate::get_rmws(struct big_key *array)
         array[2].table_id = CHECKING;
 }
 
+void SmallBank::Amalgamate::serialize(IBuffer *buffer) {
+        buffer->write(from_customer);
+        buffer->write(to_customer);
+}
+
+txn* SmallBank::Amalgamate::deserialize(IReadBuffer *buffer) {
+        uint64_t from_customer_id;
+        uint64_t to_customer_id;
+        assert(buffer->read(&from_customer_id));
+        assert(buffer->read(&to_customer_id));
+        return new SmallBank::Amalgamate(from_customer_id, to_customer_id);
+}
+
 SmallBank::WriteCheck::WriteCheck(uint64_t customer_id, long amount)
 {
         this->customer_id = customer_id;
@@ -218,4 +272,17 @@ void SmallBank::WriteCheck::get_rmws(struct big_key *array)
 {
         array[0].key = this->customer_id;
         array[0].table_id = CHECKING;
+}
+
+void SmallBank::WriteCheck::serialize(IBuffer *buffer) {
+        buffer->write(customer_id);
+        buffer->write(check_amount);
+}
+
+txn* SmallBank::WriteCheck::deserialize(IReadBuffer *buffer) {
+        uint64_t customer_id;
+        long check_amount;
+        assert(buffer->read(&customer_id));
+        assert(buffer->read(&check_amount));
+        return new SmallBank::WriteCheck(customer_id, check_amount);
 }

@@ -4,6 +4,7 @@
 
 ycsb_insert::ycsb_insert(uint64_t start, uint64_t end)
 {
+        // TODO serialize random state.
         assert(start < end);
         this->start = start;
         this->end = end;
@@ -44,6 +45,21 @@ void ycsb_insert::get_writes(struct big_key *array)
                 array[i-this->start].key = i;
                 array[i-this->start].table_id = 0;
         }
+}
+
+void ycsb_insert::serialize(IBuffer *buffer) {
+        buffer->write(start);
+        buffer->write(end);
+}
+
+txn* ycsb_insert::deserialize(IReadBuffer *buffer) {
+        uint64_t start;
+        uint64_t end;
+
+        assert(buffer->read(&start));
+        assert(buffer->read(&end));
+
+        return new ycsb_insert(start, end);
 }
 
 ycsb_readonly::ycsb_readonly(vector<uint64_t> reads)
@@ -153,4 +169,36 @@ bool ycsb_rmw::Run()
                         *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
         }
         return true;
+}
+
+void ycsb_rmw::serialize(IBuffer *buffer) {
+        buffer->write(static_cast<uint64_t>(reads.size()));
+        buffer->write(reinterpret_cast<const unsigned char*>(reads.data()),
+                      reads.size() * sizeof(decltype(*reads.begin())));
+
+        buffer->write(static_cast<uint64_t>(writes.size()));
+        buffer->write(reinterpret_cast<const unsigned char*>(writes.data()),
+                      writes.size() * sizeof(decltype(*writes.begin())));
+}
+
+txn* ycsb_rmw::deserialize(IReadBuffer *buffer) {
+        uint64_t readsSize;
+        uint64_t writesSize;
+
+        std::vector<uint64_t> reads;
+        std::vector<uint64_t> writes;
+
+        assert(buffer->read(&readsSize));
+        for (uint64_t i = 0; i < readsSize; i++) {
+                uint64_t readNumber;
+                assert(buffer->read(&readNumber));
+        }
+
+        assert(buffer->read(&writesSize));
+        for (uint64_t i = 0; i < readsSize; i++) {
+                uint64_t writeNumber;
+                assert(buffer->read(&writeNumber));
+        }
+
+        return new ycsb_rmw(std::move(reads), std::move(writes));
 }
