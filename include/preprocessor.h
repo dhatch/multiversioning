@@ -18,13 +18,14 @@ class MVRecordAllocator;
 class MVTablePartition;
 
 struct MVActionDistributorConfig {
-  int cpuNumber;
+  uint32_t cpuNumber;
   uint32_t threadId;
   uint32_t numSubords;
   SimpleQueue<ActionBatch> *inputQueue;
   SimpleQueue<ActionBatch> *outputQueue;
   SimpleQueue<ActionBatch> **pubQueues;
   SimpleQueue<ActionBatch> **subQueues;
+  int label;
 };
 
 /* An MVActionDistributor is the real first stage of the transaction
@@ -47,20 +48,14 @@ class MVActionDistributor : public Runnable {
     virtual void Init();
     virtual void StartWorking();
     void ProcessAction(mv_action * action, int* lastActions, mv_action** batch, int index);
+    bool leader;
 
   public:
     void* operator new(std::size_t sz, int cpu);
 
-    /*
-    MVActionDistributor(int cpuNumber,
-        SimpleQueue<ActionBatch> *inputQueue,
-        SimpleQueue<ActionBatch> *outputQueue,
-        SimpleQueue<int> *orderInput,
-        SimpleQueue<int> *orderOutput,
-        bool leader
-    );*/
     MVActionDistributor(MVActionDistributorConfig config);
   static uint32_t NUM_CC_THREADS;
 };
+
 
 #endif    /* PREPROCESSOR_H_ */

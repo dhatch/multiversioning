@@ -67,54 +67,6 @@ static void CreateQueues(int cpuNumber, uint32_t subCount,
         *OUT_SUB_QUEUES = subQueues;
 }
 
-
-static MVActionDistributorConfig setup_ppp_config(int cpuNumber, 
-                                    uint32_t threadId, 
-                                    int numThreads, 
-                                    SimpleQueue<ActionBatch> *inputQueue,
-                                    SimpleQueue<ActionBatch> *outputQueues) {
-        assert(inputQueue != NULL && outputQueues != NULL);
-        uint32_t subCount;
-        SimpleQueue<ActionBatch> **pubQueues, **subQueues;
-        if (cpuNumber % 10 == 0) {
-                if (cpuNumber == 0) {
-                        // Figure out how many subordinates this thread is in charge of.
-                        uint32_t localSubordinates = numThreads > 10? 9 : numThreads-1;
-                        uint32_t numRemoteSockets = 
-                                numThreads/10 + (numThreads % 10 == 0? 0 : 1) - 1;
-                        subCount = (uint32_t)(localSubordinates + numRemoteSockets);
-                        CreateQueues(cpuNumber, subCount, &pubQueues, &subQueues);
-                }
-                else {
-                        int myDiv = cpuNumber/10;
-                        int totalDiv = numThreads/10;
-                        if (myDiv < totalDiv) {
-                                subCount = 9;
-                        }
-                        else {
-                                subCount = (uint32_t)(numThreads - cpuNumber - 1);
-                        }      
-
-                        CreateQueues(cpuNumber, subCount, &pubQueues, &subQueues);      
-                }
-        }
-        else {
-                subCount = 0;
-                pubQueues = NULL;
-                subQueues = NULL;
-        }
-
-        MVActionDistributorConfig cfg = {
-                cpuNumber,
-                threadId,
-                subCount,
-                inputQueue,
-                outputQueues,
-                pubQueues,
-                subQueues,
-        };
-        return cfg;
-}
 static MVSchedulerConfig SetupSched(int cpuNumber, 
                                     uint32_t threadId, 
                                     int numThreads, 
@@ -393,77 +345,49 @@ static SimpleQueue<T>* SetupQueuesMany(uint32_t numEntries, uint32_t numQueues, 
   return queues;
 }
 
-static MVActionDistributor** SetupPPPThreads(int numProcs,
-                                             SimpleQueue<ActionBatch> ** inputRef,
-                                             SimpleQueue<ActionBatch> ** outputRef) {
+static MVActionDistributor** SetupPPPThreads(uint32_t numProcs,
+                                         SimpleQueue<ActionBatch> ** inputRef,
+                                         SimpleQueue<ActionBatch> ** outputRef) {
+
   MVActionDistributor** procArray = 
     (MVActionDistributor**) alloc_mem(sizeof(MVActionDistributor*)*numProcs, 79);
+  
 
   // Setup global input queue
   char *mem = (char*) alloc_mem(CACHE_LINE*INPUT_SIZE, 0);            
   SimpleQueue<ActionBatch>* inputQueue = new SimpleQueue<ActionBatch>(mem, INPUT_SIZE);
-  memset(mem, 0x00, CACHE_LINE*INPUT_SIZE);
   *inputRef = inputQueue;
 
   // Set up output queue (input to the scheduling layer)
-  mem = (char*) alloc_mem(sizeof(CACHE_LINE*INPUT_SIZE), 0);
+  mem = (char*) alloc_mem(CACHE_LINE*INPUT_SIZE, 0);
   SimpleQueue<ActionBatch>* outputQueue = new SimpleQueue<ActionBatch>(mem, INPUT_SIZE);
-  memset(mem, 0x00, CACHE_LINE*INPUT_SIZE);
   *outputRef = outputQueue;
 
-  MVActionDistributorConfig globalLeaderConfig = 
-    setup_ppp_config(0, 0, numProcs, inputQueue, outputQueue);
-  procArray[0] 
-    = new (globalLeaderConfig.cpuNumber) MVActionDistributor(globalLeaderConfig);
-  
-  MVActionDistributorConfig localLeaderConfig = globalLeaderConfig;
-  
+  // Setup subordinate queues
+  SimpleQueue<ActionBatch> **pubQueues, **subQueues;
+  CreateQueues(0, numProcs - 1, &pubQueues, &subQueues);
+
+  MVActionDistributorConfig leadercfg = {
+    0,
+    0,
+    numProcs - 1,
+    inputQueue,
+    outputQueue,
+    pubQueues,
+    subQueues,
+    -1
+  };
+  procArray[0] = new(0) MVActionDistributor(leadercfg);
+
   for (uint32_t i = 1; i < numProcs; ++i) {
-    if (i % 10 == 0) {
-      int leaderNum = i/10;
-      auto inputQ = globalLeaderConfig.pubQueues[9+leaderNum-1];
-      auto outputQ = globalLeaderConfig.subQueues[9+leaderNum-1];
-      MVActionDistributorConfig config = 
-        setup_ppp_config(i, i, numProcs, inputQ, outputQ);
-      procArray[i] = new (config.cpuNumber) MVActionDistributor(config);
-      localLeaderConfig = config;
-    }
-    else {
-      int index = i%10;      
-      auto inputQ = localLeaderConfig.pubQueues[index-1];
-      auto outputQ = localLeaderConfig.subQueues[index-1];
-      MVActionDistributorConfig subConfig = 
-        setup_ppp_config(i, i, numProcs, inputQ, outputQ);
-      procArray[i] = new (subConfig.cpuNumber) MVActionDistributor(subConfig);
-    }
+    // Input queue is the ith pub queue of the leader
+    // Output queue goes to the ith sub queue of the leader
+    MVActionDistributorConfig cfg = {
+      i, i, numProcs - 1, pubQueues[i - 1], subQueues[i - 1], NULL, NULL, i - 1
+    };
+    procArray[i] = new(i) MVActionDistributor(cfg);
   }
   
-
-  /*
-  // Set up the last link between the first preprocessing thread and the
-  // last one
-  uint32_t QSIZE = 2;
-  mem = (char*) alloc_mem(sizeof(CACHE_LINE*2*QSIZE), 0);
-  SimpleQueue<int>* last_link = new SimpleQueue<int>(mem, QSIZE);
-  memset(mem, 0x00, CACHE_LINE*2*QSIZE);
-
-  SimpleQueue<int>* old_link = last_link;
-
-  for (int i = 0 ; i < numProcs; i++) {
-    int cpuNum = i;
-    SimpleQueue<int> *link;
-    if (i == numProcs - 1) {
-      link = last_link;
-    } else {
-      mem = (char*) alloc_mem(sizeof(CACHE_LINE*2*QSIZE), i);
-      link = new SimpleQueue<int>(mem, QSIZE);
-      memset(mem, 0x00, CACHE_LINE*2*QSIZE);
-    }
-    procArray[i] = new (cpuNum) MVActionDistributor(cpuNum, inputQueue, outputQueue, old_link, link, i == 0);
-    std::stringstream msg;
-    std::cerr << msg.str();
-    old_link = link;
-  }*/
   return procArray;
 }
 

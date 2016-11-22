@@ -4,7 +4,7 @@ uint32_t MVActionDistributor::NUM_CC_THREADS = 1;
 
 void MVActionDistributor::log (string msg) {
   std::stringstream m;
-  m << this->getCpuNum() << ": " << msg << "\n";
+  m << config.label << ": " << msg << "\n";
   std::cout << m.str();
 }
   
@@ -20,29 +20,10 @@ MVActionDistributor::MVActionDistributor(MVActionDistributorConfig config) :
   Runnable(config.cpuNumber) {
   
   this->config = config;
+  this->leader = config.subQueues != NULL;
 
 }
 
-/*
-MVActionDistributor::MVActionDistributor(int cpuNumber, 
-    SimpleQueue<ActionBatch> *inputQueue,
-    SimpleQueue<ActionBatch> *outputQueue,
-    SimpleQueue<int> *orderInput,
-    SimpleQueue<int> *orderOutput,
-    bool leader
-): Runnable(cpuNumber) {
-  this->inputQueue = inputQueue;
-  this->outputQueue = outputQueue;
-  this->orderingInputQueue = orderInput;
-  this->orderingOutputQueue = orderOutput;
-  // If this is the leader preprocessing thread (the first one),
-  // pre-empt the input queue so that operation doesn't get blocked
-  // on the first batch
-  if (leader) {
-    orderInput->EnqueueBlocking(1);
-  }
-}
-*/
 /*
  * Hash the given key, and find which concurrency control thread is
  * responsible for the appropriate key range. 
@@ -109,51 +90,53 @@ void MVActionDistributor::ProcessAction(mv_action * action, int* last_actions, m
 
 void MVActionDistributor::StartWorking() {
   //uint32_t epoch = 0;
-  log("Thread started!");
-  while (true) {
-    // Take a batch from input...
-    ActionBatch batch = config.inputQueue->DequeueBlocking();
-    std::stringstream msg;
-    msg << "Got batch " << batch.batchNo;
+  if (leader) {
+    log("Leader thread started!");
+    int pubindex = 0;
+    int subindex = 0;
+    while (true) {
 
-    for (uint32_t i = 0; i < config.numSubords; i++) 
-      config.pubQueues[i]->EnqueueBlocking(batch);
+      // See if there is a batch available from input...
+      ActionBatch batch;
+      if (config.inputQueue->Dequeue(&batch)) {
+        // Send it round robin to the subordinate threads
+        config.pubQueues[pubindex]->EnqueueBlocking(batch);
+        pubindex = (pubindex + 1) % config.numSubords;
+      }
 
-    mv_action** actions = batch.actionBuf;
-    uint32_t numActions = batch.numActions;
-    // Allocate the output batches here for now as linked lists
-    int lastActions[NUM_CC_THREADS] = {0};
-
-    // Pre process each txn
-    for (uint32_t i = 0; i < numActions; ++i) {
-      mv_action * action = actions[i];
-      ProcessAction(action, lastActions, batch.actionBuf, i);
+      // See if there is a batch available from subordinates...
+      ActionBatch outBatch;
+      if (config.subQueues[subindex]->Dequeue(&outBatch)) {
+        config.outputQueue->EnqueueBlocking(outBatch);
+        subindex = (subindex + 1) % config.numSubords;
+      }
     }
+  } else {
+    log("Subordinate thread started!");
+    while (true) {
+      ActionBatch batch = config.inputQueue->DequeueBlocking();
+      mv_action** actions = batch.actionBuf;
+      uint32_t numActions = batch.numActions;
 
-    // Ensure the last action in the batch has negative nextAction values
-    mv_action* action = actions[numActions - 1];
-    for (uint32_t i = 0 ; i < NUM_CC_THREADS; i++) {
-      action->__nextAction[i] = -1;
+      // Allocate the output batches here for now as linked lists
+      int lastActions[NUM_CC_THREADS] = {0};
+
+      // Pre process each txn
+      for (uint32_t i = 0; i < numActions; ++i) {
+        mv_action * action = actions[i];
+        ProcessAction(action, lastActions, batch.actionBuf, i);
+      }
+
+      // Ensure the last action in the batch has negative nextAction values
+      mv_action* action = actions[numActions - 1];
+      for (uint32_t i = 0 ; i < NUM_CC_THREADS; i++) {
+        action->__nextAction[i] = -1;
+      }
+
+      config.outputQueue->EnqueueBlocking(batch);
     }
-
-    for (uint32_t i = 0; i < config.numSubords; ++i) 
-      config.subQueues[i]->DequeueBlocking();
-
-    config.outputQueue->EnqueueBlocking(batch);
-    /*
-    // Possible design for interthread comms
-    // Queue between threads in round robin
-    // Wait until previouus thread has told us we can output
-    // At a later point perhaps we can make it more dynamic and 
-    // begin working on the next batch while waiting
-    orderingInputQueue->DequeueBlocking();
-    // do the output
-    outputQueue->EnqueueBlocking(batch);
-    // Notify next thread that they can output
-    orderingOutputQueue->EnqueueBlocking(1);*/
-
   }
-
-
-
 }
+ 
+
+
