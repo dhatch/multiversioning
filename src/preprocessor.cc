@@ -18,6 +18,9 @@ void MVActionDistributor::Init() {}
 
 MVActionDistributor::MVActionDistributor(MVActionDistributorConfig config) :
   Runnable(config.cpuNumber) {
+  std::stringstream msg;
+  msg << "Preprocessor thread " << config.threadId << " started on cpu " << config.cpuNumber << "\n";
+  std::cout << msg.str();
   
   this->config = config;
   this->leader = config.subQueues != NULL;

@@ -20,6 +20,10 @@ uint32_t MVScheduler::NUM_CC_THREADS = 1;
 MVScheduler::MVScheduler(MVSchedulerConfig config) : 
         Runnable(config.cpuNumber) 
 {
+        std::stringstream msg;
+        msg << "Scheduler thread " << config.threadId << " started on cpu " << config.cpuNumber << "\n";
+        std::cout << msg.str();
+
         this->config = config;
         this->epoch = 0;
         this->txnCounter = 0;

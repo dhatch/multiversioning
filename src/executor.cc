@@ -1,4 +1,5 @@
 #include <executor.h>
+#include <sstream>
 #include <algorithm>
 
 extern uint32_t GLOBAL_RECORD_SIZE;
@@ -108,6 +109,11 @@ inline uint32_t PendingActionList::Size()
 
 Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) 
 {        
+        std::stringstream msg;
+        msg << "Executor thread " << cfg.threadId << " started on cpu " << cfg.cpu << "\n";
+        std::cout << msg.str();
+
+
         this->config = cfg;
         this->counter = 0;
         this->pendingList = new (config.cpu) PendingActionList(1000);

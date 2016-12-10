@@ -17,7 +17,7 @@ class MVTablePartition;
 
 struct MVSchedulerConfig {
   int cpuNumber;
-  uint32_t threadId;
+  uint32_t threadId;            // The scheduler thread ID [0..NUM_CC_THREADS]
   size_t allocatorSize;         // Scheduler thread's local sticky allocator
   uint32_t numTables;           // Number of tables in the system
   size_t *tblPartitionSizes;    // Size of each table's partition

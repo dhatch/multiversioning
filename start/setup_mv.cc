@@ -82,8 +82,8 @@ static MVSchedulerConfig SetupSched(int cpuNumber,
         assert(inputQueue != NULL && outputQueues != NULL);
         uint32_t subCount;
         SimpleQueue<ActionBatch> **pubQueues, **subQueues;
-        if (cpuNumber % 10 == 0) {
-                if (cpuNumber == 0) {
+        if (threadId % 10 == 0) {
+                if (threadId == 0) {
       
                         // Figure out how many subordinates this thread is in charge of.
                         uint32_t localSubordinates = numThreads > 10? 9 : numThreads-1;
@@ -93,7 +93,7 @@ static MVSchedulerConfig SetupSched(int cpuNumber,
                         CreateQueues(cpuNumber, subCount, &pubQueues, &subQueues);
                 }
                 else {
-                        int myDiv = cpuNumber/10;
+                        int myDiv = threadId/10;
                         int totalDiv = numThreads/10;
                         if (myDiv < totalDiv) {
                                 subCount = 9;
@@ -278,7 +278,7 @@ static Executor** SetupExecutors(uint32_t cpuStart,
 
   uint32_t numTables = 1;
 
-  uint64_t *sizeData = (uint64_t*)malloc(sizeof(uint32_t)*2);
+  uint64_t *sizeData = (uint64_t*)malloc(sizeof(uint64_t)*2);
   sizeData[0] = GLOBAL_RECORD_SIZE;
   sizeData[1] = threadDbSz/recordSize;
 
@@ -317,8 +317,8 @@ static Executor** SetupExecutors(uint32_t cpuStart,
           &configs[j].recycleQueues[k*queuesPerTable+(i%queuesPerTable)];
       }
       assert(configs[i].garbageConfig.workerChannels[j] != NULL);
-      execs[i] = new ((int)(cpuStart+i)) Executor(configs[i]);
     }
+    execs[i] = new ((int)(cpuStart+i)) Executor(configs[i]);
   }
   return execs;
 }
@@ -391,7 +391,8 @@ static MVActionDistributor** SetupPPPThreads(uint32_t numProcs,
   return procArray;
 }
 
-static MVScheduler** SetupSchedulers(int numProcs, 
+static MVScheduler** SetupSchedulers(uint32_t cpuStart,
+                                     int numProcs, 
                                      SimpleQueue<ActionBatch> *topInputQueue, 
                                      SimpleQueue<ActionBatch> **outputQueueRefs_OUT, 
                                      uint32_t numOutputs,
@@ -420,7 +421,7 @@ static MVScheduler** SetupSchedulers(int numProcs,
   MVScheduler **schedArray = 
     (MVScheduler**)alloc_mem(sizeof(MVScheduler*)*numProcs, 79);
   
-  MVSchedulerConfig globalLeaderConfig = SetupSched(0, 0, numProcs, 
+  MVSchedulerConfig globalLeaderConfig = SetupSched(cpuStart, 0, numProcs, 
                                                     allocatorSize,
                                                     numTables,
                                                     tblPartitionSizes, 
@@ -441,7 +442,7 @@ static MVScheduler** SetupSchedulers(int numProcs,
       int leaderNum = i/10;
       auto inputQueue = globalLeaderConfig.pubQueues[9+leaderNum-1];
       auto outputQueue = globalLeaderConfig.subQueues[9+leaderNum-1];
-      MVSchedulerConfig config = SetupSched(i, i, numProcs, allocatorSize, 
+      MVSchedulerConfig config = SetupSched(cpuStart + i, i, numProcs, allocatorSize, 
                                             numTables,
                                             tblPartitionSizes, 
                                             numOutputs,
@@ -457,7 +458,7 @@ static MVScheduler** SetupSchedulers(int numProcs,
       int index = i%10;      
       auto inputQueue = localLeaderConfig.pubQueues[index-1];
       auto outputQueue = localLeaderConfig.subQueues[index-1];
-      MVSchedulerConfig subConfig = SetupSched(i, i, numProcs, allocatorSize, 
+      MVSchedulerConfig subConfig = SetupSched(cpuStart + i, i, numProcs, allocatorSize, 
                                                numTables,
                                                tblPartitionSizes, 
                                                numOutputs,
@@ -778,6 +779,7 @@ static MVScheduler** setup_scheduler_threads(MVConfig config,
         uint32_t num_tables;
         MVScheduler **schedulers;
         int worker_start, worker_end;
+        uint32_t cpuStart = config.numPPPThreads;
         
         worker_start = (int)config.numCCThreads;
         worker_end = worker_start + config.numWorkerThreads - 1;
@@ -790,7 +792,7 @@ static MVScheduler** setup_scheduler_threads(MVConfig config,
         } else {
                 assert(false);
         }
-        schedulers = SetupSchedulers(config.numCCThreads, sched_input,
+        schedulers = SetupSchedulers(cpuStart, config.numCCThreads, sched_input,
                                      sched_output, config.numWorkerThreads+1,
                                      stickies_per_thread, num_tables,
                                      config.numRecords, gc_queues,
@@ -812,7 +814,7 @@ static Executor** setup_executors(MVConfig config,
 {
         uint32_t start_cpu, queues_per_table, queues_per_cc_thread;
         Executor **execs;
-        start_cpu = config.numCCThreads;
+        start_cpu = config.numCCThreads + config.numPPPThreads;
         queues_per_table = config.numWorkerThreads;
         queues_per_cc_thread = config.numWorkerThreads;
         execs = SetupExecutors(start_cpu, config.numWorkerThreads,
